@@ -1,30 +1,53 @@
 # The Humblewood Table
 
-A cozy, cottagecore virtual tabletop for running the Humblewood campaign online.
+A cozy, cottagecore virtual tabletop for running your Humblewood campaign online — maps, tokens, doodling, character sheets, and a synced music jukebox, shared live between you and your players.
 
 ## Running it locally
 
-Req: [Node.js](https://nodejs.org) installed (v18+).
+You need [Node.js](https://nodejs.org) installed (v18+).
 
 ```bash
 npm install
 npm start
 ```
 
-Then open `http://localhost:3000` in your browser. (just dm view)
+Then open `http://localhost:3000` in your browser. That's your DM view.
 
-## Playing with the group
+## Playing with your group
 
-Everyone needs to reach the same running server. Running it on your laptop only works for people on the same network unless deployed. 
+Everyone needs to reach the **same running server** — running it on your laptop only works for people on your own network unless you deploy it (see below).
 
 1. Open the site, enter your name, pick **Dungeon Master** or **Player**, and click "Enter the Wood."
-2. DM-only controls (uploading maps, adding tokens, doodling, editing the playlist) are hidden from players automatically.
+2. Everything — moving tokens, doodles, music, map changes, character sheets — syncs live to everyone connected, no refresh needed.
+3. DM-only controls (uploading maps, adding tokens, doodling, editing the playlist) are hidden from players automatically.
+
+## Getting this onto GitHub
+
+From inside this folder:
+
+```bash
+git init
+git add .
+git commit -m "Humblewood Table"
+git branch -M main
+git remote add origin https://github.com/YOUR-USERNAME/YOUR-REPO.git
+git push -u origin main
+```
+
+(Create the empty repo on GitHub first via "New repository" — don't initialize it with a README there, to avoid a merge conflict.)
 
 ## Deploying so players can join from anywhere
 
-Pages only serves static files unf :( but this app needs a live Node process for Socket.io to sync everyone in real time.
+**Important: GitHub Pages won't work for this.** Pages only serves static files (HTML/CSS/JS, no server), but this app needs a live Node process for Socket.io to sync everyone in real time. You need an actual Node host instead — still free, still connects straight to your GitHub repo:
 
-The filesystem resets on redeploy, so uploaded map/token images and the `data/state.json` save file can get wiped when the service restarts or redeploys. Between sessions without redeploying, your table state is safe. For a table that survives redeploys long-term, the next step is swapping local file storage for something persistent (a small hosted SQLite like Turso for state, Cloudflare R2 or S3 for images). (TODO)
+1. Push this repo to GitHub (see above).
+2. Go to [render.com](https://render.com) (or [railway.app](https://railway.app)), sign in with GitHub.
+3. "New Web Service" → pick your repo.
+4. Build command: `npm install`. Start command: `npm start`. Leave the port setting alone — the platform sets `PORT` automatically and `server.js` already reads it.
+5. Deploy. You'll get a public URL like `humblewood-table.onrender.com` — share that with your players.
+6. Every time you `git push`, Render/Railway auto-redeploys.
+
+One thing to know about free tiers: the filesystem often resets on redeploy, so the `data/table.db` database file and uploaded map/token images can get wiped when the service restarts or redeploys. Between sessions without redeploying, your table state is safe (the whole point of the SQLite database is surviving normal `Ctrl+C` / crash / restart cycles). For a table that survives *redeploys* too, the next step is a hosted database (e.g. Turso) and cloud image storage (Cloudflare R2 or S3) instead of local disk. Happy to wire that in whenever you're ready.
 
 ## What's built so far (the skeleton)
 
@@ -36,10 +59,11 @@ The filesystem resets on redeploy, so uploaded map/token images and the `data/st
 
 ## Known limitations to build out next
 
-- State lives in server memory only aka **restarting the server clears the table** (map, tokens, playlist, sheets).
-- No authentication so anyone with the link can join as anyone. 
-- Music playback requires direct audio file URLs (not YouTube/Spotify links) due to those platforms' embedding restrictions. Self-hosted MP3s or a service like SoundCloud's direct stream links also work.
-- Token art and maps upload to the server's local disk.
+- Table state (map, tokens, playlist, sheets, roll log) is saved to a real SQLite database at `data/table.db` and reloads automatically on restart. Uploaded images still live on local disk, so they only persist as long as that disk does (see the deploy note above about free-tier redeploys).
+- No authentication — anyone with the link can join as anyone. Fine for a private table with a link you control; add passwords/accounts before sharing more widely.
+- No fog of war, no dice roller, no grid/snap-to-grid yet — the `state.fog` field and grid size are stubbed in `server.js` ready for you (or me, next round) to build on.
+- Music playback requires direct audio file URLs (not YouTube/Spotify links) due to those platforms' embedding restrictions — self-hosted MP3s or a service like SoundCloud's direct stream links work.
+- Token art and maps upload to the server's local disk — fine for now, but on most hosts (Render free tier especially) uploaded files don't persist across restarts/deploys. For a permanent setup, swap in cloud storage (S3, Cloudflare R2) later.
 
 ## Project structure
 

@@ -31,9 +31,12 @@ app.post('/api/upload', upload.single('file'), (req, res) => {
 });
 
 // ---- Persisted room state (single table: "Humblewood") ----
-// Saved to disk as JSON so the table survives server restarts.
-const STATE_FILE = path.join(__dirname, 'data', 'state.json');
-if (!fs.existsSync(path.dirname(STATE_FILE))) fs.mkdirSync(path.dirname(STATE_FILE), { recursive: true });
+// Backed by a real SQLite database (via sql.js — pure WASM, no native
+// compiler needed, so it installs cleanly on any machine including Windows
+// without build tools) so the table survives restarts.
+const initSqlJs = require('sql.js');
+const DB_FILE = path.join(__dirname, 'data', 'table.db');
+if (!fs.existsSync(path.dirname(DB_FILE))) fs.mkdirSync(path.dirname(DB_FILE), { recursive: true });
 
 const defaultState = {
   scene: {
@@ -56,23 +59,45 @@ const defaultState = {
 };
 
 let state = defaultState;
-if (fs.existsSync(STATE_FILE)) {
-  try {
-    state = { ...defaultState, ...JSON.parse(fs.readFileSync(STATE_FILE, 'utf8')) };
-  } catch (e) {
-    console.warn('Could not read saved state, starting fresh.', e.message);
+let db = null;
+let dbReady = null; // promise resolved once sql.js + db file are loaded
+
+function loadStateFromDb() {
+  const row = db.exec("SELECT data FROM state WHERE id = 1");
+  if (row.length && row[0].values.length) {
+    try {
+      state = { ...defaultState, ...JSON.parse(row[0].values[0][0]) };
+    } catch (e) {
+      console.warn('Could not parse saved state, starting fresh.', e.message);
+    }
   }
+}
+
+function persistDbToDisk() {
+  const data = db.export();
+  fs.writeFile(DB_FILE, Buffer.from(data), (err) => {
+    if (err) console.error('Failed to save database:', err.message);
+  });
 }
 
 let saveTimer = null;
 function persistState() {
+  if (!db) return;
+  db.run("INSERT INTO state (id, data) VALUES (1, ?) ON CONFLICT(id) DO UPDATE SET data = excluded.data", [JSON.stringify(state)]);
   clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => {
-    fs.writeFile(STATE_FILE, JSON.stringify(state, null, 2), (err) => {
-      if (err) console.error('Failed to save state:', err.message);
-    });
-  }, 300); // debounce rapid updates (e.g. token drags)
+  saveTimer = setTimeout(persistDbToDisk, 300); // debounce rapid updates (e.g. token drags)
 }
+
+dbReady = initSqlJs().then((SQL) => {
+  if (fs.existsSync(DB_FILE)) {
+    db = new SQL.Database(fs.readFileSync(DB_FILE));
+  } else {
+    db = new SQL.Database();
+  }
+  db.run("CREATE TABLE IF NOT EXISTS state (id INTEGER PRIMARY KEY, data TEXT)");
+  loadStateFromDb();
+  persistDbToDisk();
+});
 
 function broadcastState() {
   io.emit('state:full', state);
@@ -204,6 +229,11 @@ io.on('connection', (socket) => {
   });
 });
 
-server.listen(PORT, () => {
-  console.log(`Humblewood Table running at http://localhost:${PORT}`);
+dbReady.then(() => {
+  server.listen(PORT, () => {
+    console.log(`Humblewood Table running at http://localhost:${PORT}`);
+  });
+}).catch((err) => {
+  console.error('Failed to initialize database:', err);
+  process.exit(1);
 });
