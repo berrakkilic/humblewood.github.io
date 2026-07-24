@@ -24,10 +24,6 @@ Everyone needs to reach the **same running server** — running it on your lapto
 
 Pages only serves static files unf :( but this app needs a live Node process for Socket.io to sync everyone in real time.
 
-4. Build command: `npm install`. Start command: `npm start`. Leave the port setting alone — the platform sets `PORT` automatically and `server.js` already reads it.
-5. Deploy. You'll get a public URL like `humblewood-table.onrender.com` — share that with your players.
-6. Every time you `git push`, Render/Railway auto-redeploys.
-
 The filesystem resets on redeploy, so uploaded map/token images and the `data/state.json` save file can get wiped when the service restarts or redeploys. Between sessions without redeploying, your table state is safe. For a table that survives redeploys long-term, the next step is swapping local file storage for something persistent (a small hosted SQLite like Turso for state, Cloudflare R2 or S3 for images). (TODO)
 
 ## What's built so far (the skeleton)
