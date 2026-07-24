@@ -31,12 +31,11 @@ app.post('/api/upload', upload.single('file'), (req, res) => {
 });
 
 // ---- Persisted room state (single table: "Humblewood") ----
-// Backed by a real SQLite database (via sql.js — pure WASM, no native
-// compiler needed, so it installs cleanly on any machine including Windows
-// without build tools) so the table survives restarts.
-const initSqlJs = require('sql.js');
-const DB_FILE = path.join(__dirname, 'data', 'table.db');
-if (!fs.existsSync(path.dirname(DB_FILE))) fs.mkdirSync(path.dirname(DB_FILE), { recursive: true });
+// Backed by libSQL — talks to a hosted Turso database over the network so
+// state survives redeploys on hosts with an ephemeral filesystem (like
+// Render's free tier). If TURSO_DATABASE_URL isn't set (e.g. local dev),
+// it falls back to a local SQLite file instead, no cloud account needed.
+const { createClient } = require('@libsql/client');
 
 const defaultState = {
   scene: {
@@ -59,45 +58,52 @@ const defaultState = {
 };
 
 let state = defaultState;
-let db = null;
-let dbReady = null; // promise resolved once sql.js + db file are loaded
 
-function loadStateFromDb() {
-  const row = db.exec("SELECT data FROM state WHERE id = 1");
-  if (row.length && row[0].values.length) {
+const usingTurso = !!process.env.TURSO_DATABASE_URL;
+if (!usingTurso) {
+  console.warn('TURSO_DATABASE_URL not set — falling back to a local file database (data/local.db). This is fine for local testing, but on a host with an ephemeral filesystem, data will NOT survive redeploys. See README for Turso setup.');
+  const localDir = path.join(__dirname, 'data');
+  if (!fs.existsSync(localDir)) fs.mkdirSync(localDir, { recursive: true });
+}
+
+const db = createClient(
+  usingTurso
+    ? { url: process.env.TURSO_DATABASE_URL, authToken: process.env.TURSO_AUTH_TOKEN }
+    : { url: 'file:' + path.join(__dirname, 'data', 'local.db') }
+);
+
+async function loadStateFromDb() {
+  const result = await db.execute('SELECT data FROM state WHERE id = 1');
+  if (result.rows.length) {
     try {
-      state = { ...defaultState, ...JSON.parse(row[0].values[0][0]) };
+      state = { ...defaultState, ...JSON.parse(result.rows[0].data) };
     } catch (e) {
       console.warn('Could not parse saved state, starting fresh.', e.message);
     }
   }
 }
 
-function persistDbToDisk() {
-  const data = db.export();
-  fs.writeFile(DB_FILE, Buffer.from(data), (err) => {
-    if (err) console.error('Failed to save database:', err.message);
-  });
-}
-
 let saveTimer = null;
+let pendingSave = false;
 function persistState() {
-  if (!db) return;
-  db.run("INSERT INTO state (id, data) VALUES (1, ?) ON CONFLICT(id) DO UPDATE SET data = excluded.data", [JSON.stringify(state)]);
+  pendingSave = true;
   clearTimeout(saveTimer);
-  saveTimer = setTimeout(persistDbToDisk, 300); // debounce rapid updates (e.g. token drags)
+  saveTimer = setTimeout(async () => {
+    if (!pendingSave) return;
+    pendingSave = false;
+    try {
+      await db.execute({
+        sql: 'INSERT INTO state (id, data) VALUES (1, ?) ON CONFLICT(id) DO UPDATE SET data = excluded.data',
+        args: [JSON.stringify(state)]
+      });
+    } catch (err) {
+      console.error('Failed to save state:', err.message);
+    }
+  }, 300); // debounce rapid updates (e.g. token drags)
 }
 
-dbReady = initSqlJs().then((SQL) => {
-  if (fs.existsSync(DB_FILE)) {
-    db = new SQL.Database(fs.readFileSync(DB_FILE));
-  } else {
-    db = new SQL.Database();
-  }
-  db.run("CREATE TABLE IF NOT EXISTS state (id INTEGER PRIMARY KEY, data TEXT)");
-  loadStateFromDb();
-  persistDbToDisk();
-});
+const dbReady = db.execute('CREATE TABLE IF NOT EXISTS state (id INTEGER PRIMARY KEY, data TEXT)')
+  .then(loadStateFromDb);
 
 function broadcastState() {
   io.emit('state:full', state);
@@ -237,3 +243,20 @@ dbReady.then(() => {
   console.error('Failed to initialize database:', err);
   process.exit(1);
 });
+
+async function flushAndExit() {
+  clearTimeout(saveTimer);
+  if (pendingSave) {
+    try {
+      await db.execute({
+        sql: 'INSERT INTO state (id, data) VALUES (1, ?) ON CONFLICT(id) DO UPDATE SET data = excluded.data',
+        args: [JSON.stringify(state)]
+      });
+    } catch (err) {
+      console.error('Failed to flush state on shutdown:', err.message);
+    }
+  }
+  process.exit(0);
+}
+process.on('SIGTERM', flushAndExit);
+process.on('SIGINT', flushAndExit);
