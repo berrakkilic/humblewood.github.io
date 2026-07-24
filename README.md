@@ -1,6 +1,6 @@
 # The Humblewood Table
 
-A cozy, cottagecore virtual tabletop for running your Humblewood campaign online — maps, tokens, doodling, character sheets, and a synced music jukebox, shared live between you and your players.
+A cozy, cottagecore virtual tabletop for running the Humblewood campaign online.
 
 ## Running it locally
 
