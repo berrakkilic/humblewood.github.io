@@ -15,7 +15,7 @@ Then open `http://localhost:3000` in your browser. (just dm view)
 
 ## Playing with the group
 
-Everyone needs to reach the **same running server** — running it on your laptop only works for people on the same network unless deployed. 
+Everyone needs to reach the same running server. Running it on your laptop only works for people on the same network unless deployed. 
 
 1. Open the site, enter your name, pick **Dungeon Master** or **Player**, and click "Enter the Wood."
 2. DM-only controls (uploading maps, adding tokens, doodling, editing the playlist) are hidden from players automatically.
@@ -36,11 +36,10 @@ The filesystem resets on redeploy, so uploaded map/token images and the `data/st
 
 ## Known limitations to build out next
 
-- State lives in server memory only — **restarting the server clears the table** (map, tokens, playlist, sheets). Swapping in a small database (SQLite is easiest) is the natural next step.
-- No authentication — anyone with the link can join as anyone. Fine for a private table with a link you control; add passwords/accounts before sharing more widely.
-- No fog of war, no dice roller, no grid/snap-to-grid yet — the `state.fog` field and grid size are stubbed in `server.js` ready for you (or me, next round) to build on.
-- Music playback requires direct audio file URLs (not YouTube/Spotify links) due to those platforms' embedding restrictions — self-hosted MP3s or a service like SoundCloud's direct stream links work.
-- Token art and maps upload to the server's local disk — fine for now, but on most hosts (Render free tier especially) uploaded files don't persist across restarts/deploys. For a permanent setup, swap in cloud storage (S3, Cloudflare R2) later.
+- State lives in server memory only aka **restarting the server clears the table** (map, tokens, playlist, sheets).
+- No authentication so anyone with the link can join as anyone. 
+- Music playback requires direct audio file URLs (not YouTube/Spotify links) due to those platforms' embedding restrictions. Self-hosted MP3s or a service like SoundCloud's direct stream links also work.
+- Token art and maps upload to the server's local disk.
 
 ## Project structure
 
