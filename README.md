@@ -41,19 +41,7 @@ The filesystem resets on redeploy, so uploaded map/token images will get wiped w
 
 ## Known limitations to build out next
 
-- State lives in server memory only aka **restarting the server clears the table** (map, tokens, playlist, sheets).
+- State lives in server memory only.
 - No authentication so anyone with the link can join as anyone. 
-- Music playback requires direct audio file URLs (not YouTube/Spotify links) due to those platforms' embedding restrictions. Self-hosted MP3s or a service like SoundCloud's direct stream links also work.
+- Music playback requires direct audio file URLs. Self-hosted MP3s or a service like SoundCloud's direct stream links also work.
 - Token art and maps upload to the server's local disk.
-
-## Project structure
-
-```
-humblewood-table/
-  server.js          Express + Socket.io backend, in-memory room state
-  public/
-    index.html        App shell (join screen, map/characters/jukebox views)
-    style.css          Cottagecore theme
-    app.js             All client-side logic and socket wiring
-    uploads/            Uploaded maps/token art land here
-```
