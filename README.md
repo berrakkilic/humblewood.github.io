@@ -4,50 +4,31 @@ A cozy, cottagecore virtual tabletop for running the Humblewood campaign online.
 
 ## Running it locally
 
-You need [Node.js](https://nodejs.org) installed (v18+).
+Req: [Node.js](https://nodejs.org) installed (v18+).
 
 ```bash
 npm install
 npm start
 ```
 
-Then open `http://localhost:3000` in your browser. That's your DM view.
+Then open `http://localhost:3000` in your browser. (just dm view)
 
-## Playing with your group
+## Playing with the group
 
-Everyone needs to reach the **same running server** — running it on your laptop only works for people on your own network unless you deploy it (see below).
+Everyone needs to reach the **same running server** — running it on your laptop only works for people on the same network unless deployed. 
 
 1. Open the site, enter your name, pick **Dungeon Master** or **Player**, and click "Enter the Wood."
-2. Everything — moving tokens, doodles, music, map changes, character sheets — syncs live to everyone connected, no refresh needed.
-3. DM-only controls (uploading maps, adding tokens, doodling, editing the playlist) are hidden from players automatically.
-
-## Getting this onto GitHub
-
-From inside this folder:
-
-```bash
-git init
-git add .
-git commit -m "Humblewood Table"
-git branch -M main
-git remote add origin https://github.com/YOUR-USERNAME/YOUR-REPO.git
-git push -u origin main
-```
-
-(Create the empty repo on GitHub first via "New repository" — don't initialize it with a README there, to avoid a merge conflict.)
+2. DM-only controls (uploading maps, adding tokens, doodling, editing the playlist) are hidden from players automatically.
 
 ## Deploying so players can join from anywhere
 
-**Important: GitHub Pages won't work for this.** Pages only serves static files (HTML/CSS/JS, no server), but this app needs a live Node process for Socket.io to sync everyone in real time. You need an actual Node host instead — still free, still connects straight to your GitHub repo:
+Pages only serves static files unf :( but this app needs a live Node process for Socket.io to sync everyone in real time.
 
-1. Push this repo to GitHub (see above).
-2. Go to [render.com](https://render.com) (or [railway.app](https://railway.app)), sign in with GitHub.
-3. "New Web Service" → pick your repo.
 4. Build command: `npm install`. Start command: `npm start`. Leave the port setting alone — the platform sets `PORT` automatically and `server.js` already reads it.
 5. Deploy. You'll get a public URL like `humblewood-table.onrender.com` — share that with your players.
 6. Every time you `git push`, Render/Railway auto-redeploys.
 
-One thing to know about free tiers: the filesystem often resets on redeploy, so uploaded map/token images and the `data/state.json` save file can get wiped when the service restarts or redeploys. Between sessions without redeploying, your table state is safe. For a table that survives redeploys long-term, the next step is swapping local file storage for something persistent (a small hosted SQLite like Turso for state, Cloudflare R2 or S3 for images). Happy to wire that in whenever you're ready.
+The filesystem resets on redeploy, so uploaded map/token images and the `data/state.json` save file can get wiped when the service restarts or redeploys. Between sessions without redeploying, your table state is safe. For a table that survives redeploys long-term, the next step is swapping local file storage for something persistent (a small hosted SQLite like Turso for state, Cloudflare R2 or S3 for images). (TODO)
 
 ## What's built so far (the skeleton)
 
