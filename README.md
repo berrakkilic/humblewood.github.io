@@ -24,7 +24,7 @@ Everyone needs to reach the same running server. Running it on your laptop only 
 
 Pages only serves static files unf :( but this app needs a live Node process for Socket.io to sync everyone in real time.
 
-The filesystem resets on redeploy, so uploaded map/token images and the `data/state.json` save file can get wiped when the service restarts or redeploys. Between sessions without redeploying, your table state is safe. For a table that survives redeploys long-term, the next step is swapping local file storage for something persistent (a small hosted SQLite like Turso for state, Cloudflare R2 or S3 for images). (TODO)
+The filesystem resets on redeploy, so uploaded map/token images will get wiped when the service restarts or redeploys.
 
 ## What's built so far (the skeleton)
 
