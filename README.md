@@ -51,11 +51,11 @@ One thing to know about free tiers: the filesystem often resets on redeploy, so 
 
 ## What's built so far (the skeleton)
 
-- **Map & tokens** — DM uploads a battle map image; tokens for NPCs, items, and PCs live in a tray and can be dragged around the map. Positions sync to everyone.
-- **Doodle layer** — DM can freehand-draw on the map (great for marking areas, paths, or "the ritual circle glows here"). Clearable.
-- **Jukebox** — add tracks by direct audio URL, playlist syncs playback position/play/pause across all clients.
-- **Character sheets** — a basic 5e-style sheet (abilities, HP/AC, inventory, notes) per character, editable by anyone (you may want to restrict this later).
-- **Cottagecore Humblewood aesthetic** — parchment and forest tones, a hand-lettered accent font, vine dividers, soft rounded shapes.
+- **Map & tokens**: DM uploads a battle map image; tokens for NPCs, items, and PCs live in a tray and can be dragged around the map. Positions sync to everyone.
+- **Doodle layer**: DM can freehand-draw on the map (great for marking areas, paths, or "the ritual circle glows here"). Clearable.
+- **Jukebox**: add tracks by direct audio URL, playlist syncs playback position/play/pause across all clients.
+- **Character sheets**: a basic 5e-style sheet (abilities, HP/AC, inventory, notes) per character, editable by anyone (you may want to restrict this later).
+- **Cottagecore Humblewood UI**: parchment and forest tones, a hand-lettered accent font, vine dividers, soft rounded shapes.
 
 ## Known limitations to build out next
 
