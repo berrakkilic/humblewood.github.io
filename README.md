@@ -13,6 +13,25 @@ npm start
 
 Then open `http://localhost:3000` in your browser. (just dm view)
 
+## Deploying with Docker
+- **`Dockerfile`** — builds the app into a container.
+- **`docker-compose.yml`** — runs it with two persistent volumes: one for the database, one for uploaded map/token images.
+
+```bash
+docker compose up -d --build
+```
+
+Builds the image and starts the container in the background, with the app listening on port 3000.
+
+The app uses SQLite in a file and the `docker-compose.yml` mounts a volume (`humblewood-data`) so that the file persists across restarts and redeploys automatically (hopefuckingfully).
+
+To update the live version after this, I can just push as normal, then on the server we would have to:
+```bash
+git pull
+docker compose up -d --build
+```
+Or write an automatic redeploy mechanism. 
+
 ## Playing with the group
 
 Everyone needs to reach the same running server. Running it on your laptop only works for people on the same network unless deployed. 
@@ -28,15 +47,12 @@ The filesystem resets on redeploy, so uploaded map/token images will get wiped w
 
 ## What's built so far (the skeleton)
 
-- **Map & tokens**: DM uploads a battle map image; tokens for NPCs, items, and PCs live in a tray and can be dragged around the map. Positions sync to everyone.
-- **Doodle layer**: DM can freehand-draw on the map. Clearable.
-- **Jukebox**: add tracks by direct audio URL, playlist syncs playback position/play/pause across all clients.
-- **Character sheets**: a basic 5e-style sheet (abilities, HP/AC, inventory, notes) per character, editable by anyone (will restrict this later).
+- **Map & tokens**: DM uploads the battle map image. Tokens for NPCs, items and PCs live in a tray and can be dragged around the map (hopefully). Positions sync to everyone (again, hopefully). 
+- **Doodle layer**: DM can freehand-draw on the map. Clearable. Should give players access too.
+- **Jukebox**: add tracks by direct audio URL, playlist syncs playback position/play/pause across all clients (Hopefully).
+- **Character sheets**: a basic 5e-style sheet (abilities, HP/AC, inventory, notes) per character, editable by anyone (will restrict this later and add more options).
 - **Cottagecore Humblewood aesthetic**: parchment and forest tones, vine dividers, soft rounded shapes.
 
 ## Known limitations to build out next
-
-- State lives in server memory only.
 - No authentication so anyone with the link can join as anyone. 
 - Music playback requires direct audio file URLs. Self-hosted MP3s or a service like SoundCloud's direct stream links also work.
-- Token art and maps upload to the server's local disk.
