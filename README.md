@@ -37,13 +37,7 @@ Or write an automatic redeploy mechanism.
 Everyone needs to reach the same running server. Running it on your laptop only works for people on the same network unless deployed. 
 
 1. Open the site, enter your name, pick **Dungeon Master** or **Player**, and click "Enter the Wood."
-2. DM-only controls (uploading maps, adding tokens, doodling, editing the playlist) are hidden from players automatically.
-
-## Deploying so players can join from anywhere
-
-Pages only serves static files unf :( but this app needs a live Node process for Socket.io to sync everyone in real time.
-
-The filesystem resets on redeploy, so uploaded map/token images will get wiped when the service restarts or redeploys.
+2. DM-only controls (uploading maps, adding tokens, doodling, editing the playlist) are hidden from players.
 
 ## What's built so far (the skeleton)
 
