@@ -50,3 +50,4 @@ Everyone needs to reach the same running server. Running it on your laptop only 
 ## Known limitations to build out next
 - No authentication so anyone with the link can join as anyone. 
 - Music playback requires direct audio file URLs. Self-hosted MP3s or a service like SoundCloud's direct stream links also work.
+![Logo](images/logo.jpeg)
