@@ -6,6 +6,14 @@ const multer = require('multer');
 const { Server } = require('socket.io');
 
 const app = express();
+
+// Configure app config
+let proxyTrust = "loopback, linklocal, uniquelocal";
+if (process.env.TRUST_PROXY) {
+  proxyTrust = `${proxyTrust}, ${process.env.TRUST_PROXY}`;
+}
+app.set("trust proxy", proxyTrust);
+
 const server = http.createServer(app);
 const io = new Server(server);
 
