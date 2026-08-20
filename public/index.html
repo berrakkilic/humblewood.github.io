@@ -5,6 +5,167 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>The Humblewood Table</title>
 <link rel="stylesheet" href="style.css">
+
+<style>
+/* Character sheet additions: intentionally scoped to the editor so the rest of the table keeps its existing look. */
+#sheet-editor,
+#sheet-editor * { box-sizing: border-box; }
+
+/* The old sheet inherited a narrow four-column layout from the original
+   character form. Give the expanded 5e sheet its own spacious 12-column
+   layout instead. */
+#sheet-editor .sheet-form {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 18px;
+  align-items: start;
+}
+#sheet-editor .sheet-form > .sheet-section,
+#sheet-editor .sheet-form > .sheet-save-row {
+  grid-column: 1 / -1;
+  min-width: 0;
+}
+
+/* Comfortable desktop pairings. No card is allowed to become narrower than
+   six columns, while information-dense sections remain full width. */
+#sheet-editor .sheet-form > .section-combat { grid-column: span 7; }
+#sheet-editor .sheet-form > .section-abilities { grid-column: span 5; }
+#sheet-editor .sheet-form > .section-attacks,
+#sheet-editor .sheet-form > .section-proficiencies,
+#sheet-editor .sheet-form > .section-equipment,
+#sheet-editor .sheet-form > .section-features,
+#sheet-editor .sheet-form > .section-personality,
+#sheet-editor .sheet-form > .section-story { grid-column: span 6; }
+#sheet-editor .sheet-section {
+  border: 1px solid rgba(94, 79, 55, .18);
+  border-radius: 14px;
+  padding: 18px;
+  background: rgba(255,255,255,.32);
+}
+#sheet-editor details.sheet-section { display:block; }
+#sheet-editor details.sheet-section > summary {
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 16px;
+  list-style: none;
+  margin: -2px 0 12px;
+}
+#sheet-editor details.sheet-section > summary::-webkit-details-marker { display:none; }
+#sheet-editor details.sheet-section > summary::before { content:'▸'; display:inline-block; margin-right:8px; transition:transform .15s ease; }
+#sheet-editor details.sheet-section[open] > summary::before { transform:rotate(90deg); }
+#sheet-editor .sheet-section-title { font-weight:700; font-size:16px; margin-bottom:12px; }
+#sheet-editor .sheet-section-title { line-height:1.25; }
+#sheet-editor .sheet-subgrid { display:grid; gap:14px; }
+#sheet-editor .sheet-subgrid.two-col { grid-template-columns:repeat(2,minmax(0,1fr)); }
+#sheet-editor .sheet-subgrid.four-col { grid-template-columns:repeat(4,minmax(0,1fr)); }
+#sheet-editor .sheet-subgrid.six-col { grid-template-columns:repeat(6,minmax(0,1fr)); }
+#sheet-editor .sheet-subgrid .span-2 { grid-column:span 2; }
+#sheet-editor .field,
+#sheet-editor .compact-grid .field { min-width:0; }
+#sheet-editor .field > label {
+  display:block;
+  margin-bottom:6px;
+  line-height:1.25;
+  overflow-wrap:normal;
+  word-break:normal;
+}
+#sheet-editor .field > input:not([type="checkbox"]):not([type="radio"]),
+#sheet-editor .field > select,
+#sheet-editor .field > textarea {
+  display:block;
+  width:100%;
+  min-width:0;
+  max-width:100%;
+}
+#sheet-editor textarea { line-height:1.4; }
+#sheet-editor .portrait-row {
+  display:flex;
+  align-items:center;
+  gap:14px;
+  flex-wrap:wrap;
+}
+#sheet-editor .portrait-row input[type="file"] {
+  flex:1 1 220px;
+  width:auto;
+  min-width:0;
+  max-width:100%;
+}
+#sheet-editor .ability-grid-complete {
+  display:grid;
+  grid-template-columns:repeat(6,minmax(78px,1fr));
+  gap:12px;
+}
+#sheet-editor .ability-grid-complete .ability-box { position:relative; padding-bottom:28px; }
+#sheet-editor .ability-grid-complete .ability-box input { width:100%; min-width:0; }
+#sheet-editor .ability-mod { position:absolute; left:50%; bottom:6px; transform:translateX(-50%); font-weight:700; font-size:14px; }
+#sheet-editor .death-save-row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-top:12px; font-size:13px; }
+#sheet-editor .death-save-row label { display:flex; gap:4px; align-items:center; }
+#sheet-editor .save-skill-columns { display:grid; grid-template-columns:minmax(280px,.65fr) minmax(560px,1.35fr); gap:28px; }
+#sheet-editor .check-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:7px; }
+#sheet-editor .check-grid label,
+#sheet-editor .skills-grid label {
+  display:grid;
+  align-items:center;
+  gap:8px;
+  min-width:0;
+  line-height:1.2;
+  font-size:13px;
+}
+#sheet-editor .check-grid label { grid-template-columns:auto minmax(34px,1fr) 64px; }
+#sheet-editor .skills-grid label { grid-template-columns:auto minmax(110px,1fr) 34px 64px; }
+#sheet-editor .skills-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:7px 12px; }
+#sheet-editor .skills-grid span { opacity:.6; font-size:11px; }
+#sheet-editor .mini-number { width:64px; min-width:0; padding:5px 6px; }
+#sheet-editor .attack-table { display:grid; grid-template-columns:1.2fr .6fr 1.2fr; gap:7px; margin-bottom:10px; }
+#sheet-editor .attack-table input { width:100%; min-width:0; }
+#sheet-editor .attack-head { font-size:12px; font-weight:700; opacity:.72; padding:0 4px; }
+#sheet-editor .money-grid { display:grid; grid-template-columns:repeat(5,minmax(70px,1fr)); gap:8px; margin-bottom:12px; }
+#sheet-editor .inventory-add-row {
+  display:grid;
+  grid-template-columns:minmax(180px,1fr) 80px auto;
+  gap:10px;
+  align-items:center;
+}
+#sheet-editor .inventory-add-row input { width:100% !important; min-width:0; }
+#sheet-editor .spell-levels { display:grid; grid-template-columns:58px 74px 74px 1fr; gap:7px; align-items:start; margin:10px 0; }
+#sheet-editor .spell-level-head { font-size:12px; font-weight:700; opacity:.72; padding:4px; }
+#sheet-editor .spell-level-label { font-weight:700; text-align:center; padding-top:9px; }
+#sheet-editor .spell-levels textarea { min-height:46px; resize:vertical; }
+#sheet-editor .sheet-save-row { position:sticky; bottom:8px; z-index:5; padding:10px; border-radius:12px; backdrop-filter:blur(8px); background:rgba(250,247,240,.86); }
+#sheet-editor small { display:block; opacity:.7; line-height:1.35; margin-top:4px; }
+@media (max-width: 1450px) {
+  #sheet-editor .sheet-form > .section-combat,
+  #sheet-editor .sheet-form > .section-abilities { grid-column:1 / -1; }
+}
+@media (max-width: 1100px) {
+  #sheet-editor .sheet-form > .section-attacks,
+  #sheet-editor .sheet-form > .section-proficiencies,
+  #sheet-editor .sheet-form > .section-equipment,
+  #sheet-editor .sheet-form > .section-features,
+  #sheet-editor .sheet-form > .section-personality,
+  #sheet-editor .sheet-form > .section-story { grid-column:1 / -1; }
+  #sheet-editor .save-skill-columns { grid-template-columns:1fr; gap:18px; }
+}
+@media (max-width: 900px) {
+  #sheet-editor .sheet-subgrid.four-col, #sheet-editor .sheet-subgrid.six-col { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  #sheet-editor .save-skill-columns { grid-template-columns:1fr; }
+  #sheet-editor .skills-grid { grid-template-columns:1fr; }
+  #sheet-editor .ability-grid-complete { grid-template-columns:repeat(3,minmax(78px,1fr)); }
+}
+@media (max-width: 600px) {
+  #sheet-editor .sheet-form { grid-template-columns:1fr; gap:14px; }
+  #sheet-editor .sheet-section { padding:14px; }
+  #sheet-editor .sheet-subgrid.two-col, #sheet-editor .sheet-subgrid.four-col, #sheet-editor .sheet-subgrid.six-col { grid-template-columns:1fr; }
+  #sheet-editor .sheet-subgrid .span-2 { grid-column:auto; }
+  #sheet-editor .ability-grid-complete { grid-template-columns:repeat(2,minmax(78px,1fr)); }
+  #sheet-editor .attack-table { grid-template-columns:1fr; }
+  #sheet-editor .attack-head { display:none; }
+  #sheet-editor .money-grid { grid-template-columns:repeat(3,minmax(0,1fr)); }
+  #sheet-editor .spell-levels { grid-template-columns:42px 58px 58px 1fr; }
+  #sheet-editor .inventory-add-row { grid-template-columns:1fr 72px; }
+  #sheet-editor .inventory-add-row button { grid-column:1 / -1; width:100%; }
+}
+</style>
 </head>
 <body>
 
@@ -125,87 +286,277 @@
         </div>
         <div class="vine-divider"></div>
         <form class="sheet-form" id="sheet-form">
-          <div class="field span-2 portrait-field">
-            <label>Portrait</label>
-            <div class="portrait-row">
-              <div class="portrait-preview" id="portrait-preview">🍃</div>
-              <input type="file" id="sf-portrait" accept="image/*">
-            </div>
-          </div>
-          <div class="field span-2"><label>Name</label><input type="text" id="sf-name"></div>
+          <!-- IDENTITY -->
+          <div class="sheet-section section-character">
+            <div class="sheet-section-title">Character</div>
+            <div class="sheet-subgrid four-col">
+              <div class="field span-2 portrait-field">
+                <label>Portrait</label>
+                <div class="portrait-row">
+                  <div class="portrait-preview" id="portrait-preview">🍃</div>
+                  <input type="file" id="sf-portrait" accept="image/*">
+                </div>
+              </div>
+              <div class="field span-2"><label>Name</label><input type="text" id="sf-name" placeholder="Bonk..."></div>
 
-          <div class="field">
-            <label>Species of the Wood</label>
-            <input type="text" id="sf-species" list="species-suggestions" placeholder="Avenil, Grimalkin, Vulpal...">
-            <datalist id="species-suggestions">
-              <option value="Luma (birdfolk)">
-              <option value="Corvum (birdfolk)">
-              <option value="Raptor (birdfolk)">
-              <option value="Gallus (birdfolk)">
-              <option value="Strig (birdfolk)">
-              <option value="Vulpin (humblefolk)">
-              <option value="Mapach (humblefolk)">
-              <option value="Jerbeen (humblefolk)">
-              <option value="Hedge (humblefolk)">
-              <option value="Cervan (humblefolk)">
-            </datalist>
-          </div>
-          <div class="field">
-            <label>Path</label>
-            <input type="text" id="sf-path" list="path-suggestions" placeholder="Duelist, Ranger, Mystic...">
-            <datalist id="path-suggestions">
-              <option value="Duelist">
-              <option value="Marksman">
-              <option value="Mystic">
-              <option value="Ranger">
-              <option value="Rogue">
-              <option value="Warden">
-              <option value="Wanderer">
-            </datalist>
-          </div>
-          <div class="field"><label>Class</label><input type="text" id="sf-class"></div>
-          <div class="field"><label>Level</label><input type="number" id="sf-level" value="1"></div>
+              <div class="field">
+                <label>Species of the Wood</label>
+                <input type="text" id="sf-species" list="species-suggestions" placeholder="Corvum, Luma, Raptor...">
+                <datalist id="species-suggestions">
+                  <option value="Luma (birdfolk)"><option value="Corvum (birdfolk)"><option value="Raptor (birdfolk)">
+                  <option value="Gallus (birdfolk)"><option value="Strig (birdfolk)"><option value="Vulpin (humblefolk)">
+                  <option value="Mapach (humblefolk)"><option value="Jerbeen (humblefolk)"><option value="Hedge (humblefolk)">
+                  <option value="Cervan (humblefolk)">
+                </datalist>
+              </div>
+              <div class="field">
+                <label>Subrace</label>
+                <input type="text" id="sf-subrace" list="subrace-suggestions" placeholder="Dusk Corvum, Grove Cervan...">
+                <datalist id="subrace-suggestions">
+                  <option value="Dusk Corvum"><option value="Kindled Corvum">
+                  <option value="Bright Gallus"><option value="Huden Gallus">
+                  <option value="Sable Luma"><option value="Sera Luma">
+                  <option value="Maran Raptor"><option value="Mistral Raptor">
+                  <option value="Stout Strig"><option value="Swift Strig">
+                  <option value="Grove Cervan"><option value="Pronghorn Cervan">
+                </datalist>
+              </div>
+              <div class="field"><label>Class</label><input type="text" id="sf-class" list="class-suggestions" placeholder="Rogue, Cleric, Bard..."></div>
+              <div class="field"><label>Subclass</label><input type="text" id="sf-subclass" list="subclass-suggestions" placeholder="Thief, Community Domain..."></div>
+              <datalist id="class-suggestions">
+                <option value="Artificer"><option value="Barbarian"><option value="Bard"><option value="Cleric"><option value="Druid">
+                <option value="Fighter"><option value="Monk"><option value="Paladin"><option value="Ranger"><option value="Rogue">
+                <option value="Sorcerer"><option value="Warlock"><option value="Wizard">
+              </datalist>
+              <datalist id="subclass-suggestions">
+                <option value="College of the Road (Bard)"><option value="Community Domain (Cleric)"><option value="Night Domain (Cleric)">
+                <option value="Scofflaw (Fighter)">
+              </datalist>
 
-          <div class="field span-2"><label>Home (grove, roost, or den)</label><input type="text" id="sf-home" placeholder="A hollow beneath Cedarfall Hollow..."></div>
-          <div class="field"><label>HP / Max HP</label>
-            <div style="display:flex; gap:6px;">
-              <input type="number" id="sf-hp" value="10">
-              <input type="number" id="sf-maxhp" value="10">
-            </div>
-          </div>
-          <div class="field"><label>AC</label><input type="number" id="sf-ac" value="10"></div>
-          <div class="field"><label>Speed</label><input type="text" id="sf-speed" value="30 ft"></div>
+              <div class="field"><label>Level</label><input type="number" id="sf-level" value="1" min="1" max="20"></div>
+              <div class="field"><label>Background</label><input type="text" id="sf-background" placeholder="Background"></div>
+              <div class="field">
+                <label>Alignment</label>
+                <input type="text" id="sf-path" list="path-suggestions" placeholder="Lawful Good, Chaotic Neutral...">
+                <datalist id="path-suggestions">
+                  <option value="Lawful Good"><option value="Neutral Good"><option value="Chaotic Good">
+                  <option value="Lawful Neutral"><option value="True Neutral"><option value="Chaotic Neutral">
+                  <option value="Lawful Evil"><option value="Neutral Evil"><option value="Chaotic Evil">
+                </datalist>
+              </div>
+              <div class="field"><label>Experience</label><input type="number" id="sf-xp" min="0" value="0"></div>
 
-          <div class="field span-4">
-            <label>Ability scores</label>
-            <div class="ability-grid">
-              <div class="ability-box"><label>STR</label><input type="number" id="sf-str" value="10"></div>
-              <div class="ability-box"><label>DEX</label><input type="number" id="sf-dex" value="10"></div>
-              <div class="ability-box"><label>CON</label><input type="number" id="sf-con" value="10"></div>
-              <div class="ability-box"><label>INT</label><input type="number" id="sf-int" value="10"></div>
-              <div class="ability-box"><label>WIS</label><input type="number" id="sf-wis" value="10"></div>
-              <div class="ability-box"><label>CHA</label><input type="number" id="sf-cha" value="10"></div>
-            </div>
-          </div>
-
-          <div class="field"><label>Trait</label><textarea id="sf-trait" rows="2" placeholder="A habit, quirk, or mannerism..."></textarea></div>
-          <div class="field"><label>Ideal</label><textarea id="sf-ideal" rows="2" placeholder="What they believe in..."></textarea></div>
-          <div class="field"><label>Bond</label><textarea id="sf-bond" rows="2" placeholder="Who or what they're tied to..."></textarea></div>
-          <div class="field"><label>Flaw</label><textarea id="sf-flaw" rows="2" placeholder="A weakness or vice..."></textarea></div>
-
-          <div class="field span-4">
-            <label>Inventory</label>
-            <div id="inventory-list"></div>
-            <div class="inventory-add-row">
-              <input type="text" id="inv-item-name" placeholder="Item name">
-              <input type="number" id="inv-item-qty" placeholder="Qty" value="1" min="1" style="width:70px;">
-              <button type="button" class="btn-ghost" id="inv-add-btn">+ Add</button>
+              <div class="field span-2"><label>Home (grove, roost, or den)</label><input type="text" id="sf-home" placeholder="A hollow beneath Cedarfall Hollow..."></div>
+              <div class="field">
+                <label>Faith / Amaranthine</label>
+                <input type="text" id="sf-faith" list="faith-suggestions" placeholder="Gesme, Reya, Cairith...">
+                <datalist id="faith-suggestions">
+                  <option value="Altus, the Enduring"><option value="Ardea, the Dawnmother"><option value="Cairith, the Resolute">
+                  <option value="Clhuran, the Fickle"><option value="Gaspard, the Champion"><option value="Gesme, the Brilliant">
+                  <option value="Hanera, the Provider"><option value="Hath, the Whisperer"><option value="Reya, the Explorer">
+                  <option value="Henwin, the Kind"><option value="Kren, the Sly"><option value="Tyton, the Nightfather">
+                </datalist>
+              </div>
+              <div class="field"><label>Player / Owner</label><input type="text" id="sf-player" placeholder="Player name"></div>
             </div>
           </div>
 
-          <div class="field span-4"><label>Notes & backstory</label><textarea id="sf-notes" rows="3"></textarea></div>
+          <!-- COMBAT -->
+          <div class="sheet-section section-combat">
+            <div class="sheet-section-title">Combat & Core Stats</div>
+            <div class="sheet-subgrid six-col compact-grid">
+              <div class="field"><label>HP</label><input type="number" id="sf-hp" value="10"></div>
+              <div class="field"><label>Max HP</label><input type="number" id="sf-maxhp" value="10"></div>
+              <div class="field"><label>Temp HP</label><input type="number" id="sf-temphp" value="0"></div>
+              <div class="field"><label>AC</label><input type="number" id="sf-ac" value="10"></div>
+              <div class="field"><label>Initiative</label><input type="number" id="sf-initiative" value="0"></div>
+              <div class="field"><label>Speed</label><input type="text" id="sf-speed" value="30 ft"></div>
+              <div class="field"><label>Proficiency Bonus</label><input type="number" id="sf-prof-bonus" value="2" readonly></div>
+              <div class="field"><label>Inspiration</label><input type="number" id="sf-inspiration" value="0" min="0"></div>
+              <div class="field"><label>Hit Dice</label><input type="text" id="sf-hitdice" placeholder="1d8"></div>
+              <div class="field"><label>Hit Dice Remaining</label><input type="number" id="sf-hitdice-left" min="0" value="1"></div>
+              <div class="field"><label>Passive Perception</label><input type="number" id="sf-passive-perception" value="10"></div>
+              <div class="field"><label>Size</label><input type="text" id="sf-size" list="size-suggestions" placeholder="Small / Medium"></div>
+              <datalist id="size-suggestions"><option value="Tiny"><option value="Small"><option value="Medium"><option value="Large"></datalist>
+            </div>
+            <div class="death-save-row">
+              <strong>Death Saves</strong>
+              <span>Successes:</span>
+              <label><input type="checkbox" id="sf-death-success-1"> 1</label>
+              <label><input type="checkbox" id="sf-death-success-2"> 2</label>
+              <label><input type="checkbox" id="sf-death-success-3"> 3</label>
+              <span>Failures:</span>
+              <label><input type="checkbox" id="sf-death-fail-1"> 1</label>
+              <label><input type="checkbox" id="sf-death-fail-2"> 2</label>
+              <label><input type="checkbox" id="sf-death-fail-3"> 3</label>
+            </div>
+          </div>
 
-          <div class="field span-4">
+          <!-- ABILITIES -->
+          <div class="sheet-section section-abilities">
+            <div class="sheet-section-title">Ability Scores</div>
+            <div class="ability-grid ability-grid-complete">
+              <div class="ability-box"><label>STR</label><input type="number" id="sf-str" value="10"><span class="ability-mod" id="mod-str">+0</span></div>
+              <div class="ability-box"><label>DEX</label><input type="number" id="sf-dex" value="10"><span class="ability-mod" id="mod-dex">+0</span></div>
+              <div class="ability-box"><label>CON</label><input type="number" id="sf-con" value="10"><span class="ability-mod" id="mod-con">+0</span></div>
+              <div class="ability-box"><label>INT</label><input type="number" id="sf-int" value="10"><span class="ability-mod" id="mod-int">+0</span></div>
+              <div class="ability-box"><label>WIS</label><input type="number" id="sf-wis" value="10"><span class="ability-mod" id="mod-wis">+0</span></div>
+              <div class="ability-box"><label>CHA</label><input type="number" id="sf-cha" value="10"><span class="ability-mod" id="mod-cha">+0</span></div>
+            </div>
+          </div>
+
+          <!-- SAVES + SKILLS -->
+          <details class="sheet-section section-skills" open>
+            <summary>Saving Throws & Skills</summary>
+            <div class="save-skill-columns">
+              <div>
+                <h4>Saving Throws</h4>
+                <div class="check-grid">
+                  <label><input type="checkbox" id="sf-save-str-prof"> STR <input class="mini-number" type="number" id="sf-save-str" placeholder="+0"></label>
+                  <label><input type="checkbox" id="sf-save-dex-prof"> DEX <input class="mini-number" type="number" id="sf-save-dex" placeholder="+0"></label>
+                  <label><input type="checkbox" id="sf-save-con-prof"> CON <input class="mini-number" type="number" id="sf-save-con" placeholder="+0"></label>
+                  <label><input type="checkbox" id="sf-save-int-prof"> INT <input class="mini-number" type="number" id="sf-save-int" placeholder="+0"></label>
+                  <label><input type="checkbox" id="sf-save-wis-prof"> WIS <input class="mini-number" type="number" id="sf-save-wis" placeholder="+0"></label>
+                  <label><input type="checkbox" id="sf-save-cha-prof"> CHA <input class="mini-number" type="number" id="sf-save-cha" placeholder="+0"></label>
+                </div>
+              </div>
+              <div>
+                <h4>Skills</h4>
+                <div class="skills-grid">
+                  <label><input type="checkbox" id="sf-skill-acrobatics-prof"> Acrobatics <span>DEX</span><input class="mini-number" type="number" id="sf-skill-acrobatics"></label>
+                  <label><input type="checkbox" id="sf-skill-animal-prof"> Animal Handling <span>WIS</span><input class="mini-number" type="number" id="sf-skill-animal"></label>
+                  <label><input type="checkbox" id="sf-skill-arcana-prof"> Arcana <span>INT</span><input class="mini-number" type="number" id="sf-skill-arcana"></label>
+                  <label><input type="checkbox" id="sf-skill-athletics-prof"> Athletics <span>STR</span><input class="mini-number" type="number" id="sf-skill-athletics"></label>
+                  <label><input type="checkbox" id="sf-skill-deception-prof"> Deception <span>CHA</span><input class="mini-number" type="number" id="sf-skill-deception"></label>
+                  <label><input type="checkbox" id="sf-skill-history-prof"> History <span>INT</span><input class="mini-number" type="number" id="sf-skill-history"></label>
+                  <label><input type="checkbox" id="sf-skill-insight-prof"> Insight <span>WIS</span><input class="mini-number" type="number" id="sf-skill-insight"></label>
+                  <label><input type="checkbox" id="sf-skill-intimidation-prof"> Intimidation <span>CHA</span><input class="mini-number" type="number" id="sf-skill-intimidation"></label>
+                  <label><input type="checkbox" id="sf-skill-investigation-prof"> Investigation <span>INT</span><input class="mini-number" type="number" id="sf-skill-investigation"></label>
+                  <label><input type="checkbox" id="sf-skill-medicine-prof"> Medicine <span>WIS</span><input class="mini-number" type="number" id="sf-skill-medicine"></label>
+                  <label><input type="checkbox" id="sf-skill-nature-prof"> Nature <span>INT</span><input class="mini-number" type="number" id="sf-skill-nature"></label>
+                  <label><input type="checkbox" id="sf-skill-perception-prof"> Perception <span>WIS</span><input class="mini-number" type="number" id="sf-skill-perception"></label>
+                  <label><input type="checkbox" id="sf-skill-performance-prof"> Performance <span>CHA</span><input class="mini-number" type="number" id="sf-skill-performance"></label>
+                  <label><input type="checkbox" id="sf-skill-persuasion-prof"> Persuasion <span>CHA</span><input class="mini-number" type="number" id="sf-skill-persuasion"></label>
+                  <label><input type="checkbox" id="sf-skill-religion-prof"> Religion <span>INT</span><input class="mini-number" type="number" id="sf-skill-religion"></label>
+                  <label><input type="checkbox" id="sf-skill-sleight-prof"> Sleight of Hand <span>DEX</span><input class="mini-number" type="number" id="sf-skill-sleight"></label>
+                  <label><input type="checkbox" id="sf-skill-stealth-prof"> Stealth <span>DEX</span><input class="mini-number" type="number" id="sf-skill-stealth"></label>
+                  <label><input type="checkbox" id="sf-skill-survival-prof"> Survival <span>WIS</span><input class="mini-number" type="number" id="sf-skill-survival"></label>
+                </div>
+              </div>
+            </div>
+          </details>
+
+          <!-- ATTACKS -->
+          <details class="sheet-section section-attacks" open>
+            <summary>Attacks & Actions</summary>
+            <div class="attack-table">
+              <div class="attack-head">Name</div><div class="attack-head">Attack / DC</div><div class="attack-head">Damage / Type</div>
+              <input type="text" id="sf-attack-1-name" placeholder="Rapier"><input type="text" id="sf-attack-1-bonus" placeholder="+5"><input type="text" id="sf-attack-1-damage" placeholder="1d8+3 piercing">
+              <input type="text" id="sf-attack-2-name"><input type="text" id="sf-attack-2-bonus"><input type="text" id="sf-attack-2-damage">
+              <input type="text" id="sf-attack-3-name"><input type="text" id="sf-attack-3-bonus"><input type="text" id="sf-attack-3-damage">
+            </div>
+            <div class="field"><label>Actions, bonus actions, reactions & combat notes</label><textarea id="sf-attacks-notes" rows="4" placeholder="Sneak Attack, Talons, Glide, special actions..."></textarea></div>
+          </details>
+
+          <!-- PROFICIENCIES -->
+          <details class="sheet-section section-proficiencies" open>
+            <summary>Languages & Proficiencies</summary>
+            <div class="sheet-subgrid two-col">
+              <div class="field">
+                <label>Languages</label>
+                <textarea id="sf-languages" rows="4" placeholder="Birdfolk; understands Auran; Common..."></textarea>
+                <small>Humblewood commonly uses Birdfolk in place of Common; setting-specific languages also include Cervan, Hedge, Jerbeen, Mapach and Vulpin.</small>
+              </div>
+              <div class="field"><label>Armor proficiencies</label><textarea id="sf-armor-prof" rows="4" placeholder="Light armor, shields..."></textarea></div>
+              <div class="field"><label>Weapon proficiencies</label><textarea id="sf-weapon-prof" rows="4" placeholder="Simple weapons, longbow..."></textarea></div>
+              <div class="field"><label>Tools, instruments & other proficiencies</label><textarea id="sf-other-prof" rows="4" placeholder="Thieves' tools, herbalism kit, gaming set..."></textarea></div>
+            </div>
+          </details>
+
+          <!-- EQUIPMENT -->
+          <details class="sheet-section section-equipment" open>
+            <summary>Equipment & Wealth</summary>
+            <div class="money-grid">
+              <div class="field"><label>CP</label><input type="number" id="sf-cp" value="0" min="0"></div>
+              <div class="field"><label>SP</label><input type="number" id="sf-sp" value="0" min="0"></div>
+              <div class="field"><label>EP</label><input type="number" id="sf-ep" value="0" min="0"></div>
+              <div class="field"><label>GP</label><input type="number" id="sf-gp" value="0" min="0"></div>
+              <div class="field"><label>PP</label><input type="number" id="sf-pp" value="0" min="0"></div>
+            </div>
+            <div class="field">
+              <label>Equipment / Inventory</label>
+              <div id="inventory-list"></div>
+              <div class="inventory-add-row">
+                <input type="text" id="inv-item-name" placeholder="Item name">
+                <input type="number" id="inv-item-qty" placeholder="Qty" value="1" min="1" style="width:70px;">
+                <button type="button" class="btn-ghost" id="inv-add-btn">+ Add</button>
+              </div>
+            </div>
+            <div class="field"><label>Treasure, valuables & carried notes</label><textarea id="sf-treasure" rows="3"></textarea></div>
+          </details>
+
+          <!-- FEATURES -->
+          <details class="sheet-section section-features" open>
+            <summary>Features, Traits & Feats</summary>
+            <div class="sheet-subgrid two-col">
+              <div class="field"><label>Species / subrace traits</label><textarea id="sf-racial-traits" rows="6" placeholder="Glide, Talons, Appraising Eye, Sharp Mind..."></textarea></div>
+              <div class="field"><label>Class & subclass features</label><textarea id="sf-features" rows="6" placeholder="Expertise, Channel Divinity, Action Surge..."></textarea></div>
+              <div class="field span-2"><label>Feats & other special traits</label><textarea id="sf-feats" rows="4"></textarea></div>
+            </div>
+          </details>
+
+          <!-- SPELLCASTING -->
+          <details class="sheet-section section-spellcasting">
+            <summary>Spellcasting</summary>
+            <div class="sheet-subgrid four-col compact-grid">
+              <div class="field"><label>Spellcasting class</label><input type="text" id="sf-spell-class" placeholder="Wizard / Cleric / racial magic"></div>
+              <div class="field"><label>Spellcasting ability</label><select id="sf-spell-ability"><option value="">—</option><option>INT</option><option>WIS</option><option>CHA</option></select></div>
+              <div class="field"><label>Spell Save DC</label><input type="number" id="sf-spell-dc"></div>
+              <div class="field"><label>Spell Attack Bonus</label><input type="number" id="sf-spell-attack"></div>
+            </div>
+            <div class="field"><label>Cantrips</label><textarea id="sf-spells-0" rows="3" placeholder="Cantrips known..."></textarea></div>
+            <div class="spell-levels">
+              <div class="spell-level-head">Level</div><div class="spell-level-head">Slots</div><div class="spell-level-head">Used</div><div class="spell-level-head">Spells known / prepared</div>
+              <div class="spell-level-label">1</div><input type="number" id="sf-spell-slots-1" min="0" value="0"><input type="number" id="sf-spell-used-1" min="0" value="0"><textarea id="sf-spells-1" rows="2" placeholder="Level 1 spells..."></textarea>
+              <div class="spell-level-label">2</div><input type="number" id="sf-spell-slots-2" min="0" value="0"><input type="number" id="sf-spell-used-2" min="0" value="0"><textarea id="sf-spells-2" rows="2" placeholder="Level 2 spells..."></textarea>
+              <div class="spell-level-label">3</div><input type="number" id="sf-spell-slots-3" min="0" value="0"><input type="number" id="sf-spell-used-3" min="0" value="0"><textarea id="sf-spells-3" rows="2" placeholder="Level 3 spells..."></textarea>
+              <div class="spell-level-label">4</div><input type="number" id="sf-spell-slots-4" min="0" value="0"><input type="number" id="sf-spell-used-4" min="0" value="0"><textarea id="sf-spells-4" rows="2" placeholder="Level 4 spells..."></textarea>
+              <div class="spell-level-label">5</div><input type="number" id="sf-spell-slots-5" min="0" value="0"><input type="number" id="sf-spell-used-5" min="0" value="0"><textarea id="sf-spells-5" rows="2" placeholder="Level 5 spells..."></textarea>
+              <div class="spell-level-label">6</div><input type="number" id="sf-spell-slots-6" min="0" value="0"><input type="number" id="sf-spell-used-6" min="0" value="0"><textarea id="sf-spells-6" rows="2" placeholder="Level 6 spells..."></textarea>
+              <div class="spell-level-label">7</div><input type="number" id="sf-spell-slots-7" min="0" value="0"><input type="number" id="sf-spell-used-7" min="0" value="0"><textarea id="sf-spells-7" rows="2" placeholder="Level 7 spells..."></textarea>
+              <div class="spell-level-label">8</div><input type="number" id="sf-spell-slots-8" min="0" value="0"><input type="number" id="sf-spell-used-8" min="0" value="0"><textarea id="sf-spells-8" rows="2" placeholder="Level 8 spells..."></textarea>
+              <div class="spell-level-label">9</div><input type="number" id="sf-spell-slots-9" min="0" value="0"><input type="number" id="sf-spell-used-9" min="0" value="0"><textarea id="sf-spells-9" rows="2" placeholder="Level 9 spells..."></textarea>
+            </div>
+            <div class="field"><label>Spellcasting notes</label><textarea id="sf-spell-notes" rows="3" placeholder="Rituals, prepared spell rules, spellbook, components, focus..."></textarea></div>
+          </details>
+
+          <!-- PERSONALITY -->
+          <details class="sheet-section section-personality" open>
+            <summary>Personality</summary>
+            <div class="sheet-subgrid two-col">
+              <div class="field"><label>Trait</label><textarea id="sf-trait" rows="3" placeholder="A habit, quirk, or mannerism..."></textarea></div>
+              <div class="field"><label>Ideal</label><textarea id="sf-ideal" rows="3" placeholder="What they believe in..."></textarea></div>
+              <div class="field"><label>Bond</label><textarea id="sf-bond" rows="3" placeholder="Who or what they're tied to..."></textarea></div>
+              <div class="field"><label>Flaw</label><textarea id="sf-flaw" rows="3" placeholder="A weakness or vice..."></textarea></div>
+            </div>
+          </details>
+
+          <!-- DETAILS / STORY -->
+          <details class="sheet-section section-story">
+            <summary>Appearance, Story & Notes</summary>
+            <div class="sheet-subgrid four-col compact-grid">
+              <div class="field"><label>Age</label><input type="text" id="sf-age"></div>
+              <div class="field"><label>Height</label><input type="text" id="sf-height"></div>
+              <div class="field"><label>Weight</label><input type="text" id="sf-weight"></div>
+              <div class="field"><label>Eyes</label><input type="text" id="sf-eyes"></div>
+              <div class="field span-2"><label>Feathers / fur / markings</label><input type="text" id="sf-coloring"></div>
+              <div class="field span-2"><label>Appearance</label><input type="text" id="sf-appearance"></div>
+            </div>
+            <div class="field"><label>Allies, organizations & contacts</label><textarea id="sf-allies" rows="3"></textarea></div>
+            <div class="field"><label>Notes & backstory</label><textarea id="sf-notes" rows="6"></textarea></div>
+          </details>
+
+          <div class="field sheet-save-row">
             <button type="button" class="btn-primary" id="save-sheet-btn">Save character</button>
             <p class="sheet-owner-note" id="sheet-owner-note"></p>
           </div>
@@ -297,5 +648,40 @@
 
 <script src="/socket.io/socket.io.js"></script>
 <script src="app.js"></script>
+
+<script>
+// Small UI helpers only. Your existing app.js still owns saving/loading and multiplayer sync.
+(function () {
+  const abilityIds = ['str','dex','con','int','wis','cha'];
+  function abilityMod(score) {
+    const n = Number(score);
+    if (!Number.isFinite(n)) return 0;
+    return Math.floor((n - 10) / 2);
+  }
+  function signed(n) { return n >= 0 ? `+${n}` : String(n); }
+  function updateAbilityMods() {
+    abilityIds.forEach(a => {
+      const input = document.getElementById(`sf-${a}`);
+      const out = document.getElementById(`mod-${a}`);
+      if (input && out) out.textContent = signed(abilityMod(input.value));
+    });
+  }
+  function updateProfBonus() {
+    const level = Math.max(1, Math.min(20, Number(document.getElementById('sf-level')?.value || 1)));
+    const pb = 2 + Math.floor((level - 1) / 4);
+    const out = document.getElementById('sf-prof-bonus');
+    if (out) out.value = pb;
+  }
+  function initCharacterHelpers() {
+    abilityIds.forEach(a => document.getElementById(`sf-${a}`)?.addEventListener('input', updateAbilityMods));
+    document.getElementById('sf-level')?.addEventListener('input', updateProfBonus);
+    updateAbilityMods();
+    updateProfBonus();
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initCharacterHelpers);
+  else initCharacterHelpers();
+})();
+</script>
+
 </body>
 </html>
