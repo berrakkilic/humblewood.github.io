@@ -170,7 +170,14 @@ socket.on('scene:doodle:add', (path) => { state.scene.doodlePaths.push(path); dr
 socket.on('scene:doodle:clear', () => { state.scene.doodlePaths = []; clearDoodleCanvas(); });
 socket.on('scene:doodle:redrawAll', (paths) => { state.scene.doodlePaths = paths || []; redrawAllDoodles(); });
 
-socket.on('token:add', (t) => { state.tokens.push(t); renderTokenTray(); renderMapTokens(); renderNpcRoster(); renderDmSidebarSummary(); });
+socket.on('token:add', (t) => {
+  state.tokens.push(t);
+  renderTokenTray();
+  renderMapTokens();
+  renderNpcRoster();
+  renderDmSidebarSummary();
+  renderCharacters();
+});
 socket.on('token:move', ({ id, x, y }) => {
   const t = state.tokens.find(t => t.id === id);
   if (t) { t.x = x; t.y = y; }
@@ -191,6 +198,7 @@ socket.on('token:remove', ({ id }) => {
   renderMapTokens(); renderTokenTray();
   renderNpcRoster();
   renderDmSidebarSummary();
+  renderCharacters();
 });
 
 socket.on('npcs:update', npcs => { state.npcs = npcs || {}; renderNpcRoster(); renderDmSidebarSummary(); });
@@ -902,6 +910,7 @@ function renderCharacters() {
       <div class="char-card-actions">
         <button type="button" class="btn-ghost view-character-btn">${canEdit ? 'Open sheet' : 'View sheet'}</button>
         ${canEdit ? '<button type="button" class="btn-rose roll-character-btn">🎲 Roll</button>' : ''}
+        ${myRole === 'dm' ? '<button type="button" class="btn-ghost initiative-character-btn">🎲 Initiative</button>' : ''}
         ${canEdit ? '<button type="button" class="btn-ghost combat-character-btn">⚔ Combat</button>' : ''}
         ${canEdit ? `<button type="button" class="btn-ghost map-character-btn">${mapToken ? 'Remove from map' : 'Put on map'}</button>` : ''}
         ${myRole === 'player' && canEdit && !c.claimed ? '<button type="button" class="btn-ghost claim-character-btn">Claim character</button>' : ''}
@@ -910,6 +919,7 @@ function renderCharacters() {
     `;
     card.querySelector('.view-character-btn').onclick = () => openSheetEditor(c);
     card.querySelector('.roll-character-btn')?.addEventListener('click', () => openCharacterRoller(c.name));
+    card.querySelector('.initiative-character-btn')?.addEventListener('click', () => rollCharacterInitiative(c, 'normal'));
     card.querySelector('.combat-character-btn')?.addEventListener('click', () => openCombatManager(c.name));
     card.querySelector('.map-character-btn')?.addEventListener('click', () => {
       if (mapToken) socket.emit('token:remove', { id: mapToken.id });
@@ -1279,7 +1289,8 @@ socket.on('roll:made', (entry) => {
   state.rollLog.unshift(entry);
   if (entry.characterName && entry.targetDc) pendingConcentrationChecks.delete(entry.characterName);
   renderRollLog();
-  const outcome = entry.targetDc ? (entry.success ? ' — success' : ' — failed') : '';
+  const showOutcome = entry.targetDc && !/\b(?:attack|damage)\b/i.test(entry.label || '');
+  const outcome = showOutcome ? (entry.success ? ' — success' : ' — failed') : '';
   showToast(`${entry.label || entry.expression}: ${entry.total}${outcome}`);
 });
 
@@ -1298,7 +1309,7 @@ function renderRollLog() {
         <span class="who">${escapeHtml(entry.name)}</span>
         <span class="expr">${entry.label ? escapeHtml(entry.label) + ' · ' : ''}${escapeHtml(entry.expression)}</span><br>
         <span class="breakdown">[${entry.rolls.join(', ')}]${entry.mode && entry.mode !== 'normal' ? ` → kept ${kept}` : ''}${entry.modifier ? (entry.modifier > 0 ? ' +' + entry.modifier : ' ' + entry.modifier) : ''}</span>
-        ${entry.targetDc ? `<span class="roll-outcome ${entry.success ? 'success' : 'failure'}">DC ${entry.targetDc} · ${entry.success ? 'Success' : 'Failure'}</span>` : ''}
+        ${entry.targetDc && !/\b(?:attack|damage)\b/i.test(entry.label || '') ? `<span class="roll-outcome ${entry.success ? 'success' : 'failure'}">DC ${entry.targetDc} · ${entry.success ? 'Success' : 'Failure'}</span>` : ''}
       </div>
       <div class="total">${entry.total}</div>
     `;
@@ -1814,13 +1825,13 @@ function renderInitiativeQuickAdd() {
   if (myRole !== 'dm') return;
   const label = document.createElement('span');
   label.className = 'quick-add-label';
-  label.textContent = 'Roll:';
+  label.textContent = 'Roll initiative:';
   container.appendChild(label);
   Object.values(state.characters).forEach(character => {
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'btn-ghost quick-add-chip';
-    button.textContent = character.name;
+    button.textContent = `🎲 ${character.name}`;
     button.onclick = () => rollCharacterInitiative(character, 'normal');
     container.appendChild(button);
   });

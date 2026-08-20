@@ -1152,8 +1152,11 @@ io.on('connection', (socket) => {
     const character = payload.characterName ? state.characters[String(payload.characterName)] : null;
     const rollToken = payload.tokenId ? state.tokens.find(token => token.id === String(payload.tokenId)) : null;
     if (payload.characterName && !ownsCharacter(socket, character)) return deny(socket, 'You cannot roll for another player’s character.');
-    if (payload.tokenId && (!isDm(socket) || !rollToken || rollToken.kind !== 'npc')) {
-      return deny(socket, 'Only the Dungeon Master can roll for an NPC.');
+    const validCharacterToken = !!character && !!rollToken && rollToken.kind === 'pc' &&
+      rollToken.characterName === character.name && ownsCharacter(socket, character);
+    const validNpcToken = isDm(socket) && rollToken?.kind === 'npc';
+    if (payload.tokenId && !validCharacterToken && !validNpcToken) {
+      return deny(socket, 'You cannot roll for that token.');
     }
     let count = Math.max(1, Math.min(20, Number(payload.count) || 1));
     let sides = Math.max(2, Math.min(1000, Number(payload.sides) || 20));
@@ -1183,7 +1186,9 @@ io.on('connection', (socket) => {
       total,
       ts: Date.now()
     };
-    if (Number.isFinite(Number(payload.targetDc))) {
+    const hasTargetDc = payload.targetDc !== null && payload.targetDc !== undefined && payload.targetDc !== '' &&
+      Number.isFinite(Number(payload.targetDc));
+    if (hasTargetDc) {
       entry.targetDc = Math.max(1, Math.min(1000, Number(payload.targetDc)));
       entry.success = total >= entry.targetDc;
     }
