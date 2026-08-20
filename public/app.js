@@ -2,6 +2,9 @@ const socket = io();
 
 let myRole = 'dm';
 let myName = '';
+const myPlayerId = getOrCreatePlayerId();
+let myDmPin = '';
+let joined = false;
 let state = null;
 let selectedTool = 'move';
 let draggingToken = null;
@@ -17,6 +20,8 @@ let pendingPortraitFile = null;
 let editingCanEdit = true;
 let initiativeManuallyEdited = false;
 let toastTimer = null;
+let activeCombatName = null;
+const pendingConcentrationChecks = new Map();
 
 const ABILITIES = ['str', 'dex', 'con', 'int', 'wis', 'cha'];
 const ABILITY_LABELS = { str: 'Strength', dex: 'Dexterity', con: 'Constitution', int: 'Intelligence', wis: 'Wisdom', cha: 'Charisma' };
@@ -31,6 +36,11 @@ const SKILL_LABELS = {
   nature: 'Nature', perception: 'Perception', performance: 'Performance', persuasion: 'Persuasion', religion: 'Religion',
   sleight: 'Sleight of Hand', stealth: 'Stealth', survival: 'Survival'
 };
+const CONDITIONS = [
+  'Blinded', 'Charmed', 'Deafened', 'Frightened', 'Grappled', 'Incapacitated',
+  'Invisible', 'Paralyzed', 'Petrified', 'Poisoned', 'Prone', 'Restrained',
+  'Stunned', 'Unconscious'
+];
 
 // ---------------- Join flow ----------------
 document.getElementById('role-dm').onclick = () => setRole('dm');
@@ -39,22 +49,54 @@ function setRole(role) {
   myRole = role;
   document.getElementById('role-dm').classList.toggle('active', role === 'dm');
   document.getElementById('role-player').classList.toggle('active', role === 'player');
+  document.getElementById('dm-pin-field').classList.toggle('hidden', role !== 'dm');
+  document.getElementById('join-error').textContent = '';
 }
 
 document.getElementById('join-btn').onclick = () => {
   const nameInput = document.getElementById('name-input');
   myName = nameInput.value.trim() || (myRole === 'dm' ? 'The DM' : 'A wanderer');
+  const joinButton = document.getElementById('join-btn');
+  joinButton.disabled = true;
+  joinButton.textContent = 'Entering…';
+  document.getElementById('join-error').textContent = '';
+  myDmPin = document.getElementById('dm-pin-input').value;
+  sendIdentity();
+};
+
+function sendIdentity() {
+  socket.emit('identify', {
+    role: myRole,
+    name: myName,
+    playerId: myPlayerId,
+    dmPin: myDmPin
+  });
+}
+
+document.getElementById('dm-pin-input').addEventListener('keydown', event => {
+  if (event.key === 'Enter') document.getElementById('join-btn').click();
+});
+
+socket.on('identify:result', result => {
+  const joinButton = document.getElementById('join-btn');
+  joinButton.disabled = false;
+  joinButton.textContent = 'Enter the Wood';
+  if (!result.ok) {
+    document.getElementById('join-error').textContent = result.message || 'Could not join the table.';
+    return;
+  }
+  myRole = result.role;
+  myName = result.name;
+  joined = true;
   document.getElementById('join-screen').style.display = 'none';
   document.getElementById('app').style.display = 'flex';
   document.body.setAttribute('data-role', myRole);
   document.getElementById('my-role-pill').textContent = myRole === 'dm' ? 'Dungeon Master' : 'Player · ' + myName;
-  socket.emit('identify', { role: myRole, name: myName });
-  if (state) {
-    renderCharacters();
-    renderInitiative();
-    refreshCharacterRoller();
-  }
-};
+});
+
+socket.on('connect', () => {
+  if (joined) sendIdentity();
+});
 
 // ---------------- Tabs ----------------
 document.querySelectorAll('.tab-btn').forEach(btn => { btn.onclick = () => switchView(btn.dataset.view); });
@@ -106,14 +148,26 @@ socket.on('character:update', (sheet) => {
   renderCharacters();
   renderInitiative();
   refreshCharacterRoller();
+  if (activeCombatName === sheet.name) renderCombatManager();
 });
 socket.on('character:remove', ({ name }) => {
   delete state.characters[name];
+  if (activeCombatName === name) closeCombatManager();
   renderCharacters();
   renderInitiative();
   refreshCharacterRoller();
 });
 socket.on('character:denied', ({ name }) => showToast(`You cannot edit ${name || 'that character'}.`));
+socket.on('action:denied', ({ message }) => showToast(message || 'That action is not allowed.'));
+socket.on('token:exists', token => {
+  showToast(`${token.label} is already on the map.`);
+  switchView('map');
+});
+socket.on('concentration:required', ({ name, damage, dc }) => {
+  pendingConcentrationChecks.set(name, { damage, dc });
+  showToast(`${name} must make a DC ${dc} Constitution save for concentration.`);
+  if (activeCombatName === name) renderCombatManager();
+});
 socket.on('initiative:update', (initiative) => {
   state.initiative = initiative;
   renderInitiative();
@@ -178,26 +232,40 @@ function renderMapTokens() {
     if (myRole === 'player' && t.visibleToPlayers === false) return;
     const el = document.createElement('div');
     el.className = 'token-on-map kind-' + t.kind;
+    if (!t.canControl) el.classList.add('locked-token');
     if (current && current.tokenId === t.id) el.classList.add('current-turn');
     if (t.visibleToPlayers === false) el.classList.add('hidden-token');
     el.dataset.id = t.id;
+    el.tabIndex = 0;
+    el.setAttribute('aria-label', `${t.label}${t.canControl ? ', your token' : ', locked token'}`);
     el.style.left = t.x + 'px';
     el.style.top = t.y + 'px';
+    const linkedCharacter = t.characterName ? state.characters[t.characterName] : null;
+    const canManageCombat = !!linkedCharacter?.canManage;
+    const controls = [
+      canManageCombat ? '<button type="button" data-action="combat" title="Open combat controls">⚔</button>' : '',
+      myRole === 'dm' && !linkedCharacter && t.maxHp ? '<button type="button" data-action="damage" title="Lose 1 HP">−</button><button type="button" data-action="heal" title="Heal 1 HP">+</button>' : '',
+      myRole === 'dm' ? `<button type="button" data-action="visibility" title="Show or hide from players">${t.visibleToPlayers === false ? '🙈' : '👁'}</button>` : ''
+    ].join('');
     el.innerHTML = `
       <div class="label">${escapeHtml(t.label)}</div>
       ${t.imageUrl ? `<img src="${escapeAttr(t.imageUrl)}" alt="">` : emojiFor(t.kind)}
       ${t.maxHp ? `<div class="hp-bar"><div class="hp-fill" style="width:${Math.max(0, (t.hp / t.maxHp) * 100)}%"></div></div>` : ''}
-      <div class="token-controls dm-only">
-        ${t.maxHp ? '<button type="button" data-action="damage" title="Lose 1 HP">−</button><button type="button" data-action="heal" title="Heal 1 HP">+</button>' : ''}
-        <button type="button" data-action="visibility" title="Show or hide from players">${t.visibleToPlayers === false ? '🙈' : '👁'}</button>
-      </div>
+      ${controls ? `<div class="token-controls">${controls}</div>` : ''}
     `;
     el.onmousedown = (e) => startDragToken(e, t.id);
+    el.onkeydown = event => {
+      if ((event.key === 'Enter' || event.key === ' ') && canManageCombat) {
+        event.preventDefault();
+        openCombatManager(t.characterName);
+      }
+    };
     el.querySelectorAll('.token-controls button').forEach(button => {
       button.onmousedown = (e) => e.stopPropagation();
       button.onclick = (e) => {
         e.stopPropagation();
         const action = button.dataset.action;
+        if (action === 'combat') openCombatManager(t.characterName);
         if (action === 'damage') socket.emit('token:update', { id: t.id, hp: Math.max(0, Number(t.hp) - 1) });
         if (action === 'heal') socket.emit('token:update', { id: t.id, hp: Math.min(Number(t.maxHp), Number(t.hp) + 1) });
         if (action === 'visibility') socket.emit('token:update', { id: t.id, visibleToPlayers: t.visibleToPlayers === false });
@@ -213,6 +281,8 @@ function emojiFor(kind) {
 
 function startDragToken(e, id) {
   if (selectedTool !== 'move') return;
+  const token = state.tokens.find(entry => entry.id === id);
+  if (!token?.canControl) return showToast('You can only move your own character token.');
   e.preventDefault();
   draggingToken = id;
   const el = e.currentTarget;
@@ -398,16 +468,18 @@ function renderTokenTray() {
     if (myRole === 'player' && t.visibleToPlayers === false) return;
     const chip = document.createElement('div');
     chip.className = 'token-chip kind-' + t.kind;
-    chip.title = t.label + ' (drag onto map, or click to nudge into view)';
+    if (!t.canControl) chip.classList.add('locked-token');
+    chip.title = t.canControl ? `${t.label} (click to nudge on the map)` : `${t.label} (controlled by another player)`;
     if (t.visibleToPlayers === false) chip.classList.add('hidden-token');
     chip.innerHTML = (t.imageUrl ? `<img src="${escapeAttr(t.imageUrl)}" alt="${escapeAttr(t.label)}">` : emojiFor(t.kind)) +
-      `<span class="del dm-only" title="Remove">×</span>`;
-    chip.querySelector('.del').onclick = (e) => {
-      e.stopPropagation();
-      socket.emit('token:remove', { id: t.id });
-    };
+      (t.canControl ? '<span class="del" title="Remove from map">×</span>' : '');
+    const remove = chip.querySelector('.del');
+    if (remove) remove.onclick = (e) => {
+        e.stopPropagation();
+        socket.emit('token:remove', { id: t.id });
+      };
     chip.onclick = () => {
-      // simple click-to-place: nudges the token to a visible spot near top-left of current view
+      if (!t.canControl) return showToast('You can only move your own character token.');
       socket.emit('token:move', { id: t.id, x: t.x + 10, y: t.y + 10 });
     };
     list.appendChild(chip);
@@ -422,6 +494,13 @@ function renderCharacters() {
     const card = document.createElement('div');
     card.className = 'char-card';
     const canEdit = canEditCharacter(c);
+    const mapToken = state.tokens.find(token => token.characterName === c.name);
+    const combat = c.combat || {};
+    const conditionSummary = [
+      ...(combat.conditions || []),
+      combat.concentration ? 'Concentrating' : '',
+      combat.exhaustion ? `Exhaustion ${combat.exhaustion}` : ''
+    ].filter(Boolean);
     const species = c.species || c.race || '';
     const charClass = c.charClass || c.className || '';
     card.innerHTML = `
@@ -432,16 +511,31 @@ function renderCharacters() {
       </div>
       <div class="stat-row">
         <span class="stat-pill">HP ${Number(c.hp) || 0}/${Number(c.maxHp) || 0}</span>
+        ${Number(c.tempHp) ? `<span class="stat-pill temp-hp-pill">+${Number(c.tempHp)} temp</span>` : ''}
         <span class="stat-pill">AC ${Number(c.ac) || 0}</span>
         <span class="stat-pill">Init ${signed(characterInitiativeModifier(c))}</span>
       </div>
+      ${conditionSummary.length ? `<div class="character-condition-summary">${conditionSummary.map(item => `<span>${escapeHtml(item)}</span>`).join('')}</div>` : ''}
       <div class="char-card-actions">
         <button type="button" class="btn-ghost view-character-btn">${canEdit ? 'Open sheet' : 'View sheet'}</button>
-        <button type="button" class="btn-rose roll-character-btn">🎲 Roll</button>
+        ${canEdit ? '<button type="button" class="btn-rose roll-character-btn">🎲 Roll</button>' : ''}
+        ${canEdit ? '<button type="button" class="btn-ghost combat-character-btn">⚔ Combat</button>' : ''}
+        ${canEdit ? `<button type="button" class="btn-ghost map-character-btn">${mapToken ? 'Remove from map' : 'Put on map'}</button>` : ''}
+        ${myRole === 'player' && canEdit && !c.claimed ? '<button type="button" class="btn-ghost claim-character-btn">Claim character</button>' : ''}
+        ${myRole === 'dm' && c.claimed ? '<button type="button" class="btn-ghost release-character-btn">Release owner</button>' : ''}
       </div>
     `;
     card.querySelector('.view-character-btn').onclick = () => openSheetEditor(c);
-    card.querySelector('.roll-character-btn').onclick = () => openCharacterRoller(c.name);
+    card.querySelector('.roll-character-btn')?.addEventListener('click', () => openCharacterRoller(c.name));
+    card.querySelector('.combat-character-btn')?.addEventListener('click', () => openCombatManager(c.name));
+    card.querySelector('.map-character-btn')?.addEventListener('click', () => {
+      if (mapToken) socket.emit('token:remove', { id: mapToken.id });
+      else socket.emit('token:add', { characterName: c.name });
+    });
+    card.querySelector('.claim-character-btn')?.addEventListener('click', () => socket.emit('character:claim', { name: c.name }));
+    card.querySelector('.release-character-btn')?.addEventListener('click', () => {
+      if (confirm(`Release ${c.name} so their named player can claim them again?`)) socket.emit('character:ownership:release', { name: c.name });
+    });
     grid.appendChild(card);
   });
 }
@@ -486,7 +580,7 @@ function legacyCharacterFields(c) {
 }
 
 function canEditCharacter(c) {
-  return !c || myRole === 'dm' || !c.owner || c.owner === myName;
+  return !c || !!c.canManage;
 }
 
 function setSheetEditable(canEdit, hasCharacter) {
@@ -789,16 +883,21 @@ function rollDice(count, sides, modifier, options = {}) {
     modifier,
     mode: options.mode || 'normal',
     label: options.label || '',
+    characterName: options.characterName || null,
     initiativeName: options.initiativeName || null,
-    tokenId: options.tokenId || null
+    tokenId: options.tokenId || null,
+    targetDc: options.targetDc || null,
+    concentrationFor: options.concentrationFor || null
   });
 }
 
 socket.on('roll:made', (entry) => {
   if (!state.rollLog) state.rollLog = [];
   state.rollLog.unshift(entry);
+  if (entry.characterName && entry.targetDc) pendingConcentrationChecks.delete(entry.characterName);
   renderRollLog();
-  showToast(`${entry.label || entry.expression}: ${entry.total}`);
+  const outcome = entry.targetDc ? (entry.success ? ' — success' : ' — failed') : '';
+  showToast(`${entry.label || entry.expression}: ${entry.total}${outcome}`);
 });
 
 function renderRollLog() {
@@ -816,6 +915,7 @@ function renderRollLog() {
         <span class="who">${escapeHtml(entry.name)}</span>
         <span class="expr">${entry.label ? escapeHtml(entry.label) + ' · ' : ''}${escapeHtml(entry.expression)}</span><br>
         <span class="breakdown">[${entry.rolls.join(', ')}]${entry.mode && entry.mode !== 'normal' ? ` → kept ${kept}` : ''}${entry.modifier ? (entry.modifier > 0 ? ' +' + entry.modifier : ' ' + entry.modifier) : ''}</span>
+        ${entry.targetDc ? `<span class="roll-outcome ${entry.success ? 'success' : 'failure'}">DC ${entry.targetDc} · ${entry.success ? 'Success' : 'Failure'}</span>` : ''}
       </div>
       <div class="total">${entry.total}</div>
     `;
@@ -828,7 +928,7 @@ document.getElementById('dice-character').onchange = renderCharacterRollOptions;
 function rollableCharacters() {
   const all = Object.values(state?.characters || {}).sort((a, b) => a.name.localeCompare(b.name));
   if (myRole === 'dm') return all;
-  return all.filter(character => !character.owner || character.owner === myName || character.fields?.player === myName);
+  return all.filter(character => character.canManage);
 }
 
 function openCharacterRoller(name) {
@@ -876,7 +976,11 @@ function renderCharacterRollOptions() {
     const damage = parseDiceExpression(attack.damage);
     if (attack.name && damage) {
       appendRollButton(combatButtons, `${attack.name} damage`, damage.modifier, () => {
-        rollDice(damage.count, damage.sides, damage.modifier, { name: characterRollName(character), label: `${attack.name} damage` });
+        rollDice(damage.count, damage.sides, damage.modifier, {
+          name: characterRollName(character),
+          characterName: character.name,
+          label: `${attack.name} damage`
+        });
       }, true, damage.expression);
     }
   });
@@ -928,6 +1032,7 @@ function characterRollName(character) {
 function rollCharacterD20(character, label, modifier, extra = {}) {
   rollDice(1, 20, modifier, {
     name: characterRollName(character),
+    characterName: character.name,
     label,
     mode: document.getElementById('dice-roll-mode').value,
     ...extra
@@ -938,6 +1043,7 @@ function rollCharacterInitiative(character, forcedMode) {
   const token = state.tokens.find(entry => entry.label.toLowerCase() === character.name.toLowerCase());
   rollDice(1, 20, characterInitiativeModifier(character), {
     name: characterRollName(character),
+    characterName: character.name,
     label: `${character.name} initiative`,
     mode: forcedMode || document.getElementById('dice-roll-mode').value,
     initiativeName: character.name,
@@ -971,6 +1077,118 @@ function parseDiceExpression(value) {
   const modifier = Number(match[3]) || 0;
   return { count, sides, modifier, expression: `${count}d${sides}${modifier ? signed(modifier) : ''}` };
 }
+
+// ================= QUICK COMBAT =================
+function openCombatManager(name) {
+  const character = state?.characters?.[name];
+  if (!character?.canManage) return showToast('You can only manage combat for your own character.');
+  activeCombatName = name;
+  const overlay = document.getElementById('combat-overlay');
+  overlay.classList.remove('hidden');
+  overlay.setAttribute('aria-hidden', 'false');
+  renderCombatManager();
+}
+
+function closeCombatManager() {
+  activeCombatName = null;
+  const overlay = document.getElementById('combat-overlay');
+  overlay.classList.add('hidden');
+  overlay.setAttribute('aria-hidden', 'true');
+}
+
+function combatAction(action, extra = {}) {
+  if (!activeCombatName) return;
+  socket.emit('character:combat:update', { name: activeCombatName, action, ...extra });
+}
+
+function renderCombatManager() {
+  const character = state?.characters?.[activeCombatName];
+  if (!character) return closeCombatManager();
+  const combat = character.combat || { conditions: [], concentration: false, exhaustion: 0, deathSaves: {}, spellSlots: {} };
+  document.getElementById('combat-title').textContent = character.name;
+  const portrait = document.getElementById('combat-portrait');
+  portrait.innerHTML = character.portraitUrl ? `<img src="${escapeAttr(character.portraitUrl)}" alt="">` : '🍃';
+  document.getElementById('combat-hp').textContent = `${Number(character.hp) || 0} / ${Number(character.maxHp) || 0}`;
+  document.getElementById('combat-temp-hp').textContent = Number(character.tempHp) || 0;
+  document.getElementById('combat-life-status').textContent = combat.dead ? 'Dead' : combat.stable ? 'Stable' : character.hp <= 0 ? 'Unconscious' : 'Ready';
+  document.getElementById('combat-concentration').checked = !!combat.concentration;
+  document.getElementById('combat-exhaustion').textContent = Number(combat.exhaustion) || 0;
+  document.getElementById('combat-death-successes').textContent = `${Number(combat.deathSaves?.successes) || 0} / 3`;
+  document.getElementById('combat-death-failures').textContent = `${Number(combat.deathSaves?.failures) || 0} / 3`;
+
+  const conditions = document.getElementById('combat-conditions');
+  conditions.innerHTML = '';
+  CONDITIONS.forEach(condition => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'condition-chip' + ((combat.conditions || []).includes(condition) ? ' active' : '');
+    button.textContent = condition;
+    button.onclick = () => combatAction('condition:toggle', { condition });
+    conditions.appendChild(button);
+  });
+
+  const slots = document.getElementById('combat-spell-slots');
+  slots.innerHTML = '';
+  Object.entries(combat.spellSlots || {}).filter(([, slot]) => Number(slot.total) > 0).forEach(([level, slot]) => {
+    const row = document.createElement('div');
+    row.className = 'combat-slot-row';
+    row.innerHTML = `
+      <span class="slot-level">Level ${level}</span>
+      <button class="counter-btn recover-slot" type="button" title="Recover one slot">−</button>
+      <strong>${Number(slot.total) - Number(slot.used)} / ${Number(slot.total)} available</strong>
+      <button class="counter-btn use-slot" type="button" title="Use one slot">+</button>
+    `;
+    row.querySelector('.recover-slot').onclick = () => combatAction('spellSlot', { level: Number(level), delta: -1 });
+    row.querySelector('.use-slot').onclick = () => combatAction('spellSlot', { level: Number(level), delta: 1 });
+    slots.appendChild(row);
+  });
+  if (!slots.children.length) slots.innerHTML = '<p class="empty-roll-options">No spell slots are configured on this sheet.</p>';
+
+  const check = pendingConcentrationChecks.get(character.name);
+  const checkButton = document.getElementById('combat-concentration-roll');
+  checkButton.classList.toggle('hidden', !check);
+  if (check) checkButton.textContent = `Roll Constitution save · DC ${check.dc}`;
+}
+
+document.getElementById('combat-close-btn').onclick = closeCombatManager;
+document.getElementById('combat-overlay').addEventListener('mousedown', event => {
+  if (event.target.id === 'combat-overlay') closeCombatManager();
+});
+document.addEventListener('keydown', event => {
+  if (event.key === 'Escape' && activeCombatName) closeCombatManager();
+});
+document.getElementById('combat-damage-btn').onclick = () => combatAction('damage', { amount: Number(document.getElementById('combat-amount').value) || 0 });
+document.getElementById('combat-heal-btn').onclick = () => combatAction('heal', { amount: Number(document.getElementById('combat-amount').value) || 0 });
+document.getElementById('combat-temp-btn').onclick = () => combatAction('tempHp', { amount: Number(document.getElementById('combat-amount').value) || 0 });
+document.getElementById('combat-concentration').onchange = event => combatAction('concentration:set', { value: event.target.checked });
+document.querySelectorAll('[data-combat-action]').forEach(button => {
+  button.onclick = () => {
+    const actions = {
+      'exhaustion-down': ['exhaustion', { delta: -1 }],
+      'exhaustion-up': ['exhaustion', { delta: 1 }],
+      'success-down': ['deathSave', { kind: 'successes', delta: -1 }],
+      'success-up': ['deathSave', { kind: 'successes', delta: 1 }],
+      'failure-down': ['deathSave', { kind: 'failures', delta: -1 }],
+      'failure-up': ['deathSave', { kind: 'failures', delta: 1 }]
+    };
+    const [action, extra] = actions[button.dataset.combatAction];
+    combatAction(action, extra);
+  };
+});
+document.getElementById('combat-restore-slots-btn').onclick = () => combatAction('restoreAllSlots');
+document.getElementById('combat-long-rest-btn').onclick = () => {
+  if (confirm(`Give ${activeCombatName} a long rest? This restores HP and all spell slots.`)) combatAction('longRest');
+};
+document.getElementById('combat-concentration-roll').onclick = () => {
+  const character = state?.characters?.[activeCombatName];
+  const check = pendingConcentrationChecks.get(activeCombatName);
+  if (!character || !check) return;
+  rollCharacterD20(character, `Concentration save (DC ${check.dc})`, characterSaveModifier(character, 'con'), {
+    targetDc: check.dc,
+    concentrationFor: character.name,
+    mode: 'normal'
+  });
+};
 
 // ================= INITIATIVE (MAP PANEL) =================
 document.getElementById('init-add-btn').onclick = () => {
@@ -1022,6 +1240,16 @@ function renderInitiative() {
       name.appendChild(meta);
     }
     row.append(value, name);
+    const character = state.characters[entry.name];
+    if (character?.canManage) {
+      const combatButton = document.createElement('button');
+      combatButton.type = 'button';
+      combatButton.className = 'initiative-combat-btn';
+      combatButton.textContent = '⚔';
+      combatButton.title = `Open combat controls for ${entry.name}`;
+      combatButton.onclick = () => openCombatManager(entry.name);
+      row.appendChild(combatButton);
+    }
     if (myRole === 'dm') {
       const remove = document.createElement('button');
       remove.type = 'button';
@@ -1066,6 +1294,16 @@ function renderInitiativeQuickAdd() {
 }
 
 // ================= Shared helpers =================
+function getOrCreatePlayerId() {
+  const key = 'humblewood-player-id';
+  let id = localStorage.getItem(key);
+  if (!id) {
+    id = globalThis.crypto?.randomUUID?.() || `player-${Date.now()}-${Math.random().toString(36).slice(2, 12)}`;
+    localStorage.setItem(key, id);
+  }
+  return id;
+}
+
 function signed(value) {
   const number = Number(value) || 0;
   return number >= 0 ? `+${number}` : String(number);

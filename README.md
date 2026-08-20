@@ -44,13 +44,15 @@ Everyone needs to reach the same running server. Running it on your laptop only 
 ## What's built so far (the skeleton)
 
 - **Map & tokens**: DM uploads the battle map image. Tokens for NPCs, items and PCs live in a tray and can be moved, snapped to the grid, hidden from players and given simple HP adjustments. Pan and zoom controls work for everyone.
-- **Map initiative tracker**: turn order, rounds, quick character rolls, manual NPC entries and the active token are all visible directly beside the map.
-- **Jukebox**: add tracks by direct audio URL, playlist syncs playback position/play/pause across all clients.
+- **Initiative tracker**: turn order and rounds of NPCs and player characters are all visible directly beside the map (initiative table can be toggled on and off).
+- **Jukebox**: add tracks by direct audio URL, playlist syncs playback position/play/pause across all clients. Adding track name for each track could get tiring?
 - **Character sheets**: a basic 5e-style sheet (abilities, HP/AC, inventory, notes) per character, added Humblewood characteristics.
-- **Character-aware dice**: select a character to roll ability checks, saving throws, skills, initiative, attacks, spell attacks etc. with the stored modifiers. d20 rolls support advantage and disadvantage and sync to the shared roll log.
+- **Character-specific dice**: select a character to roll ability checks, saving throws, skills, initiative, attacks, spell attacks etc. with the stored modifiers. d20 rolls support advantage and disadvantage and sync to the shared roll log.
 - **Cottagecore Humblewood aesthetic**: parchment and forest tones, vine dividers, soft rounded shapes.
+- **Access restrictions**: DM access is PIN-gated. Character ownership is tied to a persistent browser identity. Token movement/character rolls are checked server-side.
+- **Function automation**: Long-rest automation. 
 
 ## Known limitations to build out next
 - No authentication so anyone with the link can join as anyone. 
 - Music playback requires direct audio file URLs. Self-hosted MP3s or a service like SoundCloud's direct stream links also work.
-- More dnd functions.
+- More humblewood specific vibes? 

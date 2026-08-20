@@ -187,6 +187,13 @@
       </div>
     </div>
 
+    <div class="field" id="dm-pin-field">
+      <label for="dm-pin-input">Dungeon Master PIN</label>
+      <input type="password" id="dm-pin-input" autocomplete="current-password" placeholder="Enter the table PIN">
+    </div>
+
+    <p class="join-error" id="join-error" role="alert"></p>
+
     <button class="btn-primary" id="join-btn">Enter the Wood</button>
   </div>
 </div>
@@ -195,7 +202,7 @@
   <header class="topbar">
     <div style="display:flex; align-items:center;">
       <h1>🌿 The Humblewood Table</h1>
-      <span class="tagline">where the wysteria grows beneath</span>
+      <span class="tagline"> Welcome to the First Bloom Festival! </span>
     </div>
     <div class="topbar-right">
       <span id="presence-list"></span>
@@ -222,7 +229,7 @@
         </div>
         <div class="vine-divider dm-only"></div>
 
-        <h3>NPCs & items</h3>
+        <h3>Tokens on the map</h3>
         <div class="dm-only" style="display:flex; flex-direction:column; gap:6px;">
           <input type="text" id="token-name" placeholder="Token name">
           <select id="token-kind">
@@ -671,6 +678,81 @@
 </div>
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<div class="combat-overlay hidden" id="combat-overlay" aria-hidden="true">
+  <section class="combat-modal panel" role="dialog" aria-modal="true" aria-labelledby="combat-title">
+    <div class="combat-modal-header">
+      <div class="combat-identity">
+        <div class="card-portrait" id="combat-portrait">🍃</div>
+        <div>
+          <p class="combat-kicker">Quick combat controls</p>
+          <h2 id="combat-title">Character</h2>
+        </div>
+      </div>
+      <button class="btn-ghost" id="combat-close-btn" type="button" aria-label="Close combat controls">Close</button>
+    </div>
+
+    <div class="combat-vitals">
+      <div class="combat-vital"><span>Hit points</span><strong id="combat-hp">0 / 0</strong></div>
+      <div class="combat-vital"><span>Temporary HP</span><strong id="combat-temp-hp">0</strong></div>
+      <div class="combat-vital"><span>Status</span><strong id="combat-life-status">Ready</strong></div>
+    </div>
+
+    <div class="combat-adjust-row">
+      <label for="combat-amount">Amount</label>
+      <input type="number" id="combat-amount" min="0" value="1">
+      <button class="btn-rose" id="combat-damage-btn" type="button">Take damage</button>
+      <button class="btn-primary" id="combat-heal-btn" type="button">Heal</button>
+      <button class="btn-ghost" id="combat-temp-btn" type="button">Set temp HP</button>
+    </div>
+
+    <div class="combat-grid">
+      <section class="combat-section">
+        <div class="combat-section-title">
+          <h3>Conditions</h3>
+          <label class="concentration-toggle"><input type="checkbox" id="combat-concentration"> Concentrating</label>
+        </div>
+        <div class="condition-chips" id="combat-conditions"></div>
+        <div class="combat-counter-row">
+          <span>Exhaustion</span>
+          <button class="counter-btn" data-combat-action="exhaustion-down" type="button">−</button>
+          <strong id="combat-exhaustion">0</strong>
+          <button class="counter-btn" data-combat-action="exhaustion-up" type="button">+</button>
+        </div>
+      </section>
+
+      <section class="combat-section">
+        <h3>Death saves</h3>
+        <div class="combat-counter-row death-success-row">
+          <span>Successes</span>
+          <button class="counter-btn" data-combat-action="success-down" type="button">−</button>
+          <strong id="combat-death-successes">0 / 3</strong>
+          <button class="counter-btn" data-combat-action="success-up" type="button">+</button>
+        </div>
+        <div class="combat-counter-row death-failure-row">
+          <span>Failures</span>
+          <button class="counter-btn" data-combat-action="failure-down" type="button">−</button>
+          <strong id="combat-death-failures">0 / 3</strong>
+          <button class="counter-btn" data-combat-action="failure-up" type="button">+</button>
+        </div>
+        <button class="btn-ghost concentration-roll-btn hidden" id="combat-concentration-roll" type="button"></button>
+      </section>
+    </div>
+
+    <section class="combat-section combat-spells-section">
+      <div class="combat-section-title">
+        <h3>Spell slots</h3>
+        <button class="btn-ghost" id="combat-restore-slots-btn" type="button">Restore all</button>
+      </div>
+      <div class="combat-spell-slots" id="combat-spell-slots"></div>
+    </section>
+
+    <div class="combat-footer">
+      <p>Changes save immediately and stay synced with the character sheet and map token.</p>
+      <button class="btn-primary" id="combat-long-rest-btn" type="button">Complete long rest</button>
+    </div>
+  </section>
+</div>
 
 <script src="/socket.io/socket.io.js"></script>
 <script src="app.js"></script>

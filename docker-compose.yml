@@ -4,6 +4,8 @@ services:
     container_name: humblewood-table
     ports:
       - "3000:3000"
+    environment:
+      DM_PIN: ${DM_PIN:-humblewood}
     volumes:
       - humblewood-data:/app/data
       - humblewood-uploads:/app/public/uploads
