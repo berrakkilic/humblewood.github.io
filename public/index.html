@@ -11,7 +11,7 @@
 <div id="join-screen">
   <div class="join-card">
     <h1>The Humblewood Table</h1>
-    <p class="sub hand">a cozy corner of the forest for your campaign</p>
+    <p class="sub hand">a cozy corner of the forest</p>
 
     <div class="field">
       <label for="name-input">Your name</label>
@@ -34,7 +34,7 @@
   <header class="topbar">
     <div style="display:flex; align-items:center;">
       <h1>🌿 The Humblewood Table</h1>
-      <span class="tagline">where the moss grows and the dice roll</span>
+      <span class="tagline">where the wysteria grows beneath</span>
     </div>
     <div class="topbar-right">
       <span id="presence-list"></span>
@@ -47,6 +47,7 @@
     <button class="tab-btn" data-view="characters">Characters</button>
     <button class="tab-btn" data-view="jukebox">Jukebox</button>
     <button class="tab-btn" data-view="dice">Dice</button>
+    <button class="tab-btn" data-view="initiative">Initiative</button>
   </nav>
 
   <main>
@@ -75,14 +76,28 @@
         <div class="token-list" id="token-list"></div>
       </aside>
 
-      <div class="map-stage-wrap">
+      <div class="map-stage-wrap" id="map-stage-wrap">
         <div class="map-toolbar">
           <button id="tool-move" class="active">Move</button>
+          <button id="tool-pan">Pan</button>
           <button id="tool-doodle" class="dm-only">Doodle</button>
-          <input type="color" id="doodle-color" value="#d98a9e" style="width:30px; border:none; background:none;">
+          <input type="color" id="doodle-color" value="#d98a9e" class="dm-only" style="width:30px; border:none; background:none;">
+          <button id="undo-doodle-btn" class="dm-only" title="Undo last doodle stroke">Undo</button>
+        </div>
+        <div class="map-toolbar map-toolbar-right dm-only">
+          <label class="grid-toggle"><input type="checkbox" id="grid-toggle"> Grid</label>
+          <input type="number" id="grid-size" value="50" min="10" max="300" title="Grid size (px)" style="width:56px;">
+          <label class="grid-toggle"><input type="checkbox" id="snap-toggle"> Snap</label>
+        </div>
+        <div class="map-toolbar map-toolbar-bottom">
+          <button id="zoom-out">−</button>
+          <span id="zoom-level">100%</span>
+          <button id="zoom-in">+</button>
+          <button id="zoom-reset">Reset view</button>
         </div>
         <div id="map-stage">
           <img id="map-image" src="" style="display:none;">
+          <div id="grid-overlay"></div>
           <canvas id="doodle-canvas"></canvas>
         </div>
         <div class="empty-map" id="empty-map">
@@ -110,10 +125,48 @@
         </div>
         <div class="vine-divider"></div>
         <form class="sheet-form" id="sheet-form">
+          <div class="field span-2 portrait-field">
+            <label>Portrait</label>
+            <div class="portrait-row">
+              <div class="portrait-preview" id="portrait-preview">🍃</div>
+              <input type="file" id="sf-portrait" accept="image/*">
+            </div>
+          </div>
           <div class="field span-2"><label>Name</label><input type="text" id="sf-name"></div>
-          <div class="field"><label>Race</label><input type="text" id="sf-race" placeholder="Sparrowkin, Fox..."></div>
+
+          <div class="field">
+            <label>Species of the Wood</label>
+            <input type="text" id="sf-species" list="species-suggestions" placeholder="Avenil, Grimalkin, Vulpal...">
+            <datalist id="species-suggestions">
+              <option value="Luma (birdfolk)">
+              <option value="Corvum (birdfolk)">
+              <option value="Raptor (birdfolk)">
+              <option value="Gallus (birdfolk)">
+              <option value="Strig (birdfolk)">
+              <option value="Vulpin (humblefolk)">
+              <option value="Mapach (humblefolk)">
+              <option value="Jerbeen (humblefolk)">
+              <option value="Hedge (humblefolk)">
+              <option value="Cervan (humblefolk)">
+            </datalist>
+          </div>
+          <div class="field">
+            <label>Path</label>
+            <input type="text" id="sf-path" list="path-suggestions" placeholder="Duelist, Ranger, Mystic...">
+            <datalist id="path-suggestions">
+              <option value="Duelist">
+              <option value="Marksman">
+              <option value="Mystic">
+              <option value="Ranger">
+              <option value="Rogue">
+              <option value="Warden">
+              <option value="Wanderer">
+            </datalist>
+          </div>
           <div class="field"><label>Class</label><input type="text" id="sf-class"></div>
           <div class="field"><label>Level</label><input type="number" id="sf-level" value="1"></div>
+
+          <div class="field span-2"><label>Home (grove, roost, or den)</label><input type="text" id="sf-home" placeholder="A hollow beneath Cedarfall Hollow..."></div>
           <div class="field"><label>HP / Max HP</label>
             <div style="display:flex; gap:6px;">
               <input type="number" id="sf-hp" value="10">
@@ -135,11 +188,26 @@
             </div>
           </div>
 
-          <div class="field span-2"><label>Inventory</label><textarea id="sf-inventory" rows="3" placeholder="Pressed flowers, a copper flute..."></textarea></div>
-          <div class="field span-2"><label>Notes & backstory</label><textarea id="sf-notes" rows="3"></textarea></div>
+          <div class="field"><label>Trait</label><textarea id="sf-trait" rows="2" placeholder="A habit, quirk, or mannerism..."></textarea></div>
+          <div class="field"><label>Ideal</label><textarea id="sf-ideal" rows="2" placeholder="What they believe in..."></textarea></div>
+          <div class="field"><label>Bond</label><textarea id="sf-bond" rows="2" placeholder="Who or what they're tied to..."></textarea></div>
+          <div class="field"><label>Flaw</label><textarea id="sf-flaw" rows="2" placeholder="A weakness or vice..."></textarea></div>
+
+          <div class="field span-4">
+            <label>Inventory</label>
+            <div id="inventory-list"></div>
+            <div class="inventory-add-row">
+              <input type="text" id="inv-item-name" placeholder="Item name">
+              <input type="number" id="inv-item-qty" placeholder="Qty" value="1" min="1" style="width:70px;">
+              <button type="button" class="btn-ghost" id="inv-add-btn">+ Add</button>
+            </div>
+          </div>
+
+          <div class="field span-4"><label>Notes & backstory</label><textarea id="sf-notes" rows="3"></textarea></div>
 
           <div class="field span-4">
             <button type="button" class="btn-primary" id="save-sheet-btn">Save character</button>
+            <p class="sheet-owner-note" id="sheet-owner-note"></p>
           </div>
         </form>
       </div>
@@ -173,7 +241,7 @@
     <!-- DICE VIEW -->
     <section id="view-dice" class="view">
       <div class="dice-panel panel">
-        <h2>Roll the bones (gently, they're mossy)</h2>
+        <h2>Roll the bones</h2>
         <div class="dice-quick-row">
           <button class="die-btn" data-sides="4">d4</button>
           <button class="die-btn" data-sides="6">d6</button>
@@ -197,6 +265,31 @@
         <div class="vine-divider"></div>
         <h3>Roll log</h3>
         <div class="roll-log" id="roll-log"></div>
+      </div>
+    </section>
+
+    <!-- INITIATIVE VIEW -->
+    <section id="view-initiative" class="view">
+      <div class="initiative-panel panel">
+        <div class="initiative-header">
+          <h2>Turn order</h2>
+          <div class="round-badge">Round <span id="init-round">1</span></div>
+        </div>
+
+        <div class="dm-only initiative-add-row">
+          <input type="text" id="init-name" placeholder="Combatant name">
+          <input type="number" id="init-value" placeholder="Initiative">
+          <button class="btn-rose" id="init-add-btn">Add</button>
+        </div>
+        <div class="dm-only initiative-quick-add" id="init-quick-add"></div>
+
+        <div class="vine-divider"></div>
+        <div class="initiative-list" id="initiative-list"></div>
+
+        <div class="dm-only initiative-controls">
+          <button class="btn-primary" style="width:auto; padding:10px 20px;" id="init-next-btn">Next turn →</button>
+          <button class="btn-ghost" id="init-reset-btn">Reset</button>
+        </div>
       </div>
     </section>
   </main>

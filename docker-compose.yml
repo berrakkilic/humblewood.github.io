@@ -5,16 +5,9 @@ services:
     ports:
       - "3000:3000"
     volumes:
-      # Persist the database and uploaded images outside the container,
-      # so they survive rebuilds/redeploys.
       - humblewood-data:/app/data
       - humblewood-uploads:/app/public/uploads
     restart: unless-stopped
-    # Uncomment and fill in if you'd rather use a hosted Turso database
-    # instead of the local SQLite file in the humblewood-data volume:
-    # environment:
-    #   - TURSO_DATABASE_URL=libsql://your-db.turso.io
-    #   - TURSO_AUTH_TOKEN=your-token
 
 volumes:
   humblewood-data:

@@ -39,10 +39,10 @@ app.post('/api/upload', upload.single('file'), (req, res) => {
 });
 
 // ---- Persisted room state (single table: "Humblewood") ----
-// Backed by libSQL — talks to a hosted Turso database over the network so
-// state survives redeploys on hosts with an ephemeral filesystem (like
-// Render's free tier). If TURSO_DATABASE_URL isn't set (e.g. local dev),
-// it falls back to a local SQLite file instead, no cloud account needed.
+// Backed by a local SQLite database file (via libSQL) at data/local.db.
+// On Simon's server, docker-compose.yml mounts /app/data as a volume, so
+// this file and everything in it survives container restarts and
+// rebuilds without needing any external database service.
 const { createClient } = require('@libsql/client');
 
 const defaultState = {
@@ -50,6 +50,7 @@ const defaultState = {
     mapUrl: null,
     mapName: 'No map loaded',
     gridSize: 50,
+    gridVisible: false,
     doodlePaths: [] // array of {points:[{x,y}], color, width, id}
   },
   tokens: [], // {id, x, y, size, imageUrl, label, kind: 'pc'|'npc'|'item', hp, maxHp, visibleToPlayers}
@@ -62,23 +63,16 @@ const defaultState = {
   },
   characters: {}, // name -> sheet object
   rollLog: [], // {id, name, expression, rolls, modifier, total, ts}
+  initiative: { entries: [], round: 1, currentIndex: -1 }, // {id, name, value, tokenId}
   fog: [] // reserved for future fog-of-war rects
 };
 
 let state = defaultState;
 
-const usingTurso = !!process.env.TURSO_DATABASE_URL;
-if (!usingTurso) {
-  console.warn('TURSO_DATABASE_URL not set — falling back to a local file database (data/local.db). This is fine for local testing, but on a host with an ephemeral filesystem, data will NOT survive redeploys. See README for Turso setup.');
-  const localDir = path.join(__dirname, 'data');
-  if (!fs.existsSync(localDir)) fs.mkdirSync(localDir, { recursive: true });
-}
+const localDir = path.join(__dirname, 'data');
+if (!fs.existsSync(localDir)) fs.mkdirSync(localDir, { recursive: true });
 
-const db = createClient(
-  usingTurso
-    ? { url: process.env.TURSO_DATABASE_URL, authToken: process.env.TURSO_AUTH_TOKEN }
-    : { url: 'file:' + path.join(__dirname, 'data', 'local.db') }
-);
+const db = createClient({ url: 'file:' + path.join(localDir, 'local.db') });
 
 async function loadStateFromDb() {
   const result = await db.execute('SELECT data FROM state WHERE id = 1');
@@ -135,10 +129,23 @@ io.on('connection', (socket) => {
     io.emit('scene:update', state.scene);
   });
 
+  socket.on('scene:setGrid', ({ gridSize, gridVisible }) => {
+    if (gridSize !== undefined) state.scene.gridSize = Math.max(10, Math.min(300, Number(gridSize) || 50));
+    if (gridVisible !== undefined) state.scene.gridVisible = !!gridVisible;
+    persistState();
+    io.emit('scene:update', state.scene);
+  });
+
   socket.on('scene:doodle:add', (path) => {
     state.scene.doodlePaths.push(path);
     persistState();
     io.emit('scene:doodle:add', path);
+  });
+
+  socket.on('scene:doodle:undo', () => {
+    state.scene.doodlePaths.pop();
+    persistState();
+    io.emit('scene:doodle:redrawAll', state.scene.doodlePaths);
   });
 
   socket.on('scene:doodle:clear', () => {
@@ -149,6 +156,7 @@ io.on('connection', (socket) => {
 
   // --- Tokens ---
   socket.on('token:add', (token) => {
+    if (token.visibleToPlayers === undefined) token.visibleToPlayers = true;
     state.tokens.push(token);
     persistState();
     io.emit('token:add', token);
@@ -204,13 +212,27 @@ io.on('connection', (socket) => {
   });
 
   // --- Character sheets ---
+  // Lightweight ownership check: not full auth, but stops players from
+  // accidentally (or deliberately) editing/deleting each other's sheets.
+  // The DM can always edit/delete any sheet.
   socket.on('character:save', (sheet) => {
+    const existing = state.characters[sheet.name];
+    if (socket.data.role !== 'dm' && existing && existing.owner && existing.owner !== socket.data.name) {
+      socket.emit('character:denied', { name: sheet.name });
+      return;
+    }
+    sheet.owner = existing?.owner || socket.data.name || 'Unknown';
     state.characters[sheet.name] = sheet;
     persistState();
     io.emit('character:update', sheet);
   });
 
   socket.on('character:remove', ({ name }) => {
+    const existing = state.characters[name];
+    if (existing && socket.data.role !== 'dm' && existing.owner && existing.owner !== socket.data.name) {
+      socket.emit('character:denied', { name });
+      return;
+    }
     delete state.characters[name];
     persistState();
     io.emit('character:remove', { name });
@@ -234,6 +256,50 @@ io.on('connection', (socket) => {
     state.rollLog = state.rollLog.slice(0, 50);
     persistState();
     io.emit('roll:made', entry);
+  });
+
+  // --- Initiative tracker ---
+  socket.on('initiative:add', ({ name, value, tokenId }) => {
+    state.initiative.entries.push({
+      id: 'i' + Date.now() + Math.random().toString(36).slice(2, 6),
+      name: name || 'Unnamed',
+      value: Number(value) || 0,
+      tokenId: tokenId || null
+    });
+    state.initiative.entries.sort((a, b) => b.value - a.value);
+    persistState();
+    io.emit('initiative:update', state.initiative);
+  });
+
+  socket.on('initiative:remove', ({ id }) => {
+    const idx = state.initiative.entries.findIndex(e => e.id === id);
+    if (idx !== -1) {
+      state.initiative.entries.splice(idx, 1);
+      if (state.initiative.currentIndex >= state.initiative.entries.length) {
+        state.initiative.currentIndex = state.initiative.entries.length - 1;
+      }
+    }
+    persistState();
+    io.emit('initiative:update', state.initiative);
+  });
+
+  socket.on('initiative:next', () => {
+    if (state.initiative.entries.length === 0) return;
+    const next = state.initiative.currentIndex + 1;
+    if (next >= state.initiative.entries.length) {
+      state.initiative.currentIndex = 0;
+      state.initiative.round += 1;
+    } else {
+      state.initiative.currentIndex = next;
+    }
+    persistState();
+    io.emit('initiative:update', state.initiative);
+  });
+
+  socket.on('initiative:reset', () => {
+    state.initiative = { entries: [], round: 1, currentIndex: -1 };
+    persistState();
+    io.emit('initiative:update', state.initiative);
   });
 
   socket.on('disconnect', () => {

@@ -9,7 +9,7 @@ A cozy, cottagecore virtual tabletop for running the Humblewood campaign online.
 Req: [Node.js](https://nodejs.org) installed (v18+).
 
 ```bash
-npm install
+npm ci
 npm start
 ```
 
@@ -43,12 +43,13 @@ Everyone needs to reach the same running server. Running it on your laptop only 
 
 ## What's built so far (the skeleton)
 
-- **Map & tokens**: DM uploads the battle map image. Tokens for NPCs, items and PCs live in a tray and can be dragged around the map (hopefully). Positions sync to everyone (again, hopefully). 
+- **Map & tokens**: DM uploads the battle map image. Tokens for NPCs, items and PCs live in a tray and can be dragged around the map, snapping to the grid. Positions sync to everyone. 
 - **Doodle layer**: DM can freehand-draw on the map. Clearable. Should give players access too.
-- **Jukebox**: add tracks by direct audio URL, playlist syncs playback position/play/pause across all clients (Hopefully).
-- **Character sheets**: a basic 5e-style sheet (abilities, HP/AC, inventory, notes) per character, editable by anyone (will restrict this later and add more options).
+- **Jukebox**: add tracks by direct audio URL, playlist syncs playback position/play/pause across all clients.
+- **Character sheets**: a basic 5e-style sheet (abilities, HP/AC, inventory, notes) per character, added Humblewood characteristics.
 - **Cottagecore Humblewood aesthetic**: parchment and forest tones, vine dividers, soft rounded shapes.
 
 ## Known limitations to build out next
 - No authentication so anyone with the link can join as anyone. 
 - Music playback requires direct audio file URLs. Self-hosted MP3s or a service like SoundCloud's direct stream links also work.
+- More dnd functions.
