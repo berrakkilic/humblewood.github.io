@@ -31,7 +31,25 @@ const storage = multer.diskStorage({
 const upload = multer({ storage, limits: { fileSize: 25 * 1024 * 1024 } });
 
 app.use(express.json());
-app.use(express.static(path.join(__dirname, 'public')));
+const publicDir = path.join(__dirname, 'public');
+app.use(express.static(publicDir));
+
+// Keep local development working when the three frontend files are stored in
+// the repository root. A deployed project can still place them in /public;
+// express.static above takes precedence in that case.
+function sendFrontendFile(filename) {
+  return (req, res, next) => {
+    const publicFile = path.join(publicDir, filename);
+    const rootFile = path.join(__dirname, filename);
+    const selected = fs.existsSync(publicFile) ? publicFile : rootFile;
+    if (!fs.existsSync(selected)) return next();
+    res.sendFile(selected);
+  };
+}
+app.get('/', sendFrontendFile('index.html'));
+app.get('/index.html', sendFrontendFile('index.html'));
+app.get('/app.js', sendFrontendFile('app.js'));
+app.get('/style.css', sendFrontendFile('style.css'));
 
 app.post('/api/upload', upload.single('file'), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file' });
@@ -78,7 +96,19 @@ async function loadStateFromDb() {
   const result = await db.execute('SELECT data FROM state WHERE id = 1');
   if (result.rows.length) {
     try {
-      state = { ...defaultState, ...JSON.parse(result.rows[0].data) };
+      const saved = JSON.parse(result.rows[0].data);
+      state = {
+        ...defaultState,
+        ...saved,
+        scene: { ...defaultState.scene, ...(saved.scene || {}) },
+        jukebox: { ...defaultState.jukebox, ...(saved.jukebox || {}) },
+        characters: saved.characters || {},
+        rollLog: Array.isArray(saved.rollLog) ? saved.rollLog : [],
+        tokens: Array.isArray(saved.tokens) ? saved.tokens : [],
+        initiative: { ...defaultState.initiative, ...(saved.initiative || {}) }
+      };
+      if (!Array.isArray(state.scene.doodlePaths)) state.scene.doodlePaths = [];
+      if (!Array.isArray(state.initiative.entries)) state.initiative.entries = [];
     } catch (e) {
       console.warn('Could not parse saved state, starting fresh.', e.message);
     }
@@ -109,6 +139,33 @@ const dbReady = db.execute('CREATE TABLE IF NOT EXISTS state (id INTEGER PRIMARY
 
 function broadcastState() {
   io.emit('state:full', state);
+}
+
+function upsertInitiativeEntry({ name, value, tokenId }) {
+  const safeName = String(name || 'Unnamed').trim().slice(0, 100) || 'Unnamed';
+  const currentId = state.initiative.entries[state.initiative.currentIndex]?.id || null;
+  const normalizedName = safeName.toLowerCase();
+  let entry = state.initiative.entries.find(item =>
+    (tokenId && item.tokenId === tokenId) || String(item.name).toLowerCase() === normalizedName
+  );
+  if (entry) {
+    entry.name = safeName;
+    entry.value = Number(value) || 0;
+    if (tokenId) entry.tokenId = tokenId;
+  } else {
+    entry = {
+      id: 'i' + Date.now() + Math.random().toString(36).slice(2, 6),
+      name: safeName,
+      value: Number(value) || 0,
+      tokenId: tokenId || null
+    };
+    state.initiative.entries.push(entry);
+  }
+  state.initiative.entries.sort((a, b) => b.value - a.value || a.name.localeCompare(b.name));
+  state.initiative.currentIndex = currentId
+    ? state.initiative.entries.findIndex(item => item.id === currentId)
+    : -1;
+  return entry;
 }
 
 io.on('connection', (socket) => {
@@ -216,13 +273,31 @@ io.on('connection', (socket) => {
   // accidentally (or deliberately) editing/deleting each other's sheets.
   // The DM can always edit/delete any sheet.
   socket.on('character:save', (sheet) => {
-    const existing = state.characters[sheet.name];
-    if (socket.data.role !== 'dm' && existing && existing.owner && existing.owner !== socket.data.name) {
-      socket.emit('character:denied', { name: sheet.name });
+    if (!sheet || typeof sheet !== 'object') return;
+    const name = String(sheet.name || '').trim().slice(0, 100);
+    if (!name) return;
+    const originalName = String(sheet._originalName || name).trim().slice(0, 100);
+    const original = state.characters[originalName];
+    const destination = state.characters[name];
+    const ownedSheet = original || destination;
+    const isDm = socket.data.role === 'dm';
+    if (!isDm && ownedSheet && ownedSheet.owner && ownedSheet.owner !== socket.data.name) {
+      socket.emit('character:denied', { name });
       return;
     }
-    sheet.owner = existing?.owner || socket.data.name || 'Unknown';
-    state.characters[sheet.name] = sheet;
+    if (!isDm && originalName !== name && destination && destination !== original && destination.owner && destination.owner !== socket.data.name) {
+      socket.emit('character:denied', { name });
+      return;
+    }
+    const owner = original?.owner || destination?.owner || socket.data.name || 'Unknown';
+    delete sheet._originalName;
+    sheet.name = name;
+    sheet.owner = owner;
+    if (originalName !== name && original) {
+      delete state.characters[originalName];
+      io.emit('character:remove', { name: originalName });
+    }
+    state.characters[name] = sheet;
     persistState();
     io.emit('character:update', sheet);
   });
@@ -239,51 +314,61 @@ io.on('connection', (socket) => {
   });
 
   // --- Dice roller ---
-  socket.on('roll:make', ({ name, count, sides, modifier }) => {
+  socket.on('roll:make', ({ name, count, sides, modifier, mode, label, initiativeName, tokenId }) => {
     count = Math.max(1, Math.min(20, Number(count) || 1));
     sides = Math.max(2, Math.min(1000, Number(sides) || 20));
     modifier = Number(modifier) || 0;
-    const rolls = Array.from({ length: count }, () => 1 + Math.floor(Math.random() * sides));
-    const total = rolls.reduce((a, b) => a + b, 0) + modifier;
+    mode = ['advantage', 'disadvantage'].includes(mode) && sides === 20 && count === 1 ? mode : 'normal';
+    const actualCount = mode === 'normal' ? count : 2;
+    const rolls = Array.from({ length: actualCount }, () => 1 + Math.floor(Math.random() * sides));
+    const kept = mode === 'advantage' ? Math.max(...rolls) : mode === 'disadvantage' ? Math.min(...rolls) : null;
+    const diceTotal = kept ?? rolls.reduce((a, b) => a + b, 0);
+    const total = diceTotal + modifier;
+    const expression = mode === 'normal'
+      ? `${count}d${sides}${modifier ? (modifier > 0 ? '+' + modifier : modifier) : ''}`
+      : `2d20${mode === 'advantage' ? 'kh1' : 'kl1'}${modifier ? (modifier > 0 ? '+' + modifier : modifier) : ''}`;
     const entry = {
       id: 'r' + Date.now() + Math.random().toString(36).slice(2, 6),
-      name: name || 'Someone',
-      expression: `${count}d${sides}${modifier ? (modifier > 0 ? '+' + modifier : modifier) : ''}`,
-      rolls, modifier, total,
+      name: String(name || 'Someone').slice(0, 140),
+      label: String(label || '').slice(0, 140),
+      expression,
+      rolls, kept, mode, modifier, total,
       ts: Date.now()
     };
     state.rollLog.unshift(entry);
     state.rollLog = state.rollLog.slice(0, 50);
+    if (initiativeName && sides === 20) {
+      upsertInitiativeEntry({ name: initiativeName, value: total, tokenId });
+      io.emit('initiative:update', state.initiative);
+    }
     persistState();
     io.emit('roll:made', entry);
   });
 
   // --- Initiative tracker ---
   socket.on('initiative:add', ({ name, value, tokenId }) => {
-    state.initiative.entries.push({
-      id: 'i' + Date.now() + Math.random().toString(36).slice(2, 6),
-      name: name || 'Unnamed',
-      value: Number(value) || 0,
-      tokenId: tokenId || null
-    });
-    state.initiative.entries.sort((a, b) => b.value - a.value);
+    if (socket.data.role !== 'dm') return;
+    upsertInitiativeEntry({ name, value, tokenId });
     persistState();
     io.emit('initiative:update', state.initiative);
   });
 
   socket.on('initiative:remove', ({ id }) => {
+    if (socket.data.role !== 'dm') return;
+    const currentId = state.initiative.entries[state.initiative.currentIndex]?.id || null;
     const idx = state.initiative.entries.findIndex(e => e.id === id);
     if (idx !== -1) {
       state.initiative.entries.splice(idx, 1);
-      if (state.initiative.currentIndex >= state.initiative.entries.length) {
-        state.initiative.currentIndex = state.initiative.entries.length - 1;
-      }
+      state.initiative.currentIndex = currentId && currentId !== id
+        ? state.initiative.entries.findIndex(entry => entry.id === currentId)
+        : Math.min(idx, state.initiative.entries.length - 1);
     }
     persistState();
     io.emit('initiative:update', state.initiative);
   });
 
   socket.on('initiative:next', () => {
+    if (socket.data.role !== 'dm') return;
     if (state.initiative.entries.length === 0) return;
     const next = state.initiative.currentIndex + 1;
     if (next >= state.initiative.entries.length) {
@@ -297,6 +382,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on('initiative:reset', () => {
+    if (socket.data.role !== 'dm') return;
     state.initiative = { entries: [], round: 1, currentIndex: -1 };
     persistState();
     io.emit('initiative:update', state.initiative);

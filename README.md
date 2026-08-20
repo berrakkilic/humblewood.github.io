@@ -43,10 +43,11 @@ Everyone needs to reach the same running server. Running it on your laptop only 
 
 ## What's built so far (the skeleton)
 
-- **Map & tokens**: DM uploads the battle map image. Tokens for NPCs, items and PCs live in a tray and can be dragged around the map, snapping to the grid. Positions sync to everyone. 
-- **Doodle layer**: DM can freehand-draw on the map. Clearable. Should give players access too.
+- **Map & tokens**: DM uploads the battle map image. Tokens for NPCs, items and PCs live in a tray and can be moved, snapped to the grid, hidden from players and given simple HP adjustments. Pan and zoom controls work for everyone.
+- **Map initiative tracker**: turn order, rounds, quick character rolls, manual NPC entries and the active token are all visible directly beside the map.
 - **Jukebox**: add tracks by direct audio URL, playlist syncs playback position/play/pause across all clients.
 - **Character sheets**: a basic 5e-style sheet (abilities, HP/AC, inventory, notes) per character, added Humblewood characteristics.
+- **Character-aware dice**: select a character to roll ability checks, saving throws, skills, initiative, attacks, spell attacks etc. with the stored modifiers. d20 rolls support advantage and disadvantage and sync to the shared roll log.
 - **Cottagecore Humblewood aesthetic**: parchment and forest tones, vine dividers, soft rounded shapes.
 
 ## Known limitations to build out next

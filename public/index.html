@@ -199,6 +199,7 @@
     </div>
     <div class="topbar-right">
       <span id="presence-list"></span>
+      <button class="topbar-roll-btn" id="topbar-roll-btn" type="button">🎲 Roll</button>
       <span class="role-pill" id="my-role-pill"></span>
     </div>
   </header>
@@ -208,7 +209,6 @@
     <button class="tab-btn" data-view="characters">Characters</button>
     <button class="tab-btn" data-view="jukebox">Jukebox</button>
     <button class="tab-btn" data-view="dice">Dice</button>
-    <button class="tab-btn" data-view="initiative">Initiative</button>
   </nav>
 
   <main>
@@ -255,6 +255,7 @@
           <span id="zoom-level">100%</span>
           <button id="zoom-in">+</button>
           <button id="zoom-reset">Reset view</button>
+          <button id="toggle-initiative-btn" aria-controls="map-initiative-panel" aria-expanded="true">⚔ Initiative <span id="initiative-count">0</span></button>
         </div>
         <div id="map-stage">
           <img id="map-image" src="" style="display:none;">
@@ -266,6 +267,29 @@
           <p class="hand" style="font-size:20px;">No map has bloomed here yet</p>
         </div>
       </div>
+
+      <aside class="initiative-panel map-initiative-panel panel" id="map-initiative-panel">
+        <div class="initiative-header">
+          <h2>Turn order</h2>
+          <div class="round-badge">Round <span id="init-round">1</span></div>
+        </div>
+
+        <p class="initiative-help">Character initiative rolls appear here automatically.</p>
+        <div class="dm-only initiative-add-row">
+          <input type="text" id="init-name" placeholder="Combatant name">
+          <input type="number" id="init-value" placeholder="Initiative">
+          <button class="btn-rose" id="init-add-btn" type="button">Add</button>
+        </div>
+        <div class="dm-only initiative-quick-add" id="init-quick-add"></div>
+
+        <div class="vine-divider"></div>
+        <div class="initiative-list" id="initiative-list"></div>
+
+        <div class="dm-only initiative-controls">
+          <button class="btn-primary" id="init-next-btn" type="button">Next turn →</button>
+          <button class="btn-ghost" id="init-reset-btn" type="button">Reset</button>
+        </div>
+      </aside>
     </section>
 
     <!-- CHARACTERS VIEW -->
@@ -593,6 +617,31 @@
     <section id="view-dice" class="view">
       <div class="dice-panel panel">
         <h2>Roll the bones</h2>
+        <p class="dice-intro">Choose a character and the correct 5e modifier is added automatically.</p>
+
+        <section class="character-roller" aria-labelledby="character-roller-title">
+          <div class="character-roller-heading">
+            <h3 id="character-roller-title">Character rolls</h3>
+            <div class="character-roll-selectors">
+              <label>
+                Character
+                <select id="dice-character"></select>
+              </label>
+              <label>
+                d20 mode
+                <select id="dice-roll-mode">
+                  <option value="normal">Normal</option>
+                  <option value="advantage">Advantage</option>
+                  <option value="disadvantage">Disadvantage</option>
+                </select>
+              </label>
+            </div>
+          </div>
+          <div id="character-roll-options" class="character-roll-options"></div>
+        </section>
+
+        <div class="vine-divider"></div>
+        <h3>Quick dice</h3>
         <div class="dice-quick-row">
           <button class="die-btn" data-sides="4">d4</button>
           <button class="die-btn" data-sides="6">d6</button>
@@ -618,70 +667,13 @@
         <div class="roll-log" id="roll-log"></div>
       </div>
     </section>
-
-    <!-- INITIATIVE VIEW -->
-    <section id="view-initiative" class="view">
-      <div class="initiative-panel panel">
-        <div class="initiative-header">
-          <h2>Turn order</h2>
-          <div class="round-badge">Round <span id="init-round">1</span></div>
-        </div>
-
-        <div class="dm-only initiative-add-row">
-          <input type="text" id="init-name" placeholder="Combatant name">
-          <input type="number" id="init-value" placeholder="Initiative">
-          <button class="btn-rose" id="init-add-btn">Add</button>
-        </div>
-        <div class="dm-only initiative-quick-add" id="init-quick-add"></div>
-
-        <div class="vine-divider"></div>
-        <div class="initiative-list" id="initiative-list"></div>
-
-        <div class="dm-only initiative-controls">
-          <button class="btn-primary" style="width:auto; padding:10px 20px;" id="init-next-btn">Next turn →</button>
-          <button class="btn-ghost" id="init-reset-btn">Reset</button>
-        </div>
-      </div>
-    </section>
   </main>
 </div>
 
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
 <script src="/socket.io/socket.io.js"></script>
 <script src="app.js"></script>
-
-<script>
-// Small UI helpers only. Your existing app.js still owns saving/loading and multiplayer sync.
-(function () {
-  const abilityIds = ['str','dex','con','int','wis','cha'];
-  function abilityMod(score) {
-    const n = Number(score);
-    if (!Number.isFinite(n)) return 0;
-    return Math.floor((n - 10) / 2);
-  }
-  function signed(n) { return n >= 0 ? `+${n}` : String(n); }
-  function updateAbilityMods() {
-    abilityIds.forEach(a => {
-      const input = document.getElementById(`sf-${a}`);
-      const out = document.getElementById(`mod-${a}`);
-      if (input && out) out.textContent = signed(abilityMod(input.value));
-    });
-  }
-  function updateProfBonus() {
-    const level = Math.max(1, Math.min(20, Number(document.getElementById('sf-level')?.value || 1)));
-    const pb = 2 + Math.floor((level - 1) / 4);
-    const out = document.getElementById('sf-prof-bonus');
-    if (out) out.value = pb;
-  }
-  function initCharacterHelpers() {
-    abilityIds.forEach(a => document.getElementById(`sf-${a}`)?.addEventListener('input', updateAbilityMods));
-    document.getElementById('sf-level')?.addEventListener('input', updateProfBonus);
-    updateAbilityMods();
-    updateProfBonus();
-  }
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initCharacterHelpers);
-  else initCharacterHelpers();
-})();
-</script>
 
 </body>
 </html>

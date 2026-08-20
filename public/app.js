@@ -7,6 +7,30 @@ let selectedTool = 'move';
 let draggingToken = null;
 let dragOffset = { x: 0, y: 0 };
 let pendingTrayToken = null; // token about to be dropped from tray
+let mapScale = 1;
+let mapPan = { x: 0, y: 0 };
+let panStart = null;
+let editingOriginalName = null;
+let editingInventory = [];
+let editingPortraitUrl = null;
+let pendingPortraitFile = null;
+let editingCanEdit = true;
+let initiativeManuallyEdited = false;
+let toastTimer = null;
+
+const ABILITIES = ['str', 'dex', 'con', 'int', 'wis', 'cha'];
+const ABILITY_LABELS = { str: 'Strength', dex: 'Dexterity', con: 'Constitution', int: 'Intelligence', wis: 'Wisdom', cha: 'Charisma' };
+const SKILL_ABILITIES = {
+  acrobatics: 'dex', animal: 'wis', arcana: 'int', athletics: 'str', deception: 'cha', history: 'int',
+  insight: 'wis', intimidation: 'cha', investigation: 'int', medicine: 'wis', nature: 'int', perception: 'wis',
+  performance: 'cha', persuasion: 'cha', religion: 'int', sleight: 'dex', stealth: 'dex', survival: 'wis'
+};
+const SKILL_LABELS = {
+  acrobatics: 'Acrobatics', animal: 'Animal Handling', arcana: 'Arcana', athletics: 'Athletics', deception: 'Deception',
+  history: 'History', insight: 'Insight', intimidation: 'Intimidation', investigation: 'Investigation', medicine: 'Medicine',
+  nature: 'Nature', perception: 'Perception', performance: 'Performance', persuasion: 'Persuasion', religion: 'Religion',
+  sleight: 'Sleight of Hand', stealth: 'Stealth', survival: 'Survival'
+};
 
 // ---------------- Join flow ----------------
 document.getElementById('role-dm').onclick = () => setRole('dm');
@@ -25,17 +49,22 @@ document.getElementById('join-btn').onclick = () => {
   document.body.setAttribute('data-role', myRole);
   document.getElementById('my-role-pill').textContent = myRole === 'dm' ? 'Dungeon Master' : 'Player · ' + myName;
   socket.emit('identify', { role: myRole, name: myName });
+  if (state) {
+    renderCharacters();
+    renderInitiative();
+    refreshCharacterRoller();
+  }
 };
 
 // ---------------- Tabs ----------------
-document.querySelectorAll('.tab-btn').forEach(btn => {
-  btn.onclick = () => {
-    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-    document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
-    btn.classList.add('active');
-    document.getElementById('view-' + btn.dataset.view).classList.add('active');
-  };
-});
+document.querySelectorAll('.tab-btn').forEach(btn => { btn.onclick = () => switchView(btn.dataset.view); });
+document.getElementById('topbar-roll-btn').onclick = () => switchView('dice');
+
+function switchView(viewName) {
+  document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.view === viewName));
+  document.querySelectorAll('.view').forEach(view => view.classList.toggle('active', view.id === 'view-' + viewName));
+  if (viewName === 'dice') refreshCharacterRoller();
+}
 
 // ---------------- Socket state sync ----------------
 socket.on('state:full', (s) => {
@@ -45,11 +74,14 @@ socket.on('state:full', (s) => {
   renderCharacters();
   renderJukebox();
   renderRollLog();
+  renderInitiative();
+  refreshCharacterRoller();
 });
 
 socket.on('scene:update', (scene) => { state.scene = scene; renderMap(); });
 socket.on('scene:doodle:add', (path) => { state.scene.doodlePaths.push(path); drawDoodlePath(path); });
 socket.on('scene:doodle:clear', () => { state.scene.doodlePaths = []; clearDoodleCanvas(); });
+socket.on('scene:doodle:redrawAll', (paths) => { state.scene.doodlePaths = paths || []; redrawAllDoodles(); });
 
 socket.on('token:add', (t) => { state.tokens.push(t); renderTokenTray(); renderMapTokens(); });
 socket.on('token:move', ({ id, x, y }) => {
@@ -69,8 +101,24 @@ socket.on('token:remove', ({ id }) => {
 });
 
 socket.on('jukebox:update', (j) => { state.jukebox = j; renderJukebox(); });
-socket.on('character:update', (sheet) => { state.characters[sheet.name] = sheet; renderCharacters(); });
-socket.on('character:remove', ({ name }) => { delete state.characters[name]; renderCharacters(); });
+socket.on('character:update', (sheet) => {
+  state.characters[sheet.name] = sheet;
+  renderCharacters();
+  renderInitiative();
+  refreshCharacterRoller();
+});
+socket.on('character:remove', ({ name }) => {
+  delete state.characters[name];
+  renderCharacters();
+  renderInitiative();
+  refreshCharacterRoller();
+});
+socket.on('character:denied', ({ name }) => showToast(`You cannot edit ${name || 'that character'}.`));
+socket.on('initiative:update', (initiative) => {
+  state.initiative = initiative;
+  renderInitiative();
+  renderMapTokens();
+});
 
 socket.on('presence', ({ role, name, connected }) => {
   const el = document.getElementById('presence-list');
@@ -91,11 +139,15 @@ mapUpload.onchange = async () => {
 function renderMap() {
   const img = document.getElementById('map-image');
   const empty = document.getElementById('empty-map');
+  const grid = document.getElementById('grid-overlay');
+  const gridSize = Math.max(10, Number(state.scene.gridSize) || 50);
+  grid.style.backgroundSize = `${gridSize}px ${gridSize}px`;
+  grid.classList.toggle('visible', !!state.scene.gridVisible);
+  document.getElementById('grid-toggle').checked = !!state.scene.gridVisible;
+  document.getElementById('grid-size').value = gridSize;
+  applyMapTransform();
   if (state.scene.mapUrl) {
-    img.src = state.scene.mapUrl;
-    img.style.display = 'block';
-    empty.style.display = 'none';
-    img.onload = () => {
+    const sizeMapStage = () => {
       const stage = document.getElementById('map-stage');
       stage.style.width = img.naturalWidth + 'px';
       stage.style.height = img.naturalHeight + 'px';
@@ -107,6 +159,11 @@ function renderMap() {
       redrawAllDoodles();
       renderMapTokens();
     };
+    img.onload = sizeMapStage;
+    img.src = state.scene.mapUrl;
+    img.style.display = 'block';
+    empty.style.display = 'none';
+    if (img.complete && img.naturalWidth) sizeMapStage();
   } else {
     img.style.display = 'none';
     empty.style.display = 'flex';
@@ -116,18 +173,36 @@ function renderMap() {
 function renderMapTokens() {
   document.querySelectorAll('.token-on-map').forEach(el => el.remove());
   const stage = document.getElementById('map-stage');
+  const current = currentInitiativeEntry();
   state.tokens.forEach(t => {
+    if (myRole === 'player' && t.visibleToPlayers === false) return;
     const el = document.createElement('div');
     el.className = 'token-on-map kind-' + t.kind;
+    if (current && current.tokenId === t.id) el.classList.add('current-turn');
+    if (t.visibleToPlayers === false) el.classList.add('hidden-token');
     el.dataset.id = t.id;
     el.style.left = t.x + 'px';
     el.style.top = t.y + 'px';
     el.innerHTML = `
-      <div class="label">${t.label}</div>
-      ${t.imageUrl ? `<img src="${t.imageUrl}">` : emojiFor(t.kind)}
+      <div class="label">${escapeHtml(t.label)}</div>
+      ${t.imageUrl ? `<img src="${escapeAttr(t.imageUrl)}" alt="">` : emojiFor(t.kind)}
       ${t.maxHp ? `<div class="hp-bar"><div class="hp-fill" style="width:${Math.max(0, (t.hp / t.maxHp) * 100)}%"></div></div>` : ''}
+      <div class="token-controls dm-only">
+        ${t.maxHp ? '<button type="button" data-action="damage" title="Lose 1 HP">−</button><button type="button" data-action="heal" title="Heal 1 HP">+</button>' : ''}
+        <button type="button" data-action="visibility" title="Show or hide from players">${t.visibleToPlayers === false ? '🙈' : '👁'}</button>
+      </div>
     `;
     el.onmousedown = (e) => startDragToken(e, t.id);
+    el.querySelectorAll('.token-controls button').forEach(button => {
+      button.onmousedown = (e) => e.stopPropagation();
+      button.onclick = (e) => {
+        e.stopPropagation();
+        const action = button.dataset.action;
+        if (action === 'damage') socket.emit('token:update', { id: t.id, hp: Math.max(0, Number(t.hp) - 1) });
+        if (action === 'heal') socket.emit('token:update', { id: t.id, hp: Math.min(Number(t.maxHp), Number(t.hp) + 1) });
+        if (action === 'visibility') socket.emit('token:update', { id: t.id, visibleToPlayers: t.visibleToPlayers === false });
+      };
+    });
     stage.appendChild(el);
   });
 }
@@ -142,26 +217,33 @@ function startDragToken(e, id) {
   draggingToken = id;
   const el = e.currentTarget;
   const rect = el.getBoundingClientRect();
-  dragOffset.x = e.clientX - rect.left;
-  dragOffset.y = e.clientY - rect.top;
+  dragOffset.x = (e.clientX - rect.left) / mapScale;
+  dragOffset.y = (e.clientY - rect.top) / mapScale;
 }
 
 document.addEventListener('mousemove', (e) => {
   if (!draggingToken) return;
   const stage = document.getElementById('map-stage');
   const rect = stage.getBoundingClientRect();
-  let x = e.clientX - rect.left - dragOffset.x + 22;
-  let y = e.clientY - rect.top - dragOffset.y + 22;
+  const x = (e.clientX - rect.left) / mapScale - dragOffset.x;
+  const y = (e.clientY - rect.top) / mapScale - dragOffset.y;
   const el = document.querySelector(`.token-on-map[data-id="${draggingToken}"]`);
-  if (el) { el.style.left = (x - 22) + 'px'; el.style.top = (y - 22) + 'px'; }
+  if (el) { el.style.left = x + 'px'; el.style.top = y + 'px'; }
 });
 
 document.addEventListener('mouseup', (e) => {
   if (!draggingToken) return;
   const el = document.querySelector(`.token-on-map[data-id="${draggingToken}"]`);
   if (el) {
-    const x = parseFloat(el.style.left);
-    const y = parseFloat(el.style.top);
+    let x = parseFloat(el.style.left);
+    let y = parseFloat(el.style.top);
+    if (document.getElementById('snap-toggle').checked) {
+      const size = Math.max(10, Number(state.scene.gridSize) || 50);
+      x = Math.round(x / size) * size;
+      y = Math.round(y / size) * size;
+      el.style.left = x + 'px';
+      el.style.top = y + 'px';
+    }
     socket.emit('token:move', { id: draggingToken, x, y });
   }
   draggingToken = null;
@@ -169,15 +251,72 @@ document.addEventListener('mouseup', (e) => {
 
 // ---- Tool toggle ----
 document.getElementById('tool-move').onclick = () => setTool('move');
+document.getElementById('tool-pan').onclick = () => setTool('pan');
 document.getElementById('tool-doodle').onclick = () => setTool('doodle');
 function setTool(tool) {
   selectedTool = tool;
   document.getElementById('tool-move').classList.toggle('active', tool === 'move');
+  document.getElementById('tool-pan').classList.toggle('active', tool === 'pan');
   document.getElementById('tool-doodle').classList.toggle('active', tool === 'doodle');
   document.getElementById('map-stage').classList.toggle('doodling', tool === 'doodle');
+  document.getElementById('map-stage').classList.toggle('panning', tool === 'pan');
 }
 
 document.getElementById('clear-doodles-btn').onclick = () => socket.emit('scene:doodle:clear');
+document.getElementById('undo-doodle-btn').onclick = () => socket.emit('scene:doodle:undo');
+
+const mapStageWrap = document.getElementById('map-stage-wrap');
+mapStageWrap.addEventListener('mousedown', (e) => {
+  if (selectedTool !== 'pan' || e.button !== 0) return;
+  e.preventDefault();
+  panStart = { clientX: e.clientX, clientY: e.clientY, x: mapPan.x, y: mapPan.y };
+});
+document.addEventListener('mousemove', (e) => {
+  if (!panStart) return;
+  mapPan.x = panStart.x + e.clientX - panStart.clientX;
+  mapPan.y = panStart.y + e.clientY - panStart.clientY;
+  applyMapTransform();
+});
+document.addEventListener('mouseup', () => { panStart = null; });
+
+document.getElementById('grid-toggle').onchange = () => {
+  socket.emit('scene:setGrid', {
+    gridSize: Number(document.getElementById('grid-size').value) || 50,
+    gridVisible: document.getElementById('grid-toggle').checked
+  });
+};
+document.getElementById('grid-size').onchange = () => {
+  socket.emit('scene:setGrid', {
+    gridSize: Number(document.getElementById('grid-size').value) || 50,
+    gridVisible: document.getElementById('grid-toggle').checked
+  });
+};
+
+document.getElementById('zoom-in').onclick = () => setMapZoom(mapScale + 0.15);
+document.getElementById('zoom-out').onclick = () => setMapZoom(mapScale - 0.15);
+document.getElementById('zoom-reset').onclick = () => {
+  mapScale = 1;
+  mapPan = { x: 0, y: 0 };
+  applyMapTransform();
+};
+
+document.getElementById('toggle-initiative-btn').onclick = () => {
+  const mapView = document.getElementById('view-map');
+  const collapsed = mapView.classList.toggle('initiative-collapsed');
+  document.getElementById('toggle-initiative-btn').setAttribute('aria-expanded', String(!collapsed));
+};
+
+function setMapZoom(value) {
+  mapScale = Math.max(0.35, Math.min(3, Math.round(value * 100) / 100));
+  applyMapTransform();
+}
+
+function applyMapTransform() {
+  const stage = document.getElementById('map-stage');
+  if (!stage) return;
+  stage.style.transform = `translate(${mapPan.x}px, ${mapPan.y}px) scale(${mapScale})`;
+  document.getElementById('zoom-level').textContent = Math.round(mapScale * 100) + '%';
+}
 
 // ---- Doodling ----
 let isDrawing = false;
@@ -207,7 +346,7 @@ document.addEventListener('mouseup', () => {
 
 function getCanvasPos(e) {
   const rect = doodleCanvas.getBoundingClientRect();
-  return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+  return { x: (e.clientX - rect.left) / mapScale, y: (e.clientY - rect.top) / mapScale };
 }
 
 function drawDoodlePath(path, liveOnly) {
@@ -256,10 +395,12 @@ function renderTokenTray() {
   const list = document.getElementById('token-list');
   list.innerHTML = '';
   state.tokens.forEach(t => {
+    if (myRole === 'player' && t.visibleToPlayers === false) return;
     const chip = document.createElement('div');
     chip.className = 'token-chip kind-' + t.kind;
     chip.title = t.label + ' (drag onto map, or click to nudge into view)';
-    chip.innerHTML = (t.imageUrl ? `<img src="${t.imageUrl}">` : emojiFor(t.kind)) +
+    if (t.visibleToPlayers === false) chip.classList.add('hidden-token');
+    chip.innerHTML = (t.imageUrl ? `<img src="${escapeAttr(t.imageUrl)}" alt="${escapeAttr(t.label)}">` : emojiFor(t.kind)) +
       `<span class="del dm-only" title="Remove">×</span>`;
     chip.querySelector('.del').onclick = (e) => {
       e.stopPropagation();
@@ -280,16 +421,27 @@ function renderCharacters() {
   Object.values(state.characters).forEach(c => {
     const card = document.createElement('div');
     card.className = 'char-card';
+    const canEdit = canEditCharacter(c);
+    const species = c.species || c.race || '';
+    const charClass = c.charClass || c.className || '';
     card.innerHTML = `
-      <h3>${c.name}</h3>
-      <div class="meta">${c.race || ''} ${c.charClass || ''} · Level ${c.level || 1}</div>
+      <div class="card-top">
+        <div class="card-portrait">${c.portraitUrl ? `<img src="${escapeAttr(c.portraitUrl)}" alt="">` : '🍃'}</div>
+        <div><h3>${escapeHtml(c.name)}</h3><div class="meta">${escapeHtml([species, charClass].filter(Boolean).join(' · '))} · Level ${Number(c.level) || 1}</div></div>
+        ${canEdit ? '' : '<span class="locked-badge">View only</span>'}
+      </div>
       <div class="stat-row">
-        <span class="stat-pill">HP ${c.hp}/${c.maxHp}</span>
-        <span class="stat-pill">AC ${c.ac}</span>
-        <span class="stat-pill">${c.speed || ''}</span>
+        <span class="stat-pill">HP ${Number(c.hp) || 0}/${Number(c.maxHp) || 0}</span>
+        <span class="stat-pill">AC ${Number(c.ac) || 0}</span>
+        <span class="stat-pill">Init ${signed(characterInitiativeModifier(c))}</span>
+      </div>
+      <div class="char-card-actions">
+        <button type="button" class="btn-ghost view-character-btn">${canEdit ? 'Open sheet' : 'View sheet'}</button>
+        <button type="button" class="btn-rose roll-character-btn">🎲 Roll</button>
       </div>
     `;
-    card.onclick = () => openSheetEditor(c);
+    card.querySelector('.view-character-btn').onclick = () => openSheetEditor(c);
+    card.querySelector('.roll-character-btn').onclick = () => openCharacterRoller(c.name);
     grid.appendChild(card);
   });
 }
@@ -297,62 +449,247 @@ function renderCharacters() {
 document.getElementById('new-sheet-btn').onclick = () => openSheetEditor(null);
 document.getElementById('close-sheet-btn').onclick = () => document.getElementById('sheet-editor').classList.add('hidden');
 
-let editingOriginalName = null;
 function openSheetEditor(c) {
+  const form = document.getElementById('sheet-form');
+  form.reset();
   document.getElementById('sheet-editor').classList.remove('hidden');
   document.getElementById('sheet-editor-title').textContent = c ? 'Edit ' + c.name : 'New character';
   editingOriginalName = c ? c.name : null;
-  const f = (id) => document.getElementById(id);
-  f('sf-name').value = c?.name || '';
-  f('sf-race').value = c?.race || '';
-  f('sf-class').value = c?.charClass || '';
-  f('sf-level').value = c?.level || 1;
-  f('sf-hp').value = c?.hp ?? 10;
-  f('sf-maxhp').value = c?.maxHp ?? 10;
-  f('sf-ac').value = c?.ac ?? 10;
-  f('sf-speed').value = c?.speed || '30 ft';
-  f('sf-str').value = c?.abilities?.str ?? 10;
-  f('sf-dex').value = c?.abilities?.dex ?? 10;
-  f('sf-con').value = c?.abilities?.con ?? 10;
-  f('sf-int').value = c?.abilities?.int ?? 10;
-  f('sf-wis').value = c?.abilities?.wis ?? 10;
-  f('sf-cha').value = c?.abilities?.cha ?? 10;
-  f('sf-inventory').value = c?.inventory || '';
-  f('sf-notes').value = c?.notes || '';
+  editingCanEdit = canEditCharacter(c);
+  pendingPortraitFile = null;
+  editingPortraitUrl = c?.portraitUrl || null;
+  const fields = c?.fields || legacyCharacterFields(c);
+  initiativeManuallyEdited = !!c && fields.initiative !== '' && fields.initiative !== undefined;
+  form.querySelectorAll('[id^="sf-"]').forEach(input => {
+    if (input.type === 'file') return;
+    const key = input.id.slice(3);
+    if (!Object.prototype.hasOwnProperty.call(fields, key)) return;
+    if (input.type === 'checkbox') input.checked = !!fields[key];
+    else input.value = fields[key] ?? '';
+  });
+  editingInventory = normalizeInventory(c?.inventory);
+  renderInventoryEditor();
+  renderPortraitPreview(editingPortraitUrl);
+  refreshCharacterCalculations(!c);
+  setSheetEditable(editingCanEdit, !!c);
   document.getElementById('view-characters').scrollIntoView({ behavior: 'smooth' });
 }
 
-document.getElementById('save-sheet-btn').onclick = () => {
-  const f = (id) => document.getElementById(id).value;
-  const name = f('sf-name').trim();
+function legacyCharacterFields(c) {
+  if (!c) return {};
+  const fields = {
+    name: c.name || '', species: c.species || c.race || '', class: c.charClass || '', level: c.level ?? 1,
+    hp: c.hp ?? 10, maxhp: c.maxHp ?? 10, ac: c.ac ?? 10, speed: c.speed || '30 ft', notes: c.notes || ''
+  };
+  ABILITIES.forEach(ability => { fields[ability] = c.abilities?.[ability] ?? 10; });
+  return fields;
+}
+
+function canEditCharacter(c) {
+  return !c || myRole === 'dm' || !c.owner || c.owner === myName;
+}
+
+function setSheetEditable(canEdit, hasCharacter) {
+  document.querySelectorAll('#sheet-form input, #sheet-form select, #sheet-form textarea, #sheet-form button').forEach(control => {
+    control.disabled = !canEdit;
+  });
+  document.getElementById('save-sheet-btn').classList.toggle('hidden', !canEdit);
+  document.getElementById('delete-sheet-btn').classList.toggle('hidden', !canEdit || !hasCharacter);
+  const ownerNote = document.getElementById('sheet-owner-note');
+  ownerNote.textContent = canEdit ? '' : 'Only this character’s owner or the Dungeon Master can edit it.';
+}
+
+function normalizeInventory(inventory) {
+  if (Array.isArray(inventory)) {
+    return inventory.map((item, index) => ({ id: item.id || `item-${Date.now()}-${index}`, name: String(item.name || ''), qty: Math.max(1, Number(item.qty) || 1) }));
+  }
+  if (typeof inventory === 'string' && inventory.trim()) {
+    return inventory.split(/\n|,/).map((name, index) => ({ id: `legacy-${index}`, name: name.trim(), qty: 1 })).filter(item => item.name);
+  }
+  return [];
+}
+
+function renderInventoryEditor() {
+  const list = document.getElementById('inventory-list');
+  list.innerHTML = '';
+  editingInventory.forEach(item => {
+    const row = document.createElement('div');
+    row.className = 'inventory-item';
+    const description = document.createElement('span');
+    description.textContent = item.name;
+    const qty = document.createElement('span');
+    qty.className = 'qty';
+    qty.textContent = `×${item.qty}`;
+    description.appendChild(qty);
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'del';
+    remove.textContent = '×';
+    remove.title = 'Remove item';
+    remove.disabled = !editingCanEdit;
+    remove.onclick = () => {
+      editingInventory = editingInventory.filter(entry => entry.id !== item.id);
+      renderInventoryEditor();
+    };
+    row.append(description, remove);
+    list.appendChild(row);
+  });
+}
+
+document.getElementById('inv-add-btn').onclick = () => {
+  const nameInput = document.getElementById('inv-item-name');
+  const qtyInput = document.getElementById('inv-item-qty');
+  const name = nameInput.value.trim();
+  if (!name) return;
+  editingInventory.push({ id: `item-${Date.now()}`, name, qty: Math.max(1, Number(qtyInput.value) || 1) });
+  nameInput.value = '';
+  qtyInput.value = 1;
+  renderInventoryEditor();
+};
+
+document.getElementById('sf-portrait').onchange = (event) => {
+  pendingPortraitFile = event.target.files[0] || null;
+  if (!pendingPortraitFile) return renderPortraitPreview(editingPortraitUrl);
+  const reader = new FileReader();
+  reader.onload = () => renderPortraitPreview(reader.result);
+  reader.readAsDataURL(pendingPortraitFile);
+};
+
+function renderPortraitPreview(url) {
+  const preview = document.getElementById('portrait-preview');
+  preview.innerHTML = '';
+  if (!url) {
+    preview.textContent = '🍃';
+    return;
+  }
+  const image = document.createElement('img');
+  image.src = url;
+  image.alt = 'Character portrait';
+  preview.appendChild(image);
+}
+
+function collectCharacterFields() {
+  const fields = {};
+  document.querySelectorAll('#sheet-form [id^="sf-"]').forEach(input => {
+    if (input.type === 'file') return;
+    const key = input.id.slice(3);
+    fields[key] = input.type === 'checkbox' ? input.checked : input.value;
+  });
+  return fields;
+}
+
+document.getElementById('save-sheet-btn').onclick = async () => {
+  if (!editingCanEdit) return;
+  refreshCharacterCalculations(false);
+  const fields = collectCharacterFields();
+  const name = String(fields.name || '').trim();
   if (!name) return alert('Every character needs a name.');
+  const saveButton = document.getElementById('save-sheet-btn');
+  saveButton.disabled = true;
+  saveButton.textContent = 'Saving…';
+  try {
+    if (pendingPortraitFile) editingPortraitUrl = await uploadFile(pendingPortraitFile);
+  } catch (error) {
+    showToast('The portrait could not be uploaded. Please try again.');
+    saveButton.disabled = false;
+    saveButton.textContent = 'Save character';
+    return;
+  }
+
+  const num = (key, fallback = 0) => Number(fields[key]) || fallback;
   const sheet = {
     name,
-    race: f('sf-race'),
-    charClass: f('sf-class'),
-    level: Number(f('sf-level')) || 1,
-    hp: Number(f('sf-hp')) || 0,
-    maxHp: Number(f('sf-maxhp')) || 0,
-    ac: Number(f('sf-ac')) || 10,
-    speed: f('sf-speed'),
-    abilities: {
-      str: Number(f('sf-str')), dex: Number(f('sf-dex')), con: Number(f('sf-con')),
-      int: Number(f('sf-int')), wis: Number(f('sf-wis')), cha: Number(f('sf-cha'))
+    _originalName: editingOriginalName,
+    portraitUrl: editingPortraitUrl,
+    species: fields.species || '',
+    race: fields.species || '',
+    subrace: fields.subrace || '',
+    charClass: fields.class || '',
+    subclass: fields.subclass || '',
+    level: Math.max(1, Math.min(20, num('level', 1))),
+    hp: num('hp'), maxHp: num('maxhp'), tempHp: num('temphp'), ac: num('ac', 10),
+    initiativeModifier: num('initiative'), speed: fields.speed || '',
+    abilities: Object.fromEntries(ABILITIES.map(ability => [ability, num(ability, 10)])),
+    saves: Object.fromEntries(ABILITIES.map(ability => [ability, {
+      proficient: !!fields[`save-${ability}-prof`], modifier: num(`save-${ability}`)
+    }])),
+    skills: Object.fromEntries(Object.keys(SKILL_ABILITIES).map(skill => [skill, {
+      proficient: !!fields[`skill-${skill}-prof`], modifier: num(`skill-${skill}`)
+    }])),
+    attacks: [1, 2, 3].map(index => ({
+      name: fields[`attack-${index}-name`] || '', bonus: fields[`attack-${index}-bonus`] || '', damage: fields[`attack-${index}-damage`] || ''
+    })).filter(attack => attack.name || attack.bonus || attack.damage),
+    spellcasting: {
+      className: fields['spell-class'] || '', ability: fields['spell-ability'] || '',
+      saveDc: num('spell-dc'), attackBonus: num('spell-attack')
     },
-    inventory: f('sf-inventory'),
-    notes: f('sf-notes')
+    inventory: editingInventory.map(item => ({ ...item })),
+    notes: fields.notes || '',
+    fields
   };
-  if (editingOriginalName && editingOriginalName !== name) {
-    socket.emit('character:remove', { name: editingOriginalName });
-  }
   socket.emit('character:save', sheet);
   document.getElementById('sheet-editor').classList.add('hidden');
+  saveButton.disabled = false;
+  saveButton.textContent = 'Save character';
+  showToast(`${name} saved.`);
 };
 
 document.getElementById('delete-sheet-btn').onclick = () => {
-  if (editingOriginalName) socket.emit('character:remove', { name: editingOriginalName });
+  if (editingOriginalName && confirm(`Delete ${editingOriginalName}?`)) {
+    socket.emit('character:remove', { name: editingOriginalName });
+  } else if (editingOriginalName) {
+    return;
+  }
   document.getElementById('sheet-editor').classList.add('hidden');
 };
+
+function abilityModifier(score) {
+  return Math.floor(((Number(score) || 10) - 10) / 2);
+}
+
+function proficiencyBonus(level) {
+  return 2 + Math.floor((Math.max(1, Math.min(20, Number(level) || 1)) - 1) / 4);
+}
+
+function refreshCharacterCalculations(force) {
+  const level = document.getElementById('sf-level');
+  const bonus = proficiencyBonus(level.value);
+  document.getElementById('sf-prof-bonus').value = bonus;
+  ABILITIES.forEach(ability => {
+    const modifier = abilityModifier(document.getElementById(`sf-${ability}`).value);
+    document.getElementById(`mod-${ability}`).textContent = signed(modifier);
+    const saveInput = document.getElementById(`sf-save-${ability}`);
+    const saveValue = modifier + (document.getElementById(`sf-save-${ability}-prof`).checked ? bonus : 0);
+    if (force || saveInput.value === '') saveInput.value = saveValue;
+  });
+  Object.entries(SKILL_ABILITIES).forEach(([skill, ability]) => {
+    const input = document.getElementById(`sf-skill-${skill}`);
+    const value = abilityModifier(document.getElementById(`sf-${ability}`).value) +
+      (document.getElementById(`sf-skill-${skill}-prof`).checked ? bonus : 0);
+    if (force || input.value === '') input.value = value;
+  });
+  const initiativeInput = document.getElementById('sf-initiative');
+  if (!initiativeManuallyEdited && (force || initiativeInput.value === '')) {
+    initiativeInput.value = abilityModifier(document.getElementById('sf-dex').value);
+  }
+  const passive = document.getElementById('sf-passive-perception');
+  if (force || passive.value === '') passive.value = 10 + Number(document.getElementById('sf-skill-perception').value || 0);
+  const spellAbility = document.getElementById('sf-spell-ability').value.toLowerCase();
+  if (ABILITIES.includes(spellAbility)) {
+    const spellMod = abilityModifier(document.getElementById(`sf-${spellAbility}`).value);
+    const spellDc = document.getElementById('sf-spell-dc');
+    const spellAttack = document.getElementById('sf-spell-attack');
+    if (spellDc.value === '') spellDc.value = 8 + bonus + spellMod;
+    if (spellAttack.value === '') spellAttack.value = bonus + spellMod;
+  }
+}
+
+ABILITIES.forEach(ability => document.getElementById(`sf-${ability}`).addEventListener('input', () => refreshCharacterCalculations(true)));
+document.getElementById('sf-level').addEventListener('input', () => refreshCharacterCalculations(true));
+document.getElementById('sf-initiative').addEventListener('input', () => { initiativeManuallyEdited = true; });
+ABILITIES.forEach(ability => document.getElementById(`sf-save-${ability}-prof`).addEventListener('change', () => refreshCharacterCalculations(true)));
+Object.keys(SKILL_ABILITIES).forEach(skill => document.getElementById(`sf-skill-${skill}-prof`).addEventListener('change', () => refreshCharacterCalculations(true)));
+document.getElementById('sf-spell-ability').addEventListener('change', () => refreshCharacterCalculations(false));
 
 // ================= JUKEBOX =================
 const audioEl = document.getElementById('audio-el');
@@ -392,7 +729,7 @@ function renderJukebox() {
   j.playlist.forEach((track, i) => {
     const row = document.createElement('div');
     row.className = 'playlist-item' + (i === j.currentIndex ? ' playing' : '');
-    row.innerHTML = `<span>${i === j.currentIndex ? '🎶 ' : ''}${track.title}</span><span class="del dm-only">×</span>`;
+    row.innerHTML = `<span>${i === j.currentIndex ? '🎶 ' : ''}${escapeHtml(track.title)}</span><span class="del dm-only">×</span>`;
     row.querySelector('span').onclick = () => socket.emit('jukebox:play', { index: i });
     row.querySelector('.del').onclick = (e) => {
       e.stopPropagation();
@@ -433,24 +770,35 @@ audioEl.onended = () => {
 
 // ================= DICE =================
 document.querySelectorAll('.die-btn').forEach(btn => {
-  btn.onclick = () => rollDice(1, Number(btn.dataset.sides), 0);
+  btn.onclick = () => rollDice(1, Number(btn.dataset.sides), 0, { label: `Quick d${btn.dataset.sides}` });
 });
 document.getElementById('roll-custom-btn').onclick = () => {
   rollDice(
     Number(document.getElementById('dice-count').value) || 1,
     Number(document.getElementById('dice-sides').value) || 20,
-    Number(document.getElementById('dice-mod').value) || 0
+    Number(document.getElementById('dice-mod').value) || 0,
+    { label: 'Custom roll' }
   );
 };
 
-function rollDice(count, sides, modifier) {
-  socket.emit('roll:make', { name: myName, count, sides, modifier });
+function rollDice(count, sides, modifier, options = {}) {
+  socket.emit('roll:make', {
+    name: options.name || myName,
+    count,
+    sides,
+    modifier,
+    mode: options.mode || 'normal',
+    label: options.label || '',
+    initiativeName: options.initiativeName || null,
+    tokenId: options.tokenId || null
+  });
 }
 
 socket.on('roll:made', (entry) => {
   if (!state.rollLog) state.rollLog = [];
   state.rollLog.unshift(entry);
   renderRollLog();
+  showToast(`${entry.label || entry.expression}: ${entry.total}`);
 });
 
 function renderRollLog() {
@@ -459,14 +807,15 @@ function renderRollLog() {
   log.innerHTML = '';
   (state.rollLog || []).forEach(entry => {
     const row = document.createElement('div');
-    const isCrit = entry.rolls.length === 1 && entry.rolls[0] === Math.max(...entry.rolls) && entry.expression.includes('d20') && entry.rolls[0] === 20;
-    const isFumble = entry.expression.includes('d20') && entry.rolls.length === 1 && entry.rolls[0] === 1;
+    const kept = Number.isFinite(Number(entry.kept)) ? Number(entry.kept) : (entry.rolls.length === 1 ? entry.rolls[0] : null);
+    const isCrit = entry.expression.includes('d20') && kept === 20;
+    const isFumble = entry.expression.includes('d20') && kept === 1;
     row.className = 'roll-entry' + (isCrit ? ' crit' : '') + (isFumble ? ' fumble' : '');
     row.innerHTML = `
       <div>
-        <span class="who">${entry.name}</span>
-        <span class="expr">rolled ${entry.expression}</span><br>
-        <span class="breakdown">[${entry.rolls.join(', ')}]${entry.modifier ? (entry.modifier > 0 ? ' +' + entry.modifier : ' ' + entry.modifier) : ''}</span>
+        <span class="who">${escapeHtml(entry.name)}</span>
+        <span class="expr">${entry.label ? escapeHtml(entry.label) + ' · ' : ''}${escapeHtml(entry.expression)}</span><br>
+        <span class="breakdown">[${entry.rolls.join(', ')}]${entry.mode && entry.mode !== 'normal' ? ` → kept ${kept}` : ''}${entry.modifier ? (entry.modifier > 0 ? ' +' + entry.modifier : ' ' + entry.modifier) : ''}</span>
       </div>
       <div class="total">${entry.total}</div>
     `;
@@ -474,11 +823,277 @@ function renderRollLog() {
   });
 }
 
+document.getElementById('dice-character').onchange = renderCharacterRollOptions;
+
+function rollableCharacters() {
+  const all = Object.values(state?.characters || {}).sort((a, b) => a.name.localeCompare(b.name));
+  if (myRole === 'dm') return all;
+  return all.filter(character => !character.owner || character.owner === myName || character.fields?.player === myName);
+}
+
+function openCharacterRoller(name) {
+  switchView('dice');
+  refreshCharacterRoller(name);
+  document.getElementById('character-roller-title').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function refreshCharacterRoller(preferredName) {
+  if (!state) return;
+  const select = document.getElementById('dice-character');
+  const characters = rollableCharacters();
+  const previous = preferredName || select.value;
+  select.innerHTML = '';
+  characters.forEach(character => {
+    const option = document.createElement('option');
+    option.value = character.name;
+    option.textContent = `${character.name} · Level ${character.level || 1} ${character.charClass || ''}`.trim();
+    select.appendChild(option);
+  });
+  if (characters.some(character => character.name === previous)) select.value = previous;
+  renderCharacterRollOptions();
+}
+
+function renderCharacterRollOptions() {
+  const container = document.getElementById('character-roll-options');
+  container.innerHTML = '';
+  const character = state?.characters?.[document.getElementById('dice-character').value];
+  if (!character) {
+    container.innerHTML = '<p class="empty-roll-options">Create or claim a character sheet to use automatic modifiers.</p>';
+    return;
+  }
+
+  const combatButtons = createRollGroup('Combat');
+  appendRollButton(combatButtons, 'Initiative', characterInitiativeModifier(character), () => rollCharacterInitiative(character));
+  const spellAttack = character.spellcasting?.attackBonus ?? character.fields?.['spell-attack'];
+  if (spellAttack !== '' && spellAttack !== undefined && spellAttack !== null) {
+    appendRollButton(combatButtons, 'Spell attack', Number(spellAttack) || 0, () => rollCharacterD20(character, 'Spell attack', Number(spellAttack) || 0));
+  }
+  (character.attacks || []).forEach(attack => {
+    const bonusMatch = String(attack.bonus || '').match(/[+-]?\d+/);
+    if (attack.name && bonusMatch) {
+      appendRollButton(combatButtons, `${attack.name} to hit`, Number(bonusMatch[0]), () => rollCharacterD20(character, `${attack.name} attack`, Number(bonusMatch[0])));
+    }
+    const damage = parseDiceExpression(attack.damage);
+    if (attack.name && damage) {
+      appendRollButton(combatButtons, `${attack.name} damage`, damage.modifier, () => {
+        rollDice(damage.count, damage.sides, damage.modifier, { name: characterRollName(character), label: `${attack.name} damage` });
+      }, true, damage.expression);
+    }
+  });
+
+  const abilityButtons = createRollGroup('Ability checks');
+  ABILITIES.forEach(ability => {
+    const modifier = abilityModifier(character.abilities?.[ability]);
+    appendRollButton(abilityButtons, ABILITY_LABELS[ability], modifier, () => rollCharacterD20(character, `${ABILITY_LABELS[ability]} check`, modifier));
+  });
+
+  const saveButtons = createRollGroup('Saving throws');
+  ABILITIES.forEach(ability => {
+    const modifier = characterSaveModifier(character, ability);
+    appendRollButton(saveButtons, ABILITY_LABELS[ability], modifier, () => rollCharacterD20(character, `${ABILITY_LABELS[ability]} save`, modifier));
+  });
+
+  const skillButtons = createRollGroup('Skills');
+  Object.keys(SKILL_ABILITIES).forEach(skill => {
+    const modifier = characterSkillModifier(character, skill);
+    appendRollButton(skillButtons, SKILL_LABELS[skill], modifier, () => rollCharacterD20(character, `${SKILL_LABELS[skill]} check`, modifier));
+  });
+
+  function createRollGroup(title) {
+    const group = document.createElement('section');
+    group.className = 'roll-group';
+    const heading = document.createElement('h4');
+    heading.textContent = title;
+    const buttons = document.createElement('div');
+    buttons.className = 'modifier-buttons';
+    group.append(heading, buttons);
+    container.appendChild(group);
+    return buttons;
+  }
+}
+
+function appendRollButton(container, label, modifier, onclick, damage = false, valueLabel = null) {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'modifier-roll-btn' + (damage ? ' damage' : '');
+  button.innerHTML = `${escapeHtml(label)} <strong>${escapeHtml(valueLabel || signed(Number(modifier) || 0))}</strong>`;
+  button.onclick = onclick;
+  container.appendChild(button);
+}
+
+function characterRollName(character) {
+  return myName === character.name ? character.name : `${myName} as ${character.name}`;
+}
+
+function rollCharacterD20(character, label, modifier, extra = {}) {
+  rollDice(1, 20, modifier, {
+    name: characterRollName(character),
+    label,
+    mode: document.getElementById('dice-roll-mode').value,
+    ...extra
+  });
+}
+
+function rollCharacterInitiative(character, forcedMode) {
+  const token = state.tokens.find(entry => entry.label.toLowerCase() === character.name.toLowerCase());
+  rollDice(1, 20, characterInitiativeModifier(character), {
+    name: characterRollName(character),
+    label: `${character.name} initiative`,
+    mode: forcedMode || document.getElementById('dice-roll-mode').value,
+    initiativeName: character.name,
+    tokenId: token?.id || null
+  });
+}
+
+function characterInitiativeModifier(character) {
+  const stored = character.initiativeModifier ?? character.fields?.initiative;
+  if (stored !== '' && stored !== undefined && stored !== null) return Number(stored) || 0;
+  return abilityModifier(character.abilities?.dex);
+}
+
+function characterSaveModifier(character, ability) {
+  const saved = character.saves?.[ability]?.modifier ?? character.fields?.[`save-${ability}`];
+  if (saved !== '' && saved !== undefined && saved !== null) return Number(saved) || 0;
+  return abilityModifier(character.abilities?.[ability]) + (character.saves?.[ability]?.proficient ? proficiencyBonus(character.level) : 0);
+}
+
+function characterSkillModifier(character, skill) {
+  const saved = character.skills?.[skill]?.modifier ?? character.fields?.[`skill-${skill}`];
+  if (saved !== '' && saved !== undefined && saved !== null) return Number(saved) || 0;
+  return abilityModifier(character.abilities?.[SKILL_ABILITIES[skill]]) + (character.skills?.[skill]?.proficient ? proficiencyBonus(character.level) : 0);
+}
+
+function parseDiceExpression(value) {
+  const match = String(value || '').replace(/\s+/g, '').match(/(\d*)d(\d+)([+-]\d+)?/i);
+  if (!match) return null;
+  const count = Math.max(1, Number(match[1]) || 1);
+  const sides = Math.max(2, Number(match[2]) || 20);
+  const modifier = Number(match[3]) || 0;
+  return { count, sides, modifier, expression: `${count}d${sides}${modifier ? signed(modifier) : ''}` };
+}
+
+// ================= INITIATIVE (MAP PANEL) =================
+document.getElementById('init-add-btn').onclick = () => {
+  const name = document.getElementById('init-name').value.trim();
+  const value = Number(document.getElementById('init-value').value);
+  if (!name || !Number.isFinite(value)) return showToast('Add a name and initiative value.');
+  const token = state.tokens.find(entry => entry.label.toLowerCase() === name.toLowerCase());
+  socket.emit('initiative:add', { name, value, tokenId: token?.id || null });
+  document.getElementById('init-name').value = '';
+  document.getElementById('init-value').value = '';
+};
+document.getElementById('init-next-btn').onclick = () => socket.emit('initiative:next');
+document.getElementById('init-reset-btn').onclick = () => {
+  if (confirm('Clear the turn order and return to round 1?')) socket.emit('initiative:reset');
+};
+
+function currentInitiativeEntry() {
+  const initiative = state?.initiative;
+  if (!initiative || initiative.currentIndex < 0) return null;
+  return initiative.entries[initiative.currentIndex] || null;
+}
+
+function renderInitiative() {
+  if (!state) return;
+  const initiative = state.initiative || { entries: [], round: 1, currentIndex: -1 };
+  document.getElementById('init-round').textContent = initiative.round || 1;
+  document.getElementById('initiative-count').textContent = initiative.entries.length;
+  const list = document.getElementById('initiative-list');
+  list.innerHTML = '';
+  if (!initiative.entries.length) {
+    const empty = document.createElement('p');
+    empty.className = 'empty-roll-options';
+    empty.textContent = 'No combatants yet. Roll initiative from the Dice tab or add one here.';
+    list.appendChild(empty);
+  }
+  initiative.entries.forEach((entry, index) => {
+    const row = document.createElement('div');
+    row.className = 'initiative-item' + (index === initiative.currentIndex ? ' current-turn' : '');
+    const value = document.createElement('div');
+    value.className = 'init-value';
+    value.textContent = entry.value;
+    const name = document.createElement('div');
+    name.className = 'init-name';
+    name.textContent = entry.name;
+    if (index === initiative.currentIndex) {
+      const meta = document.createElement('span');
+      meta.className = 'init-meta';
+      meta.textContent = 'Current turn';
+      name.appendChild(meta);
+    }
+    row.append(value, name);
+    if (myRole === 'dm') {
+      const remove = document.createElement('button');
+      remove.type = 'button';
+      remove.className = 'del';
+      remove.textContent = '×';
+      remove.title = `Remove ${entry.name}`;
+      remove.onclick = () => socket.emit('initiative:remove', { id: entry.id });
+      row.appendChild(remove);
+    }
+    list.appendChild(row);
+  });
+  renderInitiativeQuickAdd();
+}
+
+function renderInitiativeQuickAdd() {
+  const container = document.getElementById('init-quick-add');
+  container.innerHTML = '';
+  if (myRole !== 'dm') return;
+  const label = document.createElement('span');
+  label.className = 'quick-add-label';
+  label.textContent = 'Roll:';
+  container.appendChild(label);
+  Object.values(state.characters).forEach(character => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'btn-ghost quick-add-chip';
+    button.textContent = character.name;
+    button.onclick = () => rollCharacterInitiative(character, 'normal');
+    container.appendChild(button);
+  });
+  state.tokens.filter(token => token.kind !== 'item' && !state.characters[token.label]).forEach(token => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'btn-ghost quick-add-chip';
+    button.textContent = token.label;
+    button.onclick = () => {
+      document.getElementById('init-name').value = token.label;
+      document.getElementById('init-value').focus();
+    };
+    container.appendChild(button);
+  });
+}
+
 // ================= Shared helpers =================
+function signed(value) {
+  const number = Number(value) || 0;
+  return number >= 0 ? `+${number}` : String(number);
+}
+
+function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, character => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;'
+  })[character]);
+}
+
+function escapeAttr(value) {
+  return escapeHtml(value);
+}
+
+function showToast(message) {
+  const toast = document.getElementById('toast');
+  toast.textContent = message;
+  toast.classList.add('visible');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toast.classList.remove('visible'), 3200);
+}
+
 async function uploadFile(file) {
   const form = new FormData();
   form.append('file', file);
   const res = await fetch('/api/upload', { method: 'POST', body: form });
+  if (!res.ok) throw new Error('Upload failed');
   const data = await res.json();
   return data.url;
 }
