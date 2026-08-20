@@ -241,27 +241,76 @@
   <main>
     <!-- MAP VIEW -->
     <section id="view-map" class="view active">
-      <aside class="token-tray panel">
-        <div class="dm-only">
+      <aside class="token-tray panel" id="map-sidebar">
+        <section class="player-only player-sidebar" aria-labelledby="player-sidebar-title">
+          <h3 id="player-sidebar-title">Your character</h3>
+          <div id="player-character-summary"></div>
+        </section>
+        <div class="vine-divider player-only"></div>
+
+        <section class="dm-only dm-sidebar-overview" id="dm-sidebar-overview">
+          <div class="dm-sidebar-heading">
+            <div>
+              <h3>Map controls</h3>
+              <p class="sidebar-help" id="dm-sidebar-summary">No tokens on the map.</p>
+            </div>
+            <button class="btn-ghost" id="toggle-dm-sidebar-btn" type="button" aria-expanded="false" aria-controls="dm-sidebar-details">Details</button>
+          </div>
+          <div class="scene-current">Current: <strong id="current-scene-name">Unsaved scene</strong></div>
+        </section>
+
+        <div class="dm-only dm-sidebar-details" id="dm-sidebar-details">
+          <div class="vine-divider"></div>
           <h3>Set the scene</h3>
           <input type="file" id="map-upload" accept="image/*" style="margin-bottom:6px;">
           <button class="btn-ghost" id="clear-doodles-btn" style="width:100%;">Clear doodles</button>
-        </div>
-        <div class="vine-divider dm-only"></div>
 
-        <h3>Tokens on the map</h3>
-        <div class="dm-only" style="display:flex; flex-direction:column; gap:6px;">
+          <div class="scene-library">
+            <input type="text" id="scene-name-input" maxlength="80" placeholder="Scene name, e.g. HumbleBar">
+            <button class="btn-primary" id="save-scene-btn" type="button">Save current scene</button>
+            <select id="saved-scene-select" aria-label="Saved scenes">
+              <option value="">Choose a saved scene…</option>
+            </select>
+            <div class="scene-actions">
+              <button class="btn-ghost" id="load-scene-btn" type="button">Load</button>
+              <button class="btn-danger-soft" id="delete-scene-btn" type="button">Delete</button>
+            </div>
+            <p class="sidebar-help" id="scene-summary">Maps, drawings, tokens and initiative are saved together.</p>
+          </div>
+          <div class="vine-divider"></div>
+          <h3>Create a token</h3>
+          <div class="token-create-form">
           <input type="text" id="token-name" placeholder="Token name">
           <select id="token-kind">
             <option value="npc">NPC</option>
             <option value="item">Item</option>
             <option value="pc">Player character</option>
           </select>
+          <div class="npc-create-fields" id="npc-create-fields">
+            <div class="npc-stat-inputs">
+              <label>HP <input type="number" id="npc-hp" min="1" value="10"></label>
+              <label>AC <input type="number" id="npc-ac" min="0" value="10"></label>
+              <label>Init <input type="number" id="npc-initiative" value="0"></label>
+            </div>
+            <textarea id="npc-attacks" rows="3" placeholder="Attacks: Name | +4 | 1d6+2"></textarea>
+            <textarea id="npc-notes" rows="2" placeholder="Battle notes or abilities (optional)"></textarea>
+            <p class="sidebar-help">One attack per line: Name | hit bonus | damage dice</p>
+          </div>
           <input type="file" id="token-image" accept="image/*">
-          <button class="btn-rose" id="add-token-btn">Add to tray</button>
+          <button class="btn-rose" id="add-token-btn">Create NPC & place</button>
+          <button class="btn-ghost hidden" id="cancel-npc-edit-btn" type="button">Cancel edit</button>
+          </div>
         </div>
         <div class="vine-divider"></div>
+        <h3>Tokens on the map</h3>
         <div class="token-list" id="token-list"></div>
+
+        <section class="dm-only dm-sidebar-details npc-roster-section">
+          <div class="vine-divider"></div>
+          <h3>NPC roster</h3>
+          <p class="sidebar-help">Remove keeps an NPC here. Delete removes it permanently.</p>
+          <div class="npc-roster" id="npc-roster"></div>
+        </section>
       </aside>
 
       <div class="map-stage-wrap" id="map-stage-wrap">
@@ -276,6 +325,7 @@
           <label class="grid-toggle"><input type="checkbox" id="grid-toggle"> Grid</label>
           <input type="number" id="grid-size" value="50" min="10" max="300" title="Grid size (px)" style="width:56px;">
           <label class="grid-toggle"><input type="checkbox" id="snap-toggle"> Snap</label>
+          <label class="grid-toggle"><input type="checkbox" id="fit-token-toggle" checked> Fit tokens</label>
         </div>
         <div class="map-toolbar map-toolbar-bottom">
           <button id="zoom-out">−</button>
@@ -721,7 +771,7 @@
       <div class="combat-identity">
         <div class="card-portrait" id="combat-portrait">🍃</div>
         <div>
-          <p class="combat-kicker">Quick combat controls</p>
+          <p class="combat-kicker" id="combat-kicker">Quick combat controls</p>
           <h2 id="combat-title">Character</h2>
         </div>
       </div>
@@ -731,8 +781,10 @@
     <div class="combat-vitals">
       <div class="combat-vital"><span>Hit points</span><strong id="combat-hp">0 / 0</strong></div>
       <div class="combat-vital"><span>Temporary HP</span><strong id="combat-temp-hp">0</strong></div>
+      <div class="combat-vital"><span>Armor class</span><strong id="combat-ac">0</strong></div>
       <div class="combat-vital"><span>Status</span><strong id="combat-life-status">Ready</strong></div>
     </div>
+    <p class="combat-notes hidden" id="combat-notes"></p>
 
     <div class="combat-adjust-row">
       <label for="combat-amount">Amount</label>
@@ -785,7 +837,7 @@
         </div>
       </section>
 
-      <section class="combat-section">
+      <section class="combat-section" id="combat-death-section">
         <h3>Death saves</h3>
         <div class="combat-counter-row death-success-row">
           <span>Successes</span>
@@ -803,7 +855,7 @@
       </section>
     </div>
 
-    <section class="combat-section combat-spells-section">
+    <section class="combat-section combat-spells-section" id="combat-spell-slots-section">
       <div class="combat-section-title">
         <h3>Spell slots</h3>
         <button class="btn-ghost" id="combat-restore-slots-btn" type="button">Restore all</button>

@@ -74,9 +74,13 @@ const defaultState = {
     mapName: 'No map loaded',
     gridSize: 50,
     gridVisible: false,
+    fitTokensToGrid: true,
     doodlePaths: [] // array of {points:[{x,y}], color, width, id}
   },
   tokens: [], // {id, x, y, size, imageUrl, label, kind: 'pc'|'npc'|'item', hp, maxHp, visibleToPlayers}
+  npcs: {}, // id -> reusable NPC record; map tokens reference these with npcId
+  savedScenes: {}, // name -> {name, savedAt, scene, tokens, initiative}
+  activeSceneName: null,
   jukebox: {
     playlist: [], // {id, title, url}
     currentIndex: -1,
@@ -108,6 +112,9 @@ async function loadStateFromDb() {
         scene: { ...defaultState.scene, ...(saved.scene || {}) },
         jukebox: { ...defaultState.jukebox, ...(saved.jukebox || {}) },
         characters: saved.characters || {},
+        npcs: saved.npcs && typeof saved.npcs === 'object' ? saved.npcs : {},
+        savedScenes: saved.savedScenes && typeof saved.savedScenes === 'object' ? saved.savedScenes : {},
+        activeSceneName: saved.activeSceneName || null,
         rollLog: Array.isArray(saved.rollLog) ? saved.rollLog : [],
         tokens: Array.isArray(saved.tokens) ? saved.tokens : [],
         initiative: { ...defaultState.initiative, ...(saved.initiative || {}) }
@@ -115,7 +122,9 @@ async function loadStateFromDb() {
       if (!Array.isArray(state.scene.doodlePaths)) state.scene.doodlePaths = [];
       if (!Array.isArray(state.initiative.entries)) state.initiative.entries = [];
       Object.values(state.characters).forEach(normalizeCharacter);
+      Object.values(state.npcs).forEach(normalizeNpc);
       state.tokens.forEach(token => {
+        normalizeToken(token);
         if (token.kind !== 'pc' || token.characterName) return;
         const character = Object.values(state.characters).find(entry => entry.name.toLowerCase() === String(token.label || '').toLowerCase());
         if (character) {
@@ -124,6 +133,8 @@ async function loadStateFromDb() {
           token.ownerId = character.ownerId || null;
         }
       });
+      normalizeSavedScenes();
+      syncNpcRosterFromTokens(state.tokens, true);
     } catch (e) {
       console.warn('Could not parse saved state, starting fresh.', e.message);
     }
@@ -195,6 +206,170 @@ const CONDITIONS = new Set([
   'Invisible', 'Paralyzed', 'Petrified', 'Poisoned', 'Prone', 'Restrained',
   'Stunned', 'Unconscious'
 ]);
+
+function cloneJson(value) {
+  return JSON.parse(JSON.stringify(value));
+}
+
+function cleanAttacks(attacks) {
+  if (!Array.isArray(attacks)) return [];
+  return attacks.slice(0, 30).map(attack => ({
+    name: String(attack?.name || '').trim().slice(0, 100),
+    bonus: String(attack?.bonus || '').trim().slice(0, 30),
+    damage: String(attack?.damage || '').trim().slice(0, 80)
+  })).filter(attack => attack.name);
+}
+
+function normalizeNpc(npc) {
+  if (!npc || typeof npc !== 'object') return null;
+  npc.id = String(npc.id || ('npc_' + Date.now() + Math.random().toString(36).slice(2, 7))).slice(0, 120);
+  npc.name = String(npc.name || npc.label || 'Unnamed NPC').trim().slice(0, 100) || 'Unnamed NPC';
+  npc.imageUrl = String(npc.imageUrl || '').slice(0, 1000) || null;
+  npc.maxHp = Math.max(1, Math.min(9999, Number(npc.maxHp ?? npc.hp) || 10));
+  npc.hp = Math.max(0, Math.min(npc.maxHp, Number(npc.hp) || 0));
+  npc.tempHp = Math.max(0, Math.min(9999, Number(npc.tempHp) || 0));
+  npc.ac = Math.max(0, Math.min(99, Number(npc.ac) || 10));
+  npc.initiativeModifier = Math.max(-99, Math.min(99, Number(npc.initiativeModifier) || 0));
+  npc.tokenScale = Math.max(0.35, Math.min(3, Number(npc.tokenScale ?? npc.sizeScale) || 1));
+  npc.attacks = cleanAttacks(npc.attacks);
+  npc.notes = String(npc.notes || '').slice(0, 4000);
+  const combat = npc.combat && typeof npc.combat === 'object' ? npc.combat : {};
+  npc.combat = {
+    conditions: Array.isArray(combat.conditions) ? combat.conditions.filter(condition => CONDITIONS.has(condition)) : [],
+    concentration: !!combat.concentration,
+    exhaustion: Math.max(0, Math.min(6, Number(combat.exhaustion) || 0))
+  };
+  return npc;
+}
+
+function npcFromToken(token) {
+  return normalizeNpc({
+    id: token.npcId || ('npc_' + token.id),
+    name: token.label,
+    imageUrl: token.imageUrl,
+    hp: token.hp,
+    maxHp: token.maxHp,
+    tempHp: token.tempHp,
+    ac: token.ac,
+    initiativeModifier: token.initiativeModifier,
+    tokenScale: token.sizeScale,
+    attacks: token.attacks,
+    notes: token.notes,
+    combat: token.combat
+  });
+}
+
+function normalizeToken(token) {
+  if (!token || typeof token !== 'object') return null;
+  token.id = String(token.id || ('t' + Date.now() + Math.random().toString(36).slice(2, 7))).slice(0, 140);
+  token.kind = ['pc', 'npc', 'item'].includes(token.kind) ? token.kind : 'npc';
+  token.label = String(token.label || 'Token').trim().slice(0, 100) || 'Token';
+  token.imageUrl = String(token.imageUrl || '').slice(0, 1000) || null;
+  token.size = Math.max(18, Math.min(180, Number(token.size) || 44));
+  token.sizeScale = Math.max(0.35, Math.min(3, Number(token.sizeScale) || 1));
+  // Older releases stored the token's upper-left corner. The new renderer stores
+  // its centre, which makes snapping and grid-size changes mathematically stable.
+  if (token.coordinateMode !== 'center') {
+    token.x = (Number(token.x) || 0) + 22;
+    token.y = (Number(token.y) || 0) + 22;
+    token.coordinateMode = 'center';
+  } else {
+    token.x = Number(token.x) || 0;
+    token.y = Number(token.y) || 0;
+  }
+  token.visibleToPlayers = token.visibleToPlayers !== false;
+  if (token.kind === 'item') {
+    token.hp = null;
+    token.maxHp = null;
+    token.tempHp = 0;
+  } else {
+    token.maxHp = Math.max(1, Math.min(9999, Number(token.maxHp ?? token.hp) || 10));
+    token.hp = Math.max(0, Math.min(token.maxHp, Number(token.hp) || 0));
+    token.tempHp = Math.max(0, Math.min(9999, Number(token.tempHp) || 0));
+  }
+  if (token.kind === 'npc') {
+    token.npcId = String(token.npcId || ('npc_' + token.id)).slice(0, 120);
+    const npc = normalizeNpc({ ...token, id: token.npcId, name: token.label });
+    token.ac = npc.ac;
+    token.initiativeModifier = npc.initiativeModifier;
+    token.attacks = npc.attacks;
+    token.notes = npc.notes;
+    token.combat = npc.combat;
+  }
+  return token;
+}
+
+function syncNpcRosterFromTokens(tokens, overwrite = false) {
+  (tokens || []).filter(token => token.kind === 'npc').forEach(token => {
+    normalizeToken(token);
+    const fromToken = npcFromToken(token);
+    if (overwrite || !state.npcs[fromToken.id]) state.npcs[fromToken.id] = fromToken;
+  });
+}
+
+function syncNpcFromToken(token) {
+  if (!token || token.kind !== 'npc') return;
+  state.npcs[token.npcId] = npcFromToken(token);
+}
+
+function applyNpcToToken(npc, token) {
+  normalizeNpc(npc);
+  token.npcId = npc.id;
+  token.label = npc.name;
+  token.kind = 'npc';
+  token.imageUrl = npc.imageUrl;
+  token.sizeScale = Math.max(0.35, Math.min(3, Number(token.sizeScale ?? npc.tokenScale) || 1));
+  token.hp = npc.hp;
+  token.maxHp = npc.maxHp;
+  token.tempHp = npc.tempHp;
+  token.ac = npc.ac;
+  token.initiativeModifier = npc.initiativeModifier;
+  token.attacks = cloneJson(npc.attacks);
+  token.notes = npc.notes;
+  token.combat = cloneJson(npc.combat);
+  return normalizeToken(token);
+}
+
+function normalizeSavedScenes() {
+  const normalized = {};
+  Object.entries(state.savedScenes || {}).forEach(([fallbackName, saved]) => {
+    if (!saved || typeof saved !== 'object') return;
+    const name = String(saved.name || fallbackName).trim().slice(0, 80);
+    if (!name) return;
+    const scene = { ...defaultState.scene, ...(saved.scene || {}) };
+    if (!Array.isArray(scene.doodlePaths)) scene.doodlePaths = [];
+    const tokens = Array.isArray(saved.tokens) ? saved.tokens : [];
+    tokens.forEach(normalizeToken);
+    const initiative = { ...defaultState.initiative, ...(saved.initiative || {}) };
+    if (!Array.isArray(initiative.entries)) initiative.entries = [];
+    normalized[name] = { name, savedAt: Number(saved.savedAt) || Date.now(), scene, tokens, initiative };
+    syncNpcRosterFromTokens(tokens);
+  });
+  state.savedScenes = normalized;
+}
+
+function savedSceneMetadata() {
+  return Object.values(state.savedScenes || {})
+    .map(saved => ({
+      name: saved.name,
+      savedAt: saved.savedAt,
+      mapName: saved.scene?.mapName || 'No map loaded',
+      tokenCount: Array.isArray(saved.tokens) ? saved.tokens.length : 0
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function snapCoordinateToCell(value, gridSize) {
+  return Math.floor(Number(value) / gridSize) * gridSize + gridSize / 2;
+}
+
+function removeInitiativeForTokenIds(tokenIds, initiative = state.initiative) {
+  const ids = new Set(tokenIds);
+  const currentId = initiative.entries[initiative.currentIndex]?.id || null;
+  initiative.entries = initiative.entries.filter(entry => !ids.has(entry.tokenId));
+  initiative.currentIndex = currentId ? initiative.entries.findIndex(entry => entry.id === currentId) : -1;
+  if (initiative.currentIndex < 0 && initiative.entries.length) initiative.currentIndex = 0;
+}
 
 function isDm(socket) {
   return socket.data.identified && socket.data.role === 'dm';
@@ -280,23 +455,59 @@ function publicToken(socket, token) {
   return { ...safe, canControl: controlsToken(socket, token) };
 }
 
+function publicNpc(npc) {
+  return cloneJson(normalizeNpc(npc));
+}
+
 function publicStateFor(socket) {
+  const visibleCharacters = Object.entries(state.characters)
+    .filter(([, character]) => isDm(socket) || ownsCharacter(socket, character));
   return {
     ...state,
-    characters: Object.fromEntries(Object.entries(state.characters).map(([name, character]) => [name, publicCharacter(socket, character)])),
-    tokens: state.tokens.map(token => publicToken(socket, token))
+    characters: Object.fromEntries(visibleCharacters.map(([name, character]) => [name, publicCharacter(socket, character)])),
+    tokens: state.tokens
+      .filter(token => isDm(socket) || token.visibleToPlayers !== false)
+      .map(token => publicToken(socket, token)),
+    npcs: isDm(socket)
+      ? Object.fromEntries(Object.entries(state.npcs).map(([id, npc]) => [id, publicNpc(npc)]))
+      : {},
+    savedScenes: isDm(socket) ? savedSceneMetadata() : []
   };
 }
 
 function emitCharacterUpdate(character) {
   for (const client of io.sockets.sockets.values()) {
-    if (client.data.identified) client.emit('character:update', publicCharacter(client, character));
+    if (!client.data.identified) continue;
+    if (isDm(client) || ownsCharacter(client, character)) {
+      client.emit('character:update', publicCharacter(client, character));
+    } else {
+      // Remove a previously visible sheet if its ownership changed. Clients
+      // never receive the contents of sheets owned by another player.
+      client.emit('character:remove', { name: character.name });
+    }
   }
 }
 
 function emitToken(event, token) {
   for (const client of io.sockets.sockets.values()) {
-    if (client.data.identified) client.emit(event, publicToken(client, token));
+    if (!client.data.identified) continue;
+    if (!isDm(client) && token.visibleToPlayers === false) client.emit('token:remove', { id: token.id });
+    else client.emit(event, publicToken(client, token));
+  }
+}
+
+function emitNpcRoster() {
+  for (const client of io.sockets.sockets.values()) {
+    if (!isDm(client)) continue;
+    client.emit('npcs:update', Object.fromEntries(
+      Object.entries(state.npcs).map(([id, npc]) => [id, publicNpc(npc)])
+    ));
+  }
+}
+
+function emitSavedScenes() {
+  for (const client of io.sockets.sockets.values()) {
+    if (isDm(client)) client.emit('scenes:update', savedSceneMetadata());
   }
 }
 
@@ -436,12 +647,70 @@ io.on('connection', (socket) => {
     io.emit('scene:update', state.scene);
   });
 
-  socket.on('scene:setGrid', ({ gridSize, gridVisible } = {}) => {
+  socket.on('scene:setGrid', ({ gridSize, gridVisible, fitTokensToGrid } = {}) => {
     if (!isDm(socket)) return deny(socket, 'Only the Dungeon Master can change the grid.');
+    const previousSize = state.scene.gridSize;
     if (gridSize !== undefined) state.scene.gridSize = Math.max(10, Math.min(300, Number(gridSize) || 50));
     if (gridVisible !== undefined) state.scene.gridVisible = !!gridVisible;
+    if (fitTokensToGrid !== undefined) state.scene.fitTokensToGrid = !!fitTokensToGrid;
+    if (state.scene.fitTokensToGrid && (previousSize !== state.scene.gridSize || fitTokensToGrid === true)) {
+      state.tokens.forEach(token => {
+        token.x = snapCoordinateToCell(token.x, state.scene.gridSize);
+        token.y = snapCoordinateToCell(token.y, state.scene.gridSize);
+      });
+    }
     persistState();
-    io.emit('scene:update', state.scene);
+    broadcastState();
+  });
+
+  socket.on('scene:save', ({ name } = {}) => {
+    if (!isDm(socket)) return deny(socket, 'Only the Dungeon Master can save scenes.');
+    const requestedName = String(name || '').trim().slice(0, 80);
+    if (!requestedName) return deny(socket, 'Give the scene a name first.');
+    const existingName = Object.keys(state.savedScenes).find(savedName => savedName.toLowerCase() === requestedName.toLowerCase());
+    const safeName = existingName || requestedName;
+    state.savedScenes[safeName] = {
+      name: safeName,
+      savedAt: Date.now(),
+      scene: cloneJson(state.scene),
+      tokens: cloneJson(state.tokens),
+      initiative: cloneJson(state.initiative)
+    };
+    state.activeSceneName = safeName;
+    persistState();
+    emitSavedScenes();
+    io.emit('scene:active', { name: safeName });
+    socket.emit('scene:saved', { name: safeName });
+  });
+
+  socket.on('scene:load', ({ name } = {}) => {
+    if (!isDm(socket)) return deny(socket, 'Only the Dungeon Master can load scenes.');
+    const saved = state.savedScenes[String(name || '')];
+    if (!saved) return deny(socket, 'That saved scene no longer exists.');
+    state.scene = { ...defaultState.scene, ...cloneJson(saved.scene) };
+    state.tokens = cloneJson(saved.tokens || []);
+    state.tokens.forEach(normalizeToken);
+    state.initiative = { ...defaultState.initiative, ...cloneJson(saved.initiative || {}) };
+    if (!Array.isArray(state.initiative.entries)) state.initiative.entries = [];
+    state.activeSceneName = saved.name;
+    syncNpcRosterFromTokens(state.tokens, true);
+    Object.values(state.characters).forEach(character => syncCharacterTokens(character));
+    persistState();
+    broadcastState();
+    emitNpcRoster();
+    io.emit('scene:loaded', { name: saved.name });
+  });
+
+  socket.on('scene:delete', ({ name } = {}) => {
+    if (!isDm(socket)) return deny(socket, 'Only the Dungeon Master can delete saved scenes.');
+    const safeName = String(name || '');
+    if (!state.savedScenes[safeName]) return;
+    delete state.savedScenes[safeName];
+    if (state.activeSceneName === safeName) state.activeSceneName = null;
+    persistState();
+    emitSavedScenes();
+    io.emit('scene:active', { name: state.activeSceneName });
+    socket.emit('scene:deleted', { name: safeName });
   });
 
   socket.on('scene:doodle:add', (path) => {
@@ -484,9 +753,11 @@ io.on('connection', (socket) => {
         label: character.name,
         kind: 'pc',
         imageUrl: character.portraitUrl || null,
-        x: 40,
-        y: 40,
-        size: 56,
+        x: state.scene.gridSize / 2,
+        y: state.scene.gridSize / 2,
+        size: 44,
+        sizeScale: 1,
+        coordinateMode: 'center',
         hp: character.hp,
         maxHp: character.maxHp,
         tempHp: character.tempHp,
@@ -496,27 +767,47 @@ io.on('connection', (socket) => {
       character.ownerId = null;
     } else {
       const linkedCharacter = state.characters[String(requested.characterName || requested.label || '')];
-      if (requested.kind === 'pc' && linkedCharacter) normalizeCharacter(linkedCharacter);
+      if (linkedCharacter) normalizeCharacter(linkedCharacter);
+      const kind = linkedCharacter ? 'pc' : (['pc', 'npc', 'item'].includes(requested.kind) ? requested.kind : 'npc');
       token = {
         id: 't' + Date.now() + Math.random().toString(36).slice(2, 6),
         label: String(requested.label || linkedCharacter?.name || 'Token').trim().slice(0, 100),
-        kind: ['pc', 'npc', 'item'].includes(requested.kind) ? requested.kind : 'npc',
+        kind,
         imageUrl: String(requested.imageUrl || linkedCharacter?.portraitUrl || '').slice(0, 1000) || null,
-        x: Number.isFinite(Number(requested.x)) ? Number(requested.x) : 40,
-        y: Number.isFinite(Number(requested.y)) ? Number(requested.y) : 40,
-        size: Math.max(28, Math.min(180, Number(requested.size) || 56)),
-        hp: linkedCharacter ? linkedCharacter.hp : (requested.kind === 'item' ? null : Math.max(0, Number(requested.hp) || 10)),
-        maxHp: linkedCharacter ? linkedCharacter.maxHp : (requested.kind === 'item' ? null : Math.max(0, Number(requested.maxHp) || 10)),
+        x: Number.isFinite(Number(requested.x)) ? Number(requested.x) : state.scene.gridSize / 2,
+        y: Number.isFinite(Number(requested.y)) ? Number(requested.y) : state.scene.gridSize / 2,
+        size: Math.max(18, Math.min(180, Number(requested.size) || 44)),
+        sizeScale: Math.max(0.35, Math.min(3, Number(requested.sizeScale) || 1)),
+        coordinateMode: 'center',
+        hp: linkedCharacter ? linkedCharacter.hp : (kind === 'item' ? null : Math.max(0, Number(requested.hp) || 10)),
+        maxHp: linkedCharacter ? linkedCharacter.maxHp : (kind === 'item' ? null : Math.max(1, Number(requested.maxHp ?? requested.hp) || 10)),
         tempHp: linkedCharacter ? linkedCharacter.tempHp : 0,
         visibleToPlayers: requested.visibleToPlayers !== false,
         characterName: linkedCharacter?.name || null,
         ownerUsername: linkedCharacter?.ownerUsername || null,
         ownerId: null
       };
+      if (kind === 'npc') {
+        const npc = normalizeNpc({
+          id: requested.npcId,
+          name: token.label,
+          imageUrl: token.imageUrl,
+          hp: token.hp,
+          maxHp: token.maxHp,
+          ac: requested.ac,
+          initiativeModifier: requested.initiativeModifier,
+          attacks: requested.attacks,
+          notes: requested.notes
+        });
+        state.npcs[npc.id] = npc;
+        applyNpcToToken(npc, token);
+      }
     }
+    normalizeToken(token);
     state.tokens.push(token);
     persistState();
     emitToken('token:add', token);
+    if (token.kind === 'npc') emitNpcRoster();
     if (token.characterName) emitCharacterUpdate(state.characters[token.characterName]);
   });
 
@@ -536,16 +827,144 @@ io.on('connection', (socket) => {
     if (updated.hp !== undefined && !token.characterName) token.hp = Math.max(0, Number(updated.hp) || 0);
     if (updated.maxHp !== undefined && !token.characterName) token.maxHp = Math.max(0, Number(updated.maxHp) || 0);
     if (updated.visibleToPlayers !== undefined) token.visibleToPlayers = !!updated.visibleToPlayers;
+    if (updated.sizeScale !== undefined) token.sizeScale = Math.max(0.35, Math.min(3, Number(updated.sizeScale) || 1));
+    normalizeToken(token);
+    syncNpcFromToken(token);
     persistState();
     emitToken('token:update', token);
+    if (token.kind === 'npc') emitNpcRoster();
   });
 
   socket.on('token:remove', ({ id } = {}) => {
     const token = state.tokens.find(entry => entry.id === id);
     if (!controlsToken(socket, token)) return deny(socket, 'You can only remove your own character token.');
     state.tokens = state.tokens.filter(entry => entry.id !== id);
+    removeInitiativeForTokenIds([id]);
     persistState();
     io.emit('token:remove', { id });
+    io.emit('initiative:update', state.initiative);
+  });
+
+  socket.on('npc:place', ({ id } = {}) => {
+    if (!isDm(socket)) return deny(socket, 'Only the Dungeon Master can place NPCs.');
+    const npc = state.npcs[String(id || '')];
+    if (!npc) return deny(socket, 'That NPC no longer exists.');
+    const existing = state.tokens.find(token => token.npcId === npc.id);
+    if (existing) return socket.emit('token:exists', publicToken(socket, existing));
+    const token = applyNpcToToken(npc, {
+      id: 't' + Date.now() + Math.random().toString(36).slice(2, 6),
+      x: state.scene.gridSize / 2,
+      y: state.scene.gridSize / 2,
+      size: 44,
+      sizeScale: npc.tokenScale,
+      coordinateMode: 'center',
+      visibleToPlayers: true,
+      ownerUsername: null,
+      ownerId: null
+    });
+    state.tokens.push(token);
+    persistState();
+    emitToken('token:add', token);
+    emitNpcRoster();
+  });
+
+  socket.on('npc:update', (requested = {}) => {
+    if (!isDm(socket)) return deny(socket, 'Only the Dungeon Master can edit NPCs.');
+    const existing = state.npcs[String(requested.id || '')];
+    if (!existing) return deny(socket, 'That NPC no longer exists.');
+    const updated = normalizeNpc({
+      ...existing,
+      ...requested,
+      id: existing.id,
+      imageUrl: requested.imageUrl === undefined ? existing.imageUrl : requested.imageUrl,
+      combat: existing.combat
+    });
+    state.npcs[updated.id] = updated;
+    state.tokens.filter(token => token.npcId === updated.id).forEach(token => {
+      const position = { x: token.x, y: token.y, id: token.id, size: token.size, sizeScale: token.sizeScale, coordinateMode: 'center', visibleToPlayers: token.visibleToPlayers };
+      applyNpcToToken(updated, token);
+      Object.assign(token, position);
+      emitToken('token:update', token);
+    });
+    const activeNpcTokenIds = new Set(state.tokens.filter(token => token.npcId === updated.id).map(token => token.id));
+    state.initiative.entries.filter(entry => activeNpcTokenIds.has(entry.tokenId)).forEach(entry => { entry.name = updated.name; });
+    Object.values(state.savedScenes).forEach(saved => {
+      saved.tokens.filter(token => token.npcId === updated.id).forEach(token => {
+        token.label = updated.name;
+        token.imageUrl = updated.imageUrl;
+        token.maxHp = updated.maxHp;
+        token.hp = Math.min(Number(token.hp) || 0, updated.maxHp);
+        token.ac = updated.ac;
+        token.initiativeModifier = updated.initiativeModifier;
+        token.attacks = cloneJson(updated.attacks);
+        token.notes = updated.notes;
+      });
+      saved.initiative.entries.filter(entry => saved.tokens.some(token => token.id === entry.tokenId && token.npcId === updated.id))
+        .forEach(entry => { entry.name = updated.name; });
+    });
+    persistState();
+    emitNpcRoster();
+    io.emit('initiative:update', state.initiative);
+    socket.emit('npc:saved', { id: updated.id, name: updated.name });
+  });
+
+  socket.on('npc:delete', ({ id } = {}) => {
+    if (!isDm(socket)) return deny(socket, 'Only the Dungeon Master can delete NPCs.');
+    const npcId = String(id || '');
+    const npc = state.npcs[npcId];
+    if (!npc) return;
+    const removedTokenIds = state.tokens.filter(token => token.npcId === npcId).map(token => token.id);
+    state.tokens = state.tokens.filter(token => token.npcId !== npcId);
+    removeInitiativeForTokenIds(removedTokenIds);
+    Object.values(state.savedScenes).forEach(saved => {
+      const savedIds = saved.tokens.filter(token => token.npcId === npcId).map(token => token.id);
+      saved.tokens = saved.tokens.filter(token => token.npcId !== npcId);
+      removeInitiativeForTokenIds(savedIds, saved.initiative);
+    });
+    delete state.npcs[npcId];
+    persistState();
+    removedTokenIds.forEach(tokenId => io.emit('token:remove', { id: tokenId }));
+    io.emit('initiative:update', state.initiative);
+    emitNpcRoster();
+    emitSavedScenes();
+    socket.emit('npc:deleted', { id: npcId, name: npc.name });
+  });
+
+  socket.on('token:combat:update', (payload = {}) => {
+    if (!isDm(socket)) return deny(socket, 'Only the Dungeon Master can manage NPC combat.');
+    const token = state.tokens.find(entry => entry.id === String(payload.id || ''));
+    if (!token || token.kind !== 'npc') return deny(socket, 'That NPC is not on the current map.');
+    normalizeToken(token);
+    const combat = token.combat;
+    const amount = Math.max(0, Math.min(9999, Number(payload.amount) || 0));
+    if (payload.action === 'damage' && amount) {
+      const absorbed = Math.min(token.tempHp, amount);
+      token.tempHp -= absorbed;
+      token.hp = Math.max(0, token.hp - (amount - absorbed));
+    } else if (payload.action === 'heal' && amount) {
+      token.hp = Math.min(token.maxHp, token.hp + amount);
+    } else if (payload.action === 'tempHp') {
+      token.tempHp = amount;
+    } else if (payload.action === 'condition:toggle' && CONDITIONS.has(payload.condition)) {
+      combat.conditions = combat.conditions.includes(payload.condition)
+        ? combat.conditions.filter(condition => condition !== payload.condition)
+        : [...combat.conditions, payload.condition];
+    } else if (payload.action === 'concentration:set') {
+      combat.concentration = !!payload.value;
+    } else if (payload.action === 'exhaustion') {
+      combat.exhaustion = Math.max(0, Math.min(6, combat.exhaustion + Math.sign(Number(payload.delta) || 0)));
+    } else if (payload.action === 'longRest') {
+      token.hp = token.maxHp;
+      token.tempHp = 0;
+      combat.concentration = false;
+      combat.exhaustion = Math.max(0, combat.exhaustion - 1);
+    } else {
+      return;
+    }
+    syncNpcFromToken(token);
+    persistState();
+    emitToken('token:update', token);
+    emitNpcRoster();
   });
 
   // --- Jukebox ---
@@ -631,9 +1050,11 @@ io.on('connection', (socket) => {
     delete state.characters[name];
     const removedTokenIds = state.tokens.filter(token => token.characterName === name).map(token => token.id);
     state.tokens = state.tokens.filter(token => token.characterName !== name);
+    removeInitiativeForTokenIds(removedTokenIds);
     persistState();
     io.emit('character:remove', { name });
     removedTokenIds.forEach(id => io.emit('token:remove', { id }));
+    io.emit('initiative:update', state.initiative);
   });
 
   socket.on('character:claim', ({ name } = {}) => {
@@ -729,7 +1150,11 @@ io.on('connection', (socket) => {
   socket.on('roll:make', (payload = {}) => {
     if (!socket.data.identified) return deny(socket, 'Join the table before rolling.');
     const character = payload.characterName ? state.characters[String(payload.characterName)] : null;
+    const rollToken = payload.tokenId ? state.tokens.find(token => token.id === String(payload.tokenId)) : null;
     if (payload.characterName && !ownsCharacter(socket, character)) return deny(socket, 'You cannot roll for another player’s character.');
+    if (payload.tokenId && (!isDm(socket) || !rollToken || rollToken.kind !== 'npc')) {
+      return deny(socket, 'Only the Dungeon Master can roll for an NPC.');
+    }
     let count = Math.max(1, Math.min(20, Number(payload.count) || 1));
     let sides = Math.max(2, Math.min(1000, Number(payload.sides) || 20));
     const modifier = Math.max(-1000, Math.min(1000, Number(payload.modifier) || 0));
@@ -745,7 +1170,9 @@ io.on('connection', (socket) => {
     const rollerName = String(socket.data.name || 'Someone').slice(0, 80);
     const entry = {
       id: 'r' + Date.now() + Math.random().toString(36).slice(2, 6),
-      name: character && rollerName !== character.name ? `${rollerName} as ${character.name}` : (character?.name || rollerName),
+      name: rollToken
+        ? `${rollerName} as ${rollToken.label}`
+        : (character && rollerName !== character.name ? `${rollerName} as ${character.name}` : (character?.name || rollerName)),
       characterName: character?.name || null,
       label: String(payload.label || '').slice(0, 140),
       expression,
@@ -763,8 +1190,8 @@ io.on('connection', (socket) => {
     state.rollLog.unshift(entry);
     state.rollLog = state.rollLog.slice(0, 50);
     if (payload.initiativeName && sides === 20 && (isDm(socket) || payload.initiativeName === character?.name)) {
-      const token = state.tokens.find(entry => entry.characterName === payload.initiativeName);
-      upsertInitiativeEntry({ name: payload.initiativeName, value: total, tokenId: token?.id || null });
+      const initiativeToken = rollToken || state.tokens.find(entry => entry.characterName === payload.initiativeName);
+      upsertInitiativeEntry({ name: payload.initiativeName, value: total, tokenId: initiativeToken?.id || null });
       io.emit('initiative:update', state.initiative);
     }
     if (payload.concentrationFor && character?.name === payload.concentrationFor && entry.targetDc && !entry.success) {
