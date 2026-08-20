@@ -231,11 +231,11 @@
     </div>
   </header>
 
-  <nav class="tabs">
-    <button class="tab-btn active" data-view="map">Map</button>
-    <button class="tab-btn" data-view="characters">Characters</button>
-    <button class="tab-btn" data-view="jukebox">Jukebox</button>
-    <button class="tab-btn" data-view="dice">Dice</button>
+  <nav class="tabs" aria-label="Table pages">
+    <a class="tab-btn active" data-view="map" data-route="map" href="/map">Map</a>
+    <a class="tab-btn" data-view="characters" data-route="characters" href="/characters">Characters</a>
+    <a class="tab-btn" data-view="jukebox" data-route="jukebox" href="/jukebox">Jukebox</a>
+    <a class="tab-btn" data-view="dice" data-route="dice" href="/dice">Dice</a>
   </nav>
 
   <main>
@@ -256,7 +256,10 @@
             </div>
             <button class="btn-ghost" id="toggle-dm-sidebar-btn" type="button" aria-expanded="false" aria-controls="dm-sidebar-details">Details</button>
           </div>
-          <div class="scene-current">Current: <strong id="current-scene-name">Unsaved scene</strong></div>
+          <div class="scene-current">
+            Current: <strong id="current-scene-name">Unsaved scene</strong>
+            <span class="scene-dirty-indicator hidden" id="scene-dirty-indicator">Unsaved changes</span>
+          </div>
         </section>
 
         <div class="dm-only dm-sidebar-details" id="dm-sidebar-details">
@@ -276,6 +279,16 @@
               <button class="btn-danger-soft" id="delete-scene-btn" type="button">Delete</button>
             </div>
             <p class="sidebar-help" id="scene-summary">Maps, drawings, tokens and initiative are saved together.</p>
+          </div>
+          <div class="map-permission-settings">
+            <label><input type="checkbox" id="player-doodling-toggle"> Allow player doodling</label>
+            <label><input type="checkbox" id="token-labels-toggle" checked> Show NPC/item labels to players</label>
+            <label><input type="checkbox" id="fog-enabled-toggle"> Enable fog of war</label>
+            <div class="scene-actions">
+              <button class="btn-ghost" id="undo-fog-btn" type="button">Undo fog edit</button>
+              <button class="btn-danger-soft" id="reset-fog-btn" type="button">Reset fog</button>
+            </div>
+            <p class="sidebar-help">Fog starts fully covered. Use Reveal or Cover on the map to edit rectangular areas.</p>
           </div>
           <div class="vine-divider"></div>
           <h3>Create a token</h3>
@@ -317,9 +330,13 @@
         <div class="map-toolbar">
           <button id="tool-move" class="active">Move</button>
           <button id="tool-pan">Pan</button>
-          <button id="tool-doodle" class="dm-only">Doodle</button>
-          <input type="color" id="doodle-color" value="#d98a9e" class="dm-only" style="width:30px; border:none; background:none;">
-          <button id="undo-doodle-btn" class="dm-only" title="Undo last doodle stroke">Undo</button>
+          <button id="tool-ruler">Ruler</button>
+          <button id="tool-ping">Ping</button>
+          <button id="tool-doodle" class="doodle-control hidden">Doodle</button>
+          <input type="color" id="doodle-color" value="#d98a9e" class="doodle-control hidden" title="Drawing color" style="width:30px; border:none; background:none;">
+          <button id="undo-doodle-btn" class="doodle-control hidden" title="Undo your latest doodle stroke">Undo draw</button>
+          <button id="tool-fog-reveal" class="dm-only fog-tool hidden">Reveal</button>
+          <button id="tool-fog-hide" class="dm-only fog-tool hidden">Cover</button>
         </div>
         <div class="map-toolbar map-toolbar-right dm-only">
           <label class="grid-toggle"><input type="checkbox" id="grid-toggle"> Grid</label>
@@ -338,6 +355,14 @@
           <img id="map-image" src="" style="display:none;">
           <div id="grid-overlay"></div>
           <canvas id="doodle-canvas"></canvas>
+          <canvas id="fog-canvas"></canvas>
+          <svg id="ruler-overlay" aria-hidden="true">
+            <line id="ruler-line"></line>
+            <circle id="ruler-start" r="4"></circle>
+            <circle id="ruler-end" r="4"></circle>
+            <text id="ruler-label"></text>
+          </svg>
+          <div id="map-area-selection"></div>
         </div>
         <div class="empty-map" id="empty-map">
           <span style="font-size:40px;">🗺️</span>
@@ -871,6 +896,7 @@
 </div>
 
 <script src="/socket.io/socket.io.js"></script>
+<script src="/js/router.js"></script>
 <script src="app.js"></script>
 
 </body>

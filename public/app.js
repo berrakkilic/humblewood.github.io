@@ -24,7 +24,12 @@ let initiativeManuallyEdited = false;
 let toastTimer = null;
 let activeCombatTarget = null;
 let editingNpcId = null;
+let rulerStartPoint = null;
+let mapAreaDrag = null;
+let lastPointerSentAt = 0;
+let draggedInitiativeId = null;
 const pendingConcentrationChecks = new Map();
+const pointerFadeTimers = new Map();
 
 const ABILITIES = ['str', 'dex', 'con', 'int', 'wis', 'cha'];
 const ABILITY_LABELS = { str: 'Strength', dex: 'Dexterity', con: 'Constitution', int: 'Intelligence', wis: 'Wisdom', cha: 'Charisma' };
@@ -138,15 +143,35 @@ socket.on('connect', () => {
   if (joined) sendIdentity();
 });
 
-// ---------------- Tabs ----------------
-document.querySelectorAll('.tab-btn').forEach(btn => { btn.onclick = () => switchView(btn.dataset.view); });
+// ---------------- Frontend routes ----------------
+const router = window.HumblewoodRouter.createRouter({
+  routes: {
+    map: { path: '/map', title: 'Map' },
+    characters: { path: '/characters', title: 'Characters' },
+    jukebox: { path: '/jukebox', title: 'Jukebox' },
+    dice: { path: '/dice', title: 'Dice' }
+  },
+  onRoute: renderRoute
+});
+
 document.getElementById('topbar-roll-btn').onclick = () => switchView('dice');
 
-function switchView(viewName) {
+function renderRoute(viewName, route) {
   document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.view === viewName));
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    if (btn.dataset.view === viewName) btn.setAttribute('aria-current', 'page');
+    else btn.removeAttribute('aria-current');
+  });
   document.querySelectorAll('.view').forEach(view => view.classList.toggle('active', view.id === 'view-' + viewName));
+  document.title = `${route.title} · The Humblewood Table`;
   if (viewName === 'dice') refreshCharacterRoller();
 }
+
+function switchView(viewName) {
+  router.navigate(viewName);
+}
+
+router.start();
 
 // ---------------- Socket state sync ----------------
 socket.on('state:full', (s) => {
@@ -165,10 +190,29 @@ socket.on('state:full', (s) => {
   if (activeCombatTarget) renderCombatManager();
 });
 
-socket.on('scene:update', (scene) => { state.scene = scene; renderMap(); renderDmSidebarSummary(); });
-socket.on('scene:doodle:add', (path) => { state.scene.doodlePaths.push(path); drawDoodlePath(path); });
-socket.on('scene:doodle:clear', () => { state.scene.doodlePaths = []; clearDoodleCanvas(); });
-socket.on('scene:doodle:redrawAll', (paths) => { state.scene.doodlePaths = paths || []; redrawAllDoodles(); });
+socket.on('scene:update', (scene) => {
+  if (!state) return;
+  state.scene = scene;
+  renderMap();
+  renderTokenTray();
+  renderSavedScenes();
+  renderDmSidebarSummary();
+});
+socket.on('scene:doodle:add', (path) => { if (state) { state.scene.doodlePaths.push(path); drawDoodlePath(path); } });
+socket.on('scene:doodle:clear', () => { if (state) { state.scene.doodlePaths = []; clearDoodleCanvas(); } });
+socket.on('scene:doodle:redrawAll', (paths) => { if (state) { state.scene.doodlePaths = paths || []; redrawAllDoodles(); } });
+socket.on('scene:fog:update', ({ enabled, shapes }) => {
+  if (!state) return;
+  state.scene.fogEnabled = !!enabled;
+  state.scene.fogShapes = Array.isArray(shapes) ? shapes : [];
+  updateMapPermissionControls();
+  renderFog();
+});
+socket.on('scene:dirty', ({ dirty }) => {
+  if (!state) return;
+  state.sceneDirty = !!dirty;
+  renderSavedScenes();
+});
 
 socket.on('token:add', (t) => {
   state.tokens.push(t);
@@ -284,6 +328,10 @@ socket.on('presence', ({ role, name, connected }) => {
   setTimeout(() => { if (el.textContent.includes(name)) el.textContent = ''; }, 4000);
 });
 
+socket.on('pointer:move', renderSharedPointer);
+socket.on('pointer:hide', ({ id }) => removeSharedPointer(id));
+socket.on('pointer:ping', renderSharedPing);
+
 // ================= MAP =================
 const mapUpload = document.getElementById('map-upload');
 mapUpload.onchange = async () => {
@@ -303,6 +351,9 @@ function renderMap() {
   document.getElementById('grid-toggle').checked = !!state.scene.gridVisible;
   document.getElementById('grid-size').value = gridSize;
   document.getElementById('fit-token-toggle').checked = state.scene.fitTokensToGrid !== false;
+  if (!Array.isArray(state.scene.doodlePaths)) state.scene.doodlePaths = [];
+  if (!Array.isArray(state.scene.fogShapes)) state.scene.fogShapes = [];
+  updateMapPermissionControls();
   applyMapTransform();
   if (state.scene.mapUrl) {
     const sizeMapStage = () => {
@@ -314,7 +365,11 @@ function renderMap() {
       const canvas = document.getElementById('doodle-canvas');
       canvas.width = img.naturalWidth;
       canvas.height = img.naturalHeight;
+      const fogCanvas = document.getElementById('fog-canvas');
+      fogCanvas.width = img.naturalWidth;
+      fogCanvas.height = img.naturalHeight;
       redrawAllDoodles();
+      renderFog();
       renderMapTokens();
     };
     img.onload = sizeMapStage;
@@ -325,6 +380,8 @@ function renderMap() {
   } else {
     img.style.display = 'none';
     empty.style.display = 'flex';
+    renderFog();
+    renderMapTokens();
   }
 }
 
@@ -341,7 +398,8 @@ function renderMapTokens() {
     if (t.visibleToPlayers === false) el.classList.add('hidden-token');
     el.dataset.id = t.id;
     el.tabIndex = 0;
-    el.setAttribute('aria-label', `${t.label}${t.canControl ? ', your token' : ', locked token'}`);
+    const displayLabel = visibleTokenLabel(t);
+    el.setAttribute('aria-label', `${displayLabel || t.kind + ' token'}${t.canControl ? ', your token' : ', locked token'}`);
     el.style.left = t.x + 'px';
     el.style.top = t.y + 'px';
     const renderSize = tokenRenderSize(t);
@@ -354,13 +412,15 @@ function renderMapTokens() {
       canManageCombat ? '<button type="button" data-action="combat" title="Open combat controls">⚔</button>' : '',
       myRole === 'dm' && !linkedCharacter && t.maxHp ? '<button type="button" data-action="damage" title="Lose 1 HP">−</button><button type="button" data-action="heal" title="Heal 1 HP">+</button>' : '',
       myRole === 'dm' ? '<button type="button" data-action="size-down" title="Make token smaller">↙</button><button type="button" data-action="size-up" title="Make token larger">↗</button>' : '',
+      myRole === 'dm' ? '<button type="button" data-action="duplicate" title="Duplicate token">⧉</button>' : '',
       myRole === 'dm' ? `<button type="button" data-action="visibility" title="Show or hide from players">${t.visibleToPlayers === false ? '🙈' : '👁'}</button>` : '',
       myRole === 'dm' ? `<button type="button" data-action="remove" title="Remove ${t.kind === 'item' ? 'item token' : 'token'} from this scene">×</button>` : ''
     ].join('');
     el.innerHTML = `
-      <div class="label">${escapeHtml(t.label)}</div>
+      ${displayLabel ? `<div class="label">${escapeHtml(displayLabel)}</div>` : ''}
       ${t.imageUrl ? `<img src="${escapeAttr(t.imageUrl)}" alt="">` : emojiFor(t.kind)}
       ${t.maxHp ? `<div class="hp-bar"><div class="hp-fill" style="width:${Math.max(0, (t.hp / t.maxHp) * 100)}%"></div></div>` : ''}
+      ${renderTokenConditionBadges(t, linkedCharacter)}
       ${controls ? `<div class="token-controls">${controls}</div>` : ''}
     `;
     el.onmousedown = (e) => startDragToken(e, t.id);
@@ -384,12 +444,29 @@ function renderMapTokens() {
         if (action === 'heal') socket.emit('token:update', { id: t.id, hp: Math.min(Number(t.maxHp), Number(t.hp) + 1) });
         if (action === 'size-down') adjustTokenScale(t, -0.15);
         if (action === 'size-up') adjustTokenScale(t, 0.15);
+        if (action === 'duplicate') socket.emit('token:duplicate', { id: t.id });
         if (action === 'visibility') socket.emit('token:update', { id: t.id, visibleToPlayers: t.visibleToPlayers === false });
         if (action === 'remove') socket.emit('token:remove', { id: t.id });
       };
     });
     stage.appendChild(el);
   });
+}
+
+function visibleTokenLabel(token) {
+  if (myRole === 'dm' || state.scene.showTokenLabelsToPlayers !== false || token.kind === 'pc') return token.label;
+  return '';
+}
+
+function renderTokenConditionBadges(token, linkedCharacter) {
+  const combat = linkedCharacter?.combat || token.combat || token.conditionBadges || {};
+  const badges = (combat.conditions || []).slice(0, 4).map(condition => ({
+    text: condition.slice(0, 2).toUpperCase(), title: condition
+  }));
+  if (combat.concentration) badges.push({ text: '◎', title: 'Concentrating' });
+  if (Number(combat.exhaustion)) badges.push({ text: `E${Number(combat.exhaustion)}`, title: `Exhaustion ${Number(combat.exhaustion)}` });
+  if (!badges.length) return '';
+  return `<div class="token-condition-badges">${badges.map(badge => `<span title="${escapeAttr(badge.title)}">${escapeHtml(badge.text)}</span>`).join('')}</div>`;
 }
 
 function tokenRenderSize(token) {
@@ -453,18 +530,54 @@ document.addEventListener('mouseup', (e) => {
 // ---- Tool toggle ----
 document.getElementById('tool-move').onclick = () => setTool('move');
 document.getElementById('tool-pan').onclick = () => setTool('pan');
+document.getElementById('tool-ruler').onclick = () => setTool('ruler');
+document.getElementById('tool-ping').onclick = () => setTool('ping');
 document.getElementById('tool-doodle').onclick = () => setTool('doodle');
+document.getElementById('tool-fog-reveal').onclick = () => setTool('fog-reveal');
+document.getElementById('tool-fog-hide').onclick = () => setTool('fog-hide');
 function setTool(tool) {
+  if (tool === 'doodle' && !canDoodle()) return showToast('Player doodling is not enabled for this scene.');
+  if (tool.startsWith('fog-') && (myRole !== 'dm' || !state.scene.fogEnabled)) return showToast('Enable fog of war first.');
+  const previousTool = selectedTool;
   selectedTool = tool;
-  document.getElementById('tool-move').classList.toggle('active', tool === 'move');
-  document.getElementById('tool-pan').classList.toggle('active', tool === 'pan');
-  document.getElementById('tool-doodle').classList.toggle('active', tool === 'doodle');
-  document.getElementById('map-stage').classList.toggle('doodling', tool === 'doodle');
-  document.getElementById('map-stage').classList.toggle('panning', tool === 'pan');
+  ['move', 'pan', 'ruler', 'ping', 'doodle', 'fog-reveal', 'fog-hide'].forEach(name => {
+    document.getElementById(`tool-${name}`)?.classList.toggle('active', tool === name);
+  });
+  const stage = document.getElementById('map-stage');
+  stage.classList.toggle('doodling', tool === 'doodle');
+  stage.classList.toggle('panning', tool === 'pan');
+  stage.classList.toggle('measuring', tool === 'ruler');
+  stage.classList.toggle('pinging', tool === 'ping');
+  stage.classList.toggle('fog-editing', tool.startsWith('fog-'));
+  if (previousTool === 'ping' && tool !== 'ping') socket.emit('pointer:hide');
+  if (tool !== 'ruler') clearRuler();
+  clearMapAreaSelection();
+}
+
+function canDoodle() {
+  return myRole === 'dm' || !!state?.scene?.playerDoodlingEnabled;
+}
+
+function updateMapPermissionControls() {
+  if (!state) return;
+  document.getElementById('player-doodling-toggle').checked = !!state.scene.playerDoodlingEnabled;
+  document.getElementById('token-labels-toggle').checked = state.scene.showTokenLabelsToPlayers !== false;
+  document.getElementById('fog-enabled-toggle').checked = !!state.scene.fogEnabled;
+  document.querySelectorAll('.doodle-control').forEach(element => element.classList.toggle('hidden', !canDoodle()));
+  document.querySelectorAll('.fog-tool').forEach(element => element.classList.toggle('hidden', myRole !== 'dm' || !state.scene.fogEnabled));
+  if (selectedTool === 'doodle' && !canDoodle()) setTool('move');
+  if (selectedTool.startsWith('fog-') && !state.scene.fogEnabled) setTool('move');
 }
 
 document.getElementById('clear-doodles-btn').onclick = () => socket.emit('scene:doodle:clear');
 document.getElementById('undo-doodle-btn').onclick = () => socket.emit('scene:doodle:undo');
+document.getElementById('player-doodling-toggle').onchange = event => socket.emit('scene:setPlayerDoodling', { enabled: event.target.checked });
+document.getElementById('token-labels-toggle').onchange = event => socket.emit('scene:setTokenLabels', { visible: event.target.checked });
+document.getElementById('fog-enabled-toggle').onchange = event => socket.emit('scene:setFog', { enabled: event.target.checked });
+document.getElementById('undo-fog-btn').onclick = () => socket.emit('scene:fog:undo');
+document.getElementById('reset-fog-btn').onclick = () => {
+  if (confirm('Reset fog to fully covered?')) socket.emit('scene:fog:reset');
+};
 
 const mapStageWrap = document.getElementById('map-stage-wrap');
 mapStageWrap.addEventListener('mousedown', (e) => {
@@ -479,6 +592,103 @@ document.addEventListener('mousemove', (e) => {
   applyMapTransform();
 });
 document.addEventListener('mouseup', () => { panStart = null; });
+
+const mapStage = document.getElementById('map-stage');
+mapStage.addEventListener('mousedown', event => {
+  if (event.button !== 0) return;
+  const point = getCanvasPos(event);
+  if (selectedTool === 'ruler') {
+    event.preventDefault();
+    rulerStartPoint = point;
+    updateRuler(point, point);
+  } else if (selectedTool === 'ping') {
+    event.preventDefault();
+    socket.emit('pointer:ping', point);
+  } else if (selectedTool === 'fog-reveal' || selectedTool === 'fog-hide') {
+    event.preventDefault();
+    mapAreaDrag = { start: point, current: point, mode: selectedTool === 'fog-reveal' ? 'reveal' : 'hide' };
+    updateMapAreaSelection(mapAreaDrag);
+  }
+});
+
+mapStage.addEventListener('mousemove', event => {
+  if (selectedTool !== 'ping') return;
+  const now = Date.now();
+  if (now - lastPointerSentAt < 45) return;
+  lastPointerSentAt = now;
+  socket.emit('pointer:move', getCanvasPos(event));
+});
+
+mapStage.addEventListener('mouseleave', () => {
+  if (selectedTool === 'ping') socket.emit('pointer:hide');
+});
+
+document.addEventListener('mousemove', event => {
+  if (rulerStartPoint) updateRuler(rulerStartPoint, getCanvasPos(event));
+  if (mapAreaDrag) {
+    mapAreaDrag.current = getCanvasPos(event);
+    updateMapAreaSelection(mapAreaDrag);
+  }
+});
+
+document.addEventListener('mouseup', event => {
+  if (rulerStartPoint) {
+    updateRuler(rulerStartPoint, getCanvasPos(event));
+    rulerStartPoint = null;
+  }
+  if (mapAreaDrag) {
+    const current = getCanvasPos(event);
+    const x = Math.min(mapAreaDrag.start.x, current.x);
+    const y = Math.min(mapAreaDrag.start.y, current.y);
+    const width = Math.abs(current.x - mapAreaDrag.start.x);
+    const height = Math.abs(current.y - mapAreaDrag.start.y);
+    if (width >= 3 && height >= 3) socket.emit('scene:fog:add', { mode: mapAreaDrag.mode, x, y, width, height });
+    mapAreaDrag = null;
+    clearMapAreaSelection();
+  }
+});
+
+function updateRuler(start, end) {
+  const overlay = document.getElementById('ruler-overlay');
+  const line = document.getElementById('ruler-line');
+  const startDot = document.getElementById('ruler-start');
+  const endDot = document.getElementById('ruler-end');
+  const label = document.getElementById('ruler-label');
+  overlay.classList.add('visible');
+  line.setAttribute('x1', start.x); line.setAttribute('y1', start.y);
+  line.setAttribute('x2', end.x); line.setAttribute('y2', end.y);
+  startDot.setAttribute('cx', start.x); startDot.setAttribute('cy', start.y);
+  endDot.setAttribute('cx', end.x); endDot.setAttribute('cy', end.y);
+  const gridSize = Math.max(10, Number(state.scene.gridSize) || 50);
+  const squares = Math.hypot(end.x - start.x, end.y - start.y) / gridSize;
+  label.setAttribute('x', (start.x + end.x) / 2);
+  label.setAttribute('y', (start.y + end.y) / 2 - 10);
+  label.textContent = `${squares.toFixed(1)} squares · ${Math.round(squares * 5)} ft`;
+}
+
+function clearRuler() {
+  rulerStartPoint = null;
+  document.getElementById('ruler-overlay').classList.remove('visible');
+}
+
+function updateMapAreaSelection(drag) {
+  const selection = document.getElementById('map-area-selection');
+  const x = Math.min(drag.start.x, drag.current.x);
+  const y = Math.min(drag.start.y, drag.current.y);
+  selection.style.left = `${x}px`;
+  selection.style.top = `${y}px`;
+  selection.style.width = `${Math.abs(drag.current.x - drag.start.x)}px`;
+  selection.style.height = `${Math.abs(drag.current.y - drag.start.y)}px`;
+  selection.className = `visible ${drag.mode}`;
+}
+
+function clearMapAreaSelection() {
+  mapAreaDrag = null;
+  const selection = document.getElementById('map-area-selection');
+  selection.className = '';
+  selection.style.width = '0';
+  selection.style.height = '0';
+}
 
 document.getElementById('grid-toggle').onchange = () => {
   socket.emit('scene:setGrid', {
@@ -579,6 +789,80 @@ function redrawAllDoodles() {
   state.scene.doodlePaths.forEach(p => drawDoodlePath(p));
 }
 
+function renderFog() {
+  const canvas = document.getElementById('fog-canvas');
+  if (!canvas || !state) return;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  canvas.classList.toggle('active', !!state.scene.fogEnabled);
+  if (!state.scene.fogEnabled || !canvas.width || !canvas.height) return;
+  const fogColor = myRole === 'dm' ? 'rgba(25, 32, 25, .52)' : 'rgb(18, 23, 19)';
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.fillStyle = fogColor;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  (state.scene.fogShapes || []).forEach(shape => {
+    if (shape.mode === 'reveal') {
+      ctx.globalCompositeOperation = 'destination-out';
+      ctx.fillStyle = 'rgba(0,0,0,1)';
+    } else {
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.fillStyle = fogColor;
+    }
+    ctx.fillRect(Number(shape.x) || 0, Number(shape.y) || 0, Number(shape.width) || 0, Number(shape.height) || 0);
+  });
+  ctx.globalCompositeOperation = 'source-over';
+}
+
+function renderSharedPointer({ id, name, color, x, y } = {}) {
+  if (!id || !Number.isFinite(Number(x)) || !Number.isFinite(Number(y))) return;
+  let pointer = findSharedPointer(id);
+  if (!pointer) {
+    pointer = document.createElement('div');
+    pointer.className = 'shared-pointer';
+    pointer.dataset.pointerId = id;
+    const dot = document.createElement('span');
+    dot.className = 'shared-pointer-dot';
+    const label = document.createElement('span');
+    label.className = 'shared-pointer-label';
+    pointer.append(dot, label);
+    document.getElementById('map-stage').appendChild(pointer);
+  }
+  pointer.style.left = `${Number(x)}px`;
+  pointer.style.top = `${Number(y)}px`;
+  pointer.style.setProperty('--pointer-color', color || '#d98a9e');
+  pointer.querySelector('.shared-pointer-label').textContent = name || 'Player';
+  pointer.classList.remove('fading');
+  clearTimeout(pointerFadeTimers.get(id));
+  pointerFadeTimers.set(id, setTimeout(() => pointer.classList.add('fading'), 1200));
+}
+
+function removeSharedPointer(id) {
+  if (!id) return;
+  const pointer = findSharedPointer(id);
+  if (pointer) pointer.remove();
+  clearTimeout(pointerFadeTimers.get(id));
+  pointerFadeTimers.delete(id);
+}
+
+function findSharedPointer(id) {
+  return [...document.querySelectorAll('.shared-pointer')]
+    .find(pointer => pointer.dataset.pointerId === String(id));
+}
+
+function renderSharedPing({ name, color, x, y } = {}) {
+  if (!Number.isFinite(Number(x)) || !Number.isFinite(Number(y))) return;
+  const ping = document.createElement('div');
+  ping.className = 'shared-ping';
+  ping.style.left = `${Number(x)}px`;
+  ping.style.top = `${Number(y)}px`;
+  ping.style.setProperty('--pointer-color', color || '#d98a9e');
+  const label = document.createElement('span');
+  label.textContent = name || 'Player';
+  ping.appendChild(label);
+  document.getElementById('map-stage').appendChild(ping);
+  setTimeout(() => ping.remove(), 1500);
+}
+
 // ---- Named scene library ----
 function savedSceneList() {
   return Array.isArray(state?.savedScenes) ? state.savedScenes : [];
@@ -587,6 +871,9 @@ function savedSceneList() {
 function renderSavedScenes() {
   if (!state) return;
   document.getElementById('current-scene-name').textContent = state.activeSceneName || 'Unsaved scene';
+  const dirtyIndicator = document.getElementById('scene-dirty-indicator');
+  dirtyIndicator.classList.toggle('hidden', !state.sceneDirty);
+  dirtyIndicator.textContent = state.activeSceneName ? 'Unsaved changes' : 'Not saved yet';
   const select = document.getElementById('saved-scene-select');
   const previous = select.value;
   select.innerHTML = '<option value="">Choose a saved scene…</option>';
@@ -733,9 +1020,10 @@ function renderTokenTray() {
     const chip = document.createElement('div');
     chip.className = 'token-chip kind-' + t.kind;
     if (!t.canControl) chip.classList.add('locked-token');
-    chip.title = t.canControl ? `${t.label} (click to nudge on the map)` : `${t.label} (controlled by another player)`;
+    const displayLabel = visibleTokenLabel(t) || `${t.kind} token`;
+    chip.title = t.canControl ? `${displayLabel} (click to nudge on the map)` : `${displayLabel} (controlled by another player)`;
     if (t.visibleToPlayers === false) chip.classList.add('hidden-token');
-    chip.innerHTML = (t.imageUrl ? `<img src="${escapeAttr(t.imageUrl)}" alt="${escapeAttr(t.label)}">` : emojiFor(t.kind)) +
+    chip.innerHTML = (t.imageUrl ? `<img src="${escapeAttr(t.imageUrl)}" alt="${escapeAttr(displayLabel)}">` : emojiFor(t.kind)) +
       (t.canControl ? '<span class="del" title="Remove from map">×</span>' : '');
     const remove = chip.querySelector('.del');
     if (remove) remove.onclick = (e) => {
@@ -755,6 +1043,7 @@ function renderTokenTray() {
       <div class="token-list-actions">
         <button class="btn-ghost token-reset-size" type="button">Reset size</button>
         <button class="btn-ghost token-visibility" type="button">${t.visibleToPlayers === false ? 'Show' : 'Hide'}</button>
+        <button class="btn-ghost token-duplicate" type="button">Duplicate</button>
         <button class="btn-danger-soft token-remove" type="button">Remove</button>
       </div>
     `;
@@ -764,6 +1053,7 @@ function renderTokenTray() {
     sizeInput.onchange = () => socket.emit('token:update', { id: t.id, sizeScale: Number(sizeInput.value) / 100 });
     details.querySelector('.token-reset-size').onclick = () => socket.emit('token:update', { id: t.id, sizeScale: 1 });
     details.querySelector('.token-visibility').onclick = () => socket.emit('token:update', { id: t.id, visibleToPlayers: t.visibleToPlayers === false });
+    details.querySelector('.token-duplicate').onclick = () => socket.emit('token:duplicate', { id: t.id });
     details.querySelector('.token-remove').onclick = () => socket.emit('token:remove', { id: t.id });
     entry.append(chip, details);
     list.appendChild(entry);
@@ -1781,9 +2071,35 @@ function renderInitiative() {
   initiative.entries.forEach((entry, index) => {
     const row = document.createElement('div');
     row.className = 'initiative-item' + (index === initiative.currentIndex ? ' current-turn' : '');
-    const value = document.createElement('div');
-    value.className = 'init-value';
-    value.textContent = entry.value;
+    row.dataset.initiativeId = entry.id;
+    if (myRole === 'dm') {
+      const dragHandle = document.createElement('span');
+      dragHandle.className = 'initiative-drag-handle';
+      dragHandle.textContent = '⋮⋮';
+      dragHandle.title = 'Drag to reorder';
+      dragHandle.draggable = true;
+      dragHandle.ondragstart = event => {
+        draggedInitiativeId = entry.id;
+        event.dataTransfer.effectAllowed = 'move';
+        event.dataTransfer.setData('text/plain', entry.id);
+        row.classList.add('dragging');
+      };
+      dragHandle.ondragend = () => {
+        draggedInitiativeId = null;
+        document.querySelectorAll('.initiative-item').forEach(item => item.classList.remove('dragging', 'drag-over'));
+      };
+      row.appendChild(dragHandle);
+    }
+    const value = document.createElement(myRole === 'dm' ? 'input' : 'div');
+    value.className = 'init-value' + (myRole === 'dm' ? ' init-value-edit' : '');
+    if (myRole === 'dm') {
+      value.type = 'number';
+      value.value = entry.value;
+      value.title = `Edit ${entry.name}'s initiative`;
+      value.onchange = () => socket.emit('initiative:edit', { id: entry.id, value: Number(value.value) });
+    } else {
+      value.textContent = entry.value;
+    }
     const name = document.createElement('div');
     name.className = 'init-name';
     name.textContent = entry.name;
@@ -1813,6 +2129,25 @@ function renderInitiative() {
       remove.title = `Remove ${entry.name}`;
       remove.onclick = () => socket.emit('initiative:remove', { id: entry.id });
       row.appendChild(remove);
+      row.ondragover = event => {
+        if (!draggedInitiativeId || draggedInitiativeId === entry.id) return;
+        event.preventDefault();
+        event.dataTransfer.dropEffect = 'move';
+        row.classList.add('drag-over');
+      };
+      row.ondragleave = () => row.classList.remove('drag-over');
+      row.ondrop = event => {
+        event.preventDefault();
+        const draggedId = draggedInitiativeId || event.dataTransfer.getData('text/plain');
+        row.classList.remove('drag-over');
+        if (!draggedId || draggedId === entry.id) return;
+        const orderedIds = initiative.entries.map(item => item.id).filter(id => id !== draggedId);
+        const targetIndex = orderedIds.indexOf(entry.id);
+        const rect = row.getBoundingClientRect();
+        const insertAfter = event.clientY > rect.top + rect.height / 2;
+        orderedIds.splice(Math.max(0, targetIndex + (insertAfter ? 1 : 0)), 0, draggedId);
+        socket.emit('initiative:reorder', { orderedIds });
+      };
     }
     list.appendChild(row);
   });
