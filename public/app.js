@@ -1,4 +1,11 @@
 const socket = io();
+const {
+  clampScale,
+  fitStageInViewport,
+  gridMeasurement,
+  positionStagePoint,
+  zoomAroundPoint
+} = window.HumblewoodMapGeometry;
 
 let myRole = 'dm';
 let myName = '';
@@ -15,6 +22,9 @@ let pendingTrayToken = null; // token about to be dropped from tray
 let mapScale = 1;
 let mapPan = { x: 0, y: 0 };
 let panStart = null;
+let touchGesture = null;
+let spacePanPressed = false;
+let lastFittedMapUrl = null;
 let editingOriginalName = null;
 let editingInventory = [];
 let editingPortraitUrl = null;
@@ -371,6 +381,10 @@ function renderMap() {
       redrawAllDoodles();
       renderFog();
       renderMapTokens();
+      if (lastFittedMapUrl !== state.scene.mapUrl) {
+        lastFittedMapUrl = state.scene.mapUrl;
+        fitMapToViewport();
+      }
     };
     img.onload = sizeMapStage;
     img.src = state.scene.mapUrl;
@@ -378,6 +392,7 @@ function renderMap() {
     empty.style.display = 'none';
     if (img.complete && img.naturalWidth) sizeMapStage();
   } else {
+    lastFittedMapUrl = null;
     img.style.display = 'none';
     empty.style.display = 'flex';
     renderFog();
@@ -581,9 +596,11 @@ document.getElementById('reset-fog-btn').onclick = () => {
 
 const mapStageWrap = document.getElementById('map-stage-wrap');
 mapStageWrap.addEventListener('mousedown', (e) => {
-  if (selectedTool !== 'pan' || e.button !== 0) return;
+  const canStartPan = (selectedTool === 'pan' && e.button === 0) || e.button === 1 || (spacePanPressed && e.button === 0);
+  if (!canStartPan || !isMapGestureTarget(e.target)) return;
   e.preventDefault();
   panStart = { clientX: e.clientX, clientY: e.clientY, x: mapPan.x, y: mapPan.y };
+  mapStageWrap.classList.add('is-panning');
 });
 document.addEventListener('mousemove', (e) => {
   if (!panStart) return;
@@ -591,7 +608,130 @@ document.addEventListener('mousemove', (e) => {
   mapPan.y = panStart.y + e.clientY - panStart.clientY;
   applyMapTransform();
 });
-document.addEventListener('mouseup', () => { panStart = null; });
+document.addEventListener('mouseup', () => {
+  panStart = null;
+  mapStageWrap.classList.remove('is-panning');
+});
+
+document.addEventListener('keydown', event => {
+  const typing = ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName);
+  if (event.code !== 'Space' || typing) return;
+  spacePanPressed = true;
+  mapStageWrap.classList.add('space-pan-ready');
+  if (document.getElementById('view-map').classList.contains('active')) event.preventDefault();
+});
+document.addEventListener('keyup', event => {
+  if (event.code !== 'Space') return;
+  spacePanPressed = false;
+  mapStageWrap.classList.remove('space-pan-ready');
+});
+
+mapStageWrap.addEventListener('wheel', event => {
+  if (!isMapGestureTarget(event.target)) return;
+  event.preventDefault();
+  const sensitivity = event.ctrlKey ? 0.006 : 0.0015;
+  const nextScale = mapScale * Math.exp(-event.deltaY * sensitivity);
+  setMapZoom(nextScale, { clientX: event.clientX, clientY: event.clientY });
+}, { passive: false });
+
+mapStageWrap.addEventListener('touchstart', event => {
+  if (!isMapGestureTarget(event.target)) return;
+  if (event.touches.length >= 2) {
+    event.preventDefault();
+    touchGesture = createPinchGesture(event.touches);
+  } else if (event.touches.length === 1 && selectedTool === 'pan') {
+    event.preventDefault();
+    const touch = event.touches[0];
+    touchGesture = {
+      type: 'pan',
+      clientX: touch.clientX,
+      clientY: touch.clientY,
+      pan: { ...mapPan }
+    };
+    mapStageWrap.classList.add('is-panning');
+  }
+}, { passive: false });
+
+mapStageWrap.addEventListener('touchmove', event => {
+  if (event.touches.length >= 2) {
+    event.preventDefault();
+    if (touchGesture?.type !== 'pinch') touchGesture = createPinchGesture(event.touches);
+    const current = touchMetrics(event.touches);
+    const wrapperRect = mapStageWrap.getBoundingClientRect();
+    const anchor = {
+      x: current.center.x - wrapperRect.left,
+      y: current.center.y - wrapperRect.top
+    };
+    const next = positionStagePoint({
+      stagePoint: touchGesture.stagePoint,
+      anchor,
+      nextScale: touchGesture.scale * (current.distance / Math.max(1, touchGesture.distance))
+    });
+    mapScale = next.scale;
+    mapPan = next.pan;
+    applyMapTransform();
+  } else if (event.touches.length === 1 && touchGesture?.type === 'pan') {
+    event.preventDefault();
+    const touch = event.touches[0];
+    mapPan.x = touchGesture.pan.x + touch.clientX - touchGesture.clientX;
+    mapPan.y = touchGesture.pan.y + touch.clientY - touchGesture.clientY;
+    applyMapTransform();
+  }
+}, { passive: false });
+
+mapStageWrap.addEventListener('touchend', event => {
+  if (event.touches.length === 1 && selectedTool === 'pan') {
+    const touch = event.touches[0];
+    touchGesture = {
+      type: 'pan',
+      clientX: touch.clientX,
+      clientY: touch.clientY,
+      pan: { ...mapPan }
+    };
+  } else if (event.touches.length < 2) {
+    touchGesture = null;
+    mapStageWrap.classList.remove('is-panning');
+  }
+}, { passive: false });
+mapStageWrap.addEventListener('touchcancel', () => {
+  touchGesture = null;
+  mapStageWrap.classList.remove('is-panning');
+});
+
+function isMapGestureTarget(target) {
+  return !!target.closest?.('#map-stage, #empty-map') && !target.closest('button, input, select, textarea, label');
+}
+
+function touchMetrics(touches) {
+  const first = touches[0];
+  const second = touches[1];
+  return {
+    center: {
+      x: (first.clientX + second.clientX) / 2,
+      y: (first.clientY + second.clientY) / 2
+    },
+    distance: Math.hypot(second.clientX - first.clientX, second.clientY - first.clientY)
+  };
+}
+
+function createPinchGesture(touches) {
+  const metrics = touchMetrics(touches);
+  const wrapperRect = mapStageWrap.getBoundingClientRect();
+  const anchor = {
+    x: metrics.center.x - wrapperRect.left,
+    y: metrics.center.y - wrapperRect.top
+  };
+  mapStageWrap.classList.add('is-panning');
+  return {
+    type: 'pinch',
+    distance: metrics.distance,
+    scale: mapScale,
+    stagePoint: {
+      x: (anchor.x - mapPan.x) / mapScale,
+      y: (anchor.y - mapPan.y) / mapScale
+    }
+  };
+}
 
 const mapStage = document.getElementById('map-stage');
 mapStage.addEventListener('mousedown', event => {
@@ -654,16 +794,17 @@ function updateRuler(start, end) {
   const startDot = document.getElementById('ruler-start');
   const endDot = document.getElementById('ruler-end');
   const label = document.getElementById('ruler-label');
-  overlay.classList.add('visible');
-  line.setAttribute('x1', start.x); line.setAttribute('y1', start.y);
-  line.setAttribute('x2', end.x); line.setAttribute('y2', end.y);
-  startDot.setAttribute('cx', start.x); startDot.setAttribute('cy', start.y);
-  endDot.setAttribute('cx', end.x); endDot.setAttribute('cy', end.y);
   const gridSize = Math.max(10, Number(state.scene.gridSize) || 50);
-  const squares = Math.hypot(end.x - start.x, end.y - start.y) / gridSize;
-  label.setAttribute('x', (start.x + end.x) / 2);
-  label.setAttribute('y', (start.y + end.y) / 2 - 10);
-  label.textContent = `${squares.toFixed(1)} squares · ${Math.round(squares * 5)} ft`;
+  const measurement = gridMeasurement(start, end, gridSize);
+  overlay.classList.add('visible');
+  line.setAttribute('x1', measurement.start.x); line.setAttribute('y1', measurement.start.y);
+  line.setAttribute('x2', measurement.end.x); line.setAttribute('y2', measurement.end.y);
+  startDot.setAttribute('cx', measurement.start.x); startDot.setAttribute('cy', measurement.start.y);
+  endDot.setAttribute('cx', measurement.end.x); endDot.setAttribute('cy', measurement.end.y);
+  label.setAttribute('x', (measurement.start.x + measurement.end.x) / 2);
+  label.setAttribute('y', (measurement.start.y + measurement.end.y) / 2 - 10);
+  const squareLabel = measurement.squares === 1 ? 'square' : 'squares';
+  label.textContent = `${measurement.squares} ${squareLabel} · ${measurement.feet} ft`;
 }
 
 function clearRuler() {
@@ -712,13 +853,14 @@ document.getElementById('fit-token-toggle').onchange = () => {
   });
 };
 
-document.getElementById('zoom-in').onclick = () => setMapZoom(mapScale + 0.15);
-document.getElementById('zoom-out').onclick = () => setMapZoom(mapScale - 0.15);
+document.getElementById('zoom-in').onclick = () => setMapZoom(mapScale * 1.2, viewportCenter());
+document.getElementById('zoom-out').onclick = () => setMapZoom(mapScale / 1.2, viewportCenter());
 document.getElementById('zoom-reset').onclick = () => {
   mapScale = 1;
   mapPan = { x: 0, y: 0 };
   applyMapTransform();
 };
+document.getElementById('zoom-fit').onclick = fitMapToViewport;
 
 document.getElementById('toggle-initiative-btn').onclick = () => {
   const mapView = document.getElementById('view-map');
@@ -726,8 +868,42 @@ document.getElementById('toggle-initiative-btn').onclick = () => {
   document.getElementById('toggle-initiative-btn').setAttribute('aria-expanded', String(!collapsed));
 };
 
-function setMapZoom(value) {
-  mapScale = Math.max(0.35, Math.min(3, Math.round(value * 100) / 100));
+function setMapZoom(value, clientPoint = viewportCenter()) {
+  const wrapperRect = mapStageWrap.getBoundingClientRect();
+  const anchor = {
+    x: clientPoint.clientX - wrapperRect.left,
+    y: clientPoint.clientY - wrapperRect.top
+  };
+  const next = zoomAroundPoint({
+    pan: mapPan,
+    scale: mapScale,
+    nextScale: clampScale(Math.round(value * 1000) / 1000),
+    anchor
+  });
+  mapScale = next.scale;
+  mapPan = next.pan;
+  applyMapTransform();
+}
+
+function viewportCenter() {
+  const rect = mapStageWrap.getBoundingClientRect();
+  return { clientX: rect.left + rect.width / 2, clientY: rect.top + rect.height / 2 };
+}
+
+function fitMapToViewport() {
+  const stage = document.getElementById('map-stage');
+  const stageWidth = stage.offsetWidth;
+  const stageHeight = stage.offsetHeight;
+  if (!stageWidth || !stageHeight) return;
+  const fitted = fitStageInViewport({
+    stageWidth,
+    stageHeight,
+    viewportWidth: mapStageWrap.clientWidth,
+    viewportHeight: mapStageWrap.clientHeight,
+    padding: 24
+  });
+  mapScale = fitted.scale;
+  mapPan = fitted.pan;
   applyMapTransform();
 }
 

@@ -329,8 +329,8 @@
       <div class="map-stage-wrap" id="map-stage-wrap">
         <div class="map-toolbar">
           <button id="tool-move" class="active">Move</button>
-          <button id="tool-pan">Pan</button>
-          <button id="tool-ruler">Ruler</button>
+          <button id="tool-pan" title="Drag to move the map. You can also hold Space or use the middle mouse button.">Pan</button>
+          <button id="tool-ruler" title="Counts grid-square movement: 5 ft per horizontal or vertical square.">Ruler</button>
           <button id="tool-ping">Ping</button>
           <button id="tool-doodle" class="doodle-control hidden">Doodle</button>
           <input type="color" id="doodle-color" value="#d98a9e" class="doodle-control hidden" title="Drawing color" style="width:30px; border:none; background:none;">
@@ -349,6 +349,7 @@
           <span id="zoom-level">100%</span>
           <button id="zoom-in">+</button>
           <button id="zoom-reset">Reset view</button>
+          <button id="zoom-fit">Fit map</button>
           <button id="toggle-initiative-btn" aria-controls="map-initiative-panel" aria-expanded="true">⚔ Initiative <span id="initiative-count">0</span></button>
         </div>
         <div id="map-stage">
@@ -896,6 +897,7 @@
 </div>
 
 <script src="/socket.io/socket.io.js"></script>
+<script src="/js/map-geometry.js"></script>
 <script src="/js/router.js"></script>
 <script src="app.js"></script>
 

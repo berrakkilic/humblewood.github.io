@@ -69,11 +69,17 @@ async function run() {
   for (const route of ['/map', '/characters', '/jukebox', '/dice']) {
     const response = await fetch(`http://127.0.0.1:${port}${route}`);
     assert.equal(response.status, 200, `${route} should load the frontend shell`);
-    assert.match(await response.text(), /The Humblewood Table/);
+    const html = await response.text();
+    assert.match(html, /The Humblewood Table/);
+    assert.match(html, /js\/map-geometry\.js/);
+    assert.match(html, /id="zoom-fit"/);
   }
   const routerResponse = await fetch(`http://127.0.0.1:${port}/js/router.js`);
   assert.equal(routerResponse.status, 200);
   assert.match(await routerResponse.text(), /createRouter/);
+  const geometryResponse = await fetch(`http://127.0.0.1:${port}/js/map-geometry.js`);
+  assert.equal(geometryResponse.status, 200);
+  assert.match(await geometryResponse.text(), /gridMeasurement/);
 
   global.window = global;
   global.self = global;
