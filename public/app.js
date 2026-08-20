@@ -2,7 +2,9 @@ const socket = io();
 
 let myRole = 'dm';
 let myName = '';
-const myPlayerId = getOrCreatePlayerId();
+let myUsername = '';
+let myPassword = '';
+let authMode = 'login';
 let myDmPin = '';
 let joined = false;
 let state = null;
@@ -45,17 +47,40 @@ const CONDITIONS = [
 // ---------------- Join flow ----------------
 document.getElementById('role-dm').onclick = () => setRole('dm');
 document.getElementById('role-player').onclick = () => setRole('player');
+document.getElementById('auth-login').onclick = () => setAuthMode('login');
+document.getElementById('auth-register').onclick = () => setAuthMode('register');
 function setRole(role) {
   myRole = role;
   document.getElementById('role-dm').classList.toggle('active', role === 'dm');
   document.getElementById('role-player').classList.toggle('active', role === 'player');
   document.getElementById('dm-pin-field').classList.toggle('hidden', role !== 'dm');
+  document.getElementById('player-auth-fields').classList.toggle('hidden', role !== 'player');
+  document.getElementById('name-field').classList.toggle('hidden', role === 'player' && authMode === 'login');
+  document.getElementById('join-error').textContent = '';
+}
+
+function setAuthMode(mode) {
+  authMode = mode;
+  document.getElementById('auth-login').classList.toggle('active', mode === 'login');
+  document.getElementById('auth-register').classList.toggle('active', mode === 'register');
+  document.getElementById('name-field').classList.toggle('hidden', myRole === 'player' && mode === 'login');
+  document.getElementById('confirm-password-field').classList.toggle('hidden', mode !== 'register');
+  document.getElementById('password-input').autocomplete = mode === 'register' ? 'new-password' : 'current-password';
+  document.getElementById('auth-help').textContent = mode === 'register'
+    ? 'Create one account, then use it anywhere you play.'
+    : 'Sign in from any device. If you forget it, ask the DM to look up your username or reset the password.';
   document.getElementById('join-error').textContent = '';
 }
 
 document.getElementById('join-btn').onclick = () => {
   const nameInput = document.getElementById('name-input');
-  myName = nameInput.value.trim() || (myRole === 'dm' ? 'The DM' : 'A wanderer');
+  myUsername = document.getElementById('username-input').value.trim();
+  myPassword = document.getElementById('password-input').value;
+  myName = nameInput.value.trim() || (myRole === 'dm' ? 'The DM' : myUsername);
+  if (myRole === 'player' && authMode === 'register' && myPassword !== document.getElementById('confirm-password-input').value) {
+    document.getElementById('join-error').textContent = 'Those passwords do not match.';
+    return;
+  }
   const joinButton = document.getElementById('join-btn');
   joinButton.disabled = true;
   joinButton.textContent = 'Entering…';
@@ -68,12 +93,20 @@ function sendIdentity() {
   socket.emit('identify', {
     role: myRole,
     name: myName,
-    playerId: myPlayerId,
+    username: myUsername,
+    password: myPassword,
+    authMode,
     dmPin: myDmPin
   });
 }
 
 document.getElementById('dm-pin-input').addEventListener('keydown', event => {
+  if (event.key === 'Enter') document.getElementById('join-btn').click();
+});
+document.getElementById('password-input').addEventListener('keydown', event => {
+  if (event.key === 'Enter') document.getElementById('join-btn').click();
+});
+document.getElementById('confirm-password-input').addEventListener('keydown', event => {
   if (event.key === 'Enter') document.getElementById('join-btn').click();
 });
 
@@ -87,11 +120,17 @@ socket.on('identify:result', result => {
   }
   myRole = result.role;
   myName = result.name;
+  myUsername = result.username || '';
+  if (myRole === 'player') authMode = 'login';
   joined = true;
+  document.getElementById('password-input').value = '';
+  document.getElementById('confirm-password-input').value = '';
+  document.getElementById('dm-pin-input').value = '';
   document.getElementById('join-screen').style.display = 'none';
   document.getElementById('app').style.display = 'flex';
   document.body.setAttribute('data-role', myRole);
-  document.getElementById('my-role-pill').textContent = myRole === 'dm' ? 'Dungeon Master' : 'Player · ' + myName;
+  document.getElementById('my-role-pill').textContent = myRole === 'dm' ? 'Dungeon Master' : `Player · ${myName}`;
+  if (myRole === 'dm') socket.emit('accounts:list');
 });
 
 socket.on('connect', () => {
@@ -168,6 +207,36 @@ socket.on('concentration:required', ({ name, damage, dc }) => {
   showToast(`${name} must make a DC ${dc} Constitution save for concentration.`);
   if (activeCombatName === name) renderCombatManager();
 });
+socket.on('accounts:update', renderPlayerAccounts);
+socket.on('account:passwordReset', ({ username }) => {
+  document.getElementById('reset-account-password').value = '';
+  showToast(`Password reset for ${username}.`);
+});
+
+function renderPlayerAccounts(accounts) {
+  const list = document.getElementById('account-list');
+  list.innerHTML = '';
+  if (!accounts.length) {
+    list.innerHTML = '<p class="empty-roll-options">No player accounts have been created yet.</p>';
+    return;
+  }
+  accounts.forEach(account => {
+    const row = document.createElement('div');
+    row.className = 'account-list-item';
+    row.innerHTML = `<strong>${escapeHtml(account.displayName)}</strong><span>@${escapeHtml(account.username)}</span>`;
+    row.onclick = () => { document.getElementById('reset-account-username').value = account.username; };
+    list.appendChild(row);
+  });
+}
+
+document.getElementById('refresh-accounts-btn').onclick = () => socket.emit('accounts:list');
+document.getElementById('reset-account-password-btn').onclick = () => {
+  const username = document.getElementById('reset-account-username').value.trim();
+  const password = document.getElementById('reset-account-password').value;
+  if (!username) return showToast('Choose a player account first.');
+  if (password.length < 8) return showToast('The new password needs at least 8 characters.');
+  socket.emit('account:resetPassword', { username, password });
+};
 socket.on('initiative:update', (initiative) => {
   state.initiative = initiative;
   renderInitiative();
@@ -1111,6 +1180,7 @@ function renderCombatManager() {
   document.getElementById('combat-hp').textContent = `${Number(character.hp) || 0} / ${Number(character.maxHp) || 0}`;
   document.getElementById('combat-temp-hp').textContent = Number(character.tempHp) || 0;
   document.getElementById('combat-life-status').textContent = combat.dead ? 'Dead' : combat.stable ? 'Stable' : character.hp <= 0 ? 'Unconscious' : 'Ready';
+  renderCombatRolls(character);
   document.getElementById('combat-concentration').checked = !!combat.concentration;
   document.getElementById('combat-exhaustion').textContent = Number(combat.exhaustion) || 0;
   document.getElementById('combat-death-successes').textContent = `${Number(combat.deathSaves?.successes) || 0} / 3`;
@@ -1148,6 +1218,103 @@ function renderCombatManager() {
   const checkButton = document.getElementById('combat-concentration-roll');
   checkButton.classList.toggle('hidden', !check);
   if (check) checkButton.textContent = `Roll Constitution save · DC ${check.dc}`;
+}
+
+function renderCombatRolls(character) {
+  const mode = () => document.getElementById('combat-roll-mode').value;
+  const initiativeButton = document.getElementById('combat-initiative-roll');
+  initiativeButton.textContent = `Initiative ${signed(characterInitiativeModifier(character))}`;
+  initiativeButton.onclick = () => rollCharacterInitiative(character, mode());
+
+  const spellAttackValue = character.spellcasting?.attackBonus ?? character.fields?.['spell-attack'];
+  const hasSpellAttack = spellAttackValue !== '' && spellAttackValue !== undefined && spellAttackValue !== null;
+  const spellAttackButton = document.getElementById('combat-spell-attack-roll');
+  spellAttackButton.classList.toggle('hidden', !hasSpellAttack);
+  if (hasSpellAttack) {
+    const spellModifier = Number(spellAttackValue) || 0;
+    spellAttackButton.textContent = `Spell attack ${signed(spellModifier)}`;
+    spellAttackButton.onclick = () => rollCharacterD20(character, 'Spell attack', spellModifier, { mode: mode() });
+  }
+
+  const spellDcValue = character.spellcasting?.saveDc ?? character.fields?.['spell-dc'];
+  const spellDc = document.getElementById('combat-spell-dc');
+  const hasSpellDc = spellDcValue !== '' && spellDcValue !== undefined && spellDcValue !== null;
+  spellDc.classList.toggle('hidden', !hasSpellDc);
+  if (hasSpellDc) spellDc.textContent = `Spell save DC ${Number(spellDcValue) || 0}`;
+
+  const attacks = document.getElementById('combat-attacks');
+  attacks.innerHTML = '';
+  (character.attacks || []).filter(attack => attack.name).forEach(attack => {
+    const row = document.createElement('div');
+    row.className = 'combat-roll-row';
+    const name = document.createElement('span');
+    name.className = 'combat-roll-name';
+    name.textContent = attack.name;
+    row.appendChild(name);
+    const bonusMatch = String(attack.bonus || '').match(/[+-]?\d+/);
+    if (bonusMatch) {
+      const modifier = Number(bonusMatch[0]);
+      row.appendChild(makeCombatRollButton(`Hit ${signed(modifier)}`, () => rollCharacterD20(character, `${attack.name} attack`, modifier, { mode: mode() })));
+    }
+    const damage = parseDiceExpression(attack.damage);
+    if (damage) {
+      row.appendChild(makeCombatRollButton(damage.expression, () => rollDice(damage.count, damage.sides, damage.modifier, {
+        characterName: character.name,
+        label: `${attack.name} damage`
+      }), true));
+    }
+    attacks.appendChild(row);
+  });
+  if (!attacks.children.length) attacks.innerHTML = '<p class="empty-roll-options">No attacks are configured.</p>';
+
+  const spells = document.getElementById('combat-spells');
+  spells.innerHTML = '';
+  characterSpellEntries(character).forEach(spell => {
+    const row = document.createElement('div');
+    row.className = 'combat-roll-row';
+    const name = document.createElement('span');
+    name.className = 'combat-roll-name';
+    name.textContent = spell.name;
+    const level = document.createElement('small');
+    level.textContent = spell.level === 0 ? 'Cantrip' : `Level ${spell.level}`;
+    name.appendChild(level);
+    row.appendChild(name);
+    if (hasSpellAttack) {
+      const modifier = Number(spellAttackValue) || 0;
+      row.appendChild(makeCombatRollButton(`Attack ${signed(modifier)}`, () => rollCharacterD20(character, `${spell.name} spell attack`, modifier, { mode: mode() })));
+    }
+    const damage = parseDiceExpression(spell.name);
+    if (damage) {
+      row.appendChild(makeCombatRollButton(damage.expression, () => rollDice(damage.count, damage.sides, damage.modifier, {
+        characterName: character.name,
+        label: `${spell.name} damage`
+      }), true));
+    }
+    spells.appendChild(row);
+  });
+  if (!spells.children.length) spells.innerHTML = '<p class="empty-roll-options">No spells are listed on the sheet.</p>';
+}
+
+function makeCombatRollButton(label, onclick, damage = false) {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = `combat-roll-button${damage ? ' damage' : ''}`;
+  button.textContent = label;
+  button.onclick = onclick;
+  return button;
+}
+
+function characterSpellEntries(character) {
+  const entries = [];
+  for (let level = 0; level <= 9; level += 1) {
+    const text = String(character.fields?.[`spells-${level}`] || '').trim();
+    if (!text) continue;
+    text.split(/\n|;/).flatMap(line => {
+      const trimmed = line.trim();
+      return trimmed.includes(',') && !/\d+d\d+/i.test(trimmed) ? trimmed.split(',') : [trimmed];
+    }).map(name => name.trim()).filter(Boolean).forEach(name => entries.push({ level, name }));
+  }
+  return entries;
 }
 
 document.getElementById('combat-close-btn').onclick = closeCombatManager;
@@ -1294,16 +1461,6 @@ function renderInitiativeQuickAdd() {
 }
 
 // ================= Shared helpers =================
-function getOrCreatePlayerId() {
-  const key = 'humblewood-player-id';
-  let id = localStorage.getItem(key);
-  if (!id) {
-    id = globalThis.crypto?.randomUUID?.() || `player-${Date.now()}-${Math.random().toString(36).slice(2, 12)}`;
-    localStorage.setItem(key, id);
-  }
-  return id;
-}
-
 function signed(value) {
   const number = Number(value) || 0;
   return number >= 0 ? `+${number}` : String(number);

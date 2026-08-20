@@ -174,7 +174,7 @@
     <h1>The Humblewood Table</h1>
     <p class="sub hand">a cozy corner of the forest</p>
 
-    <div class="field">
+    <div class="field" id="name-field">
       <label for="name-input">Your name</label>
       <input type="text" id="name-input" placeholder="Wren, keeper of maps...">
     </div>
@@ -190,6 +190,26 @@
     <div class="field" id="dm-pin-field">
       <label for="dm-pin-input">Dungeon Master PIN</label>
       <input type="password" id="dm-pin-input" autocomplete="current-password" placeholder="Enter the table PIN">
+    </div>
+
+    <div id="player-auth-fields" class="hidden">
+      <div class="auth-toggle" aria-label="Player account action">
+        <button id="auth-login" class="active" type="button">Sign in</button>
+        <button id="auth-register" type="button">Create account</button>
+      </div>
+      <div class="field">
+        <label for="username-input">Username</label>
+        <input type="text" id="username-input" autocomplete="username" maxlength="32" placeholder="wren">
+      </div>
+      <div class="field">
+        <label for="password-input">Password</label>
+        <input type="password" id="password-input" autocomplete="current-password" placeholder="At least 8 characters">
+      </div>
+      <div class="field hidden" id="confirm-password-field">
+        <label for="confirm-password-input">Confirm password</label>
+        <input type="password" id="confirm-password-input" autocomplete="new-password" placeholder="Type it again">
+      </div>
+      <p class="auth-help" id="auth-help">Sign in from any device. If you forget it, ask the DM to look up your username or reset the password.</p>
     </div>
 
     <p class="join-error" id="join-error" role="alert"></p>
@@ -306,6 +326,22 @@
         <button class="btn-primary" style="width:auto; padding:10px 18px;" id="new-sheet-btn">+ New character</button>
       </div>
       <div class="char-grid" id="char-grid"></div>
+
+      <section class="panel account-admin dm-only" id="account-admin">
+        <div class="account-admin-heading">
+          <div>
+            <h3>Player accounts</h3>
+            <p>Use this if a player forgets their username or password.</p>
+          </div>
+          <button class="btn-ghost" id="refresh-accounts-btn" type="button">Refresh</button>
+        </div>
+        <div class="account-list" id="account-list"></div>
+        <div class="account-reset-row">
+          <input type="text" id="reset-account-username" placeholder="Username">
+          <input type="password" id="reset-account-password" placeholder="New password (8+ characters)">
+          <button class="btn-rose" id="reset-account-password-btn" type="button">Reset password</button>
+        </div>
+      </section>
 
       <div id="sheet-editor" class="panel hidden" style="margin-top:20px;">
         <div style="display:flex; justify-content:space-between; align-items:center;">
@@ -705,6 +741,34 @@
       <button class="btn-primary" id="combat-heal-btn" type="button">Heal</button>
       <button class="btn-ghost" id="combat-temp-btn" type="button">Set temp HP</button>
     </div>
+
+    <section class="combat-section combat-rolls-section">
+      <div class="combat-section-title">
+        <h3>Roll attacks & spells</h3>
+        <label class="combat-roll-mode">d20 mode
+          <select id="combat-roll-mode">
+            <option value="normal">Normal</option>
+            <option value="advantage">Advantage</option>
+            <option value="disadvantage">Disadvantage</option>
+          </select>
+        </label>
+      </div>
+      <div class="combat-roll-highlights">
+        <button class="btn-rose" id="combat-initiative-roll" type="button">Roll initiative</button>
+        <button class="btn-ghost hidden" id="combat-spell-attack-roll" type="button">Spell attack</button>
+        <span class="combat-spell-dc hidden" id="combat-spell-dc"></span>
+      </div>
+      <div class="combat-roll-columns">
+        <div>
+          <h4>Attacks</h4>
+          <div class="combat-roll-list" id="combat-attacks"></div>
+        </div>
+        <div>
+          <h4>Spells</h4>
+          <div class="combat-roll-list" id="combat-spells"></div>
+        </div>
+      </div>
+    </section>
 
     <div class="combat-grid">
       <section class="combat-section">

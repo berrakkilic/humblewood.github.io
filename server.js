@@ -2,8 +2,11 @@ const express = require('express');
 const http = require('http');
 const path = require('path');
 const fs = require('fs');
+const crypto = require('crypto');
+const { promisify } = require('util');
 const multer = require('multer');
 const { Server } = require('socket.io');
+const scryptAsync = promisify(crypto.scrypt);
 
 const app = express();
 
@@ -117,6 +120,7 @@ async function loadStateFromDb() {
         const character = Object.values(state.characters).find(entry => entry.name.toLowerCase() === String(token.label || '').toLowerCase());
         if (character) {
           token.characterName = character.name;
+          token.ownerUsername = character.ownerUsername || null;
           token.ownerId = character.ownerId || null;
         }
       });
@@ -145,8 +149,40 @@ function persistState() {
   }, 300); // debounce rapid updates (e.g. token drags)
 }
 
-const dbReady = db.execute('CREATE TABLE IF NOT EXISTS state (id INTEGER PRIMARY KEY, data TEXT)')
-  .then(loadStateFromDb);
+const dbReady = Promise.all([
+  db.execute('CREATE TABLE IF NOT EXISTS state (id INTEGER PRIMARY KEY, data TEXT)'),
+  db.execute(`CREATE TABLE IF NOT EXISTS player_accounts (
+    username TEXT PRIMARY KEY,
+    display_name TEXT NOT NULL,
+    password_hash TEXT NOT NULL,
+    salt TEXT NOT NULL,
+    created_at INTEGER NOT NULL
+  )`)
+]).then(loadStateFromDb);
+
+function normalizeUsername(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function validUsername(username) {
+  return /^[a-z0-9][a-z0-9_.-]{2,31}$/.test(username);
+}
+
+function validPassword(password) {
+  return typeof password === 'string' && password.length >= 8 && password.length <= 128;
+}
+
+async function makePasswordRecord(password) {
+  const salt = crypto.randomBytes(16).toString('hex');
+  const derived = await scryptAsync(password, salt, 64);
+  return { salt, passwordHash: derived.toString('hex') };
+}
+
+async function verifyPassword(password, salt, expectedHash) {
+  const derived = await scryptAsync(password, salt, 64);
+  const expected = Buffer.from(expectedHash, 'hex');
+  return expected.length === derived.length && crypto.timingSafeEqual(expected, derived);
+}
 
 function broadcastState() {
   for (const client of io.sockets.sockets.values()) {
@@ -167,15 +203,18 @@ function isDm(socket) {
 function ownsCharacter(socket, character) {
   if (!socket.data.identified || !character) return false;
   if (isDm(socket)) return true;
-  if (character.ownerId) return character.ownerId === socket.data.playerId;
+  if (character.ownerUsername) return character.ownerUsername === socket.data.username;
   const legacyOwner = String(character.fields?.player || character.owner || '').trim().toLowerCase();
-  return !!legacyOwner && legacyOwner === String(socket.data.name || '').trim().toLowerCase();
+  return !!legacyOwner && [socket.data.name, socket.data.username]
+    .map(value => String(value || '').trim().toLowerCase())
+    .includes(legacyOwner);
 }
 
 function controlsToken(socket, token) {
   if (!socket.data.identified || !token) return false;
   if (isDm(socket)) return true;
-  return token.kind === 'pc' && token.ownerId && token.ownerId === socket.data.playerId;
+  if (token.characterName) return ownsCharacter(socket, state.characters[token.characterName]);
+  return token.kind === 'pc' && token.ownerUsername && token.ownerUsername === socket.data.username;
 }
 
 function deny(socket, message) {
@@ -232,12 +271,12 @@ function syncCombatFields(character) {
 
 function publicCharacter(socket, character) {
   normalizeCharacter(character);
-  const { ownerId, ...safe } = character;
-  return { ...safe, claimed: !!ownerId, canManage: ownsCharacter(socket, character) };
+  const { ownerId, ownerUsername, ...safe } = character;
+  return { ...safe, claimed: !!ownerUsername, legacyClaimed: !!ownerId, canManage: ownsCharacter(socket, character) };
 }
 
 function publicToken(socket, token) {
-  const { ownerId, ...safe } = token;
+  const { ownerId, ownerUsername, ...safe } = token;
   return { ...safe, canControl: controlsToken(socket, token) };
 }
 
@@ -268,7 +307,8 @@ function syncCharacterTokens(character) {
     token.hp = character.hp;
     token.maxHp = character.maxHp;
     token.tempHp = character.tempHp;
-    token.ownerId = character.ownerId || token.ownerId || null;
+    token.ownerUsername = character.ownerUsername || token.ownerUsername || null;
+    token.ownerId = null;
     emitToken('token:update', token);
   });
 }
@@ -301,21 +341,89 @@ function upsertInitiativeEntry({ name, value, tokenId }) {
 }
 
 io.on('connection', (socket) => {
-  socket.on('identify', (payload = {}) => {
+  socket.data.authAttempts = 0;
+  const rejectIdentity = (message) => {
+    socket.data.authAttempts += 1;
+    socket.emit('identify:result', { ok: false, message });
+    if (socket.data.authAttempts >= 10) setTimeout(() => socket.disconnect(true), 150);
+  };
+
+  socket.on('identify', async (payload = {}) => {
     const requestedRole = payload.role === 'dm' ? 'dm' : 'player';
-    const name = String(payload.name || '').trim().slice(0, 80) || (requestedRole === 'dm' ? 'The DM' : 'A wanderer');
-    const playerId = String(payload.playerId || '').trim().slice(0, 100);
-    if (!playerId) return socket.emit('identify:result', { ok: false, message: 'This browser could not create a player identity. Refresh and try again.' });
-    if (requestedRole === 'dm' && String(payload.dmPin || '') !== DM_PIN) {
-      return socket.emit('identify:result', { ok: false, message: 'That Dungeon Master PIN is not correct.' });
+    let name;
+    let username = null;
+    try {
+      if (requestedRole === 'dm') {
+        if (String(payload.dmPin || '') !== DM_PIN) return rejectIdentity('That Dungeon Master PIN is not correct.');
+        name = String(payload.name || '').trim().slice(0, 80) || 'The DM';
+      } else {
+        username = normalizeUsername(payload.username);
+        const password = String(payload.password || '');
+        if (!validUsername(username)) return rejectIdentity('Use a 3–32 character username containing letters, numbers, dots, dashes or underscores.');
+        if (!validPassword(password)) return rejectIdentity('Passwords must be between 8 and 128 characters.');
+        const existingResult = await db.execute({ sql: 'SELECT * FROM player_accounts WHERE username = ?', args: [username] });
+        const existing = existingResult.rows[0];
+        if (payload.authMode === 'register') {
+          if (existing) return rejectIdentity('That username is already taken. Choose Sign in if it belongs to you.');
+          name = String(payload.name || '').trim().slice(0, 80) || username;
+          const passwordRecord = await makePasswordRecord(password);
+          await db.execute({
+            sql: 'INSERT INTO player_accounts (username, display_name, password_hash, salt, created_at) VALUES (?, ?, ?, ?, ?)',
+            args: [username, name, passwordRecord.passwordHash, passwordRecord.salt, Date.now()]
+          });
+        } else {
+          if (!existing || !(await verifyPassword(password, existing.salt, existing.password_hash))) {
+            return rejectIdentity('The username or password is incorrect.');
+          }
+          name = String(existing.display_name).slice(0, 80);
+        }
+      }
+    } catch (error) {
+      console.error('Account sign-in failed:', error.message);
+      return rejectIdentity('The account could not be checked right now. Please try again.');
     }
     socket.data.role = requestedRole;
     socket.data.name = name;
-    socket.data.playerId = playerId;
+    socket.data.username = username;
     socket.data.identified = true;
-    socket.emit('identify:result', { ok: true, role: requestedRole, name });
+    socket.data.authAttempts = 0;
+    socket.emit('identify:result', { ok: true, role: requestedRole, name, username });
     socket.emit('state:full', publicStateFor(socket));
     io.emit('presence', { role: requestedRole, name, connected: true });
+  });
+
+  socket.on('accounts:list', async () => {
+    if (!isDm(socket)) return deny(socket, 'Only the Dungeon Master can view player accounts.');
+    try {
+      const result = await db.execute('SELECT username, display_name, created_at FROM player_accounts ORDER BY display_name COLLATE NOCASE');
+      socket.emit('accounts:update', result.rows.map(row => ({
+        username: String(row.username),
+        displayName: String(row.display_name),
+        createdAt: Number(row.created_at)
+      })));
+    } catch (error) {
+      console.error('Could not list accounts:', error.message);
+      deny(socket, 'Player accounts could not be loaded right now.');
+    }
+  });
+
+  socket.on('account:resetPassword', async ({ username: requestedUsername, password } = {}) => {
+    if (!isDm(socket)) return deny(socket, 'Only the Dungeon Master can reset player passwords.');
+    const username = normalizeUsername(requestedUsername);
+    if (!validPassword(password)) return deny(socket, 'The new password must be between 8 and 128 characters.');
+    try {
+      const existing = await db.execute({ sql: 'SELECT username FROM player_accounts WHERE username = ?', args: [username] });
+      if (!existing.rows.length) return deny(socket, 'No player account uses that username.');
+      const passwordRecord = await makePasswordRecord(password);
+      await db.execute({
+        sql: 'UPDATE player_accounts SET password_hash = ?, salt = ? WHERE username = ?',
+        args: [passwordRecord.passwordHash, passwordRecord.salt, username]
+      });
+      socket.emit('account:passwordReset', { username });
+    } catch (error) {
+      console.error('Could not reset account password:', error.message);
+      deny(socket, 'That password could not be reset right now.');
+    }
   });
 
   // --- Map / scene ---
@@ -371,7 +479,8 @@ io.on('connection', (socket) => {
       token = {
         id: 't' + Date.now() + Math.random().toString(36).slice(2, 6),
         characterName: character.name,
-        ownerId: character.ownerId || socket.data.playerId,
+        ownerUsername: character.ownerUsername || socket.data.username,
+        ownerId: null,
         label: character.name,
         kind: 'pc',
         imageUrl: character.portraitUrl || null,
@@ -383,7 +492,8 @@ io.on('connection', (socket) => {
         tempHp: character.tempHp,
         visibleToPlayers: true
       };
-      if (!character.ownerId) character.ownerId = socket.data.playerId;
+      if (!character.ownerUsername) character.ownerUsername = socket.data.username;
+      character.ownerId = null;
     } else {
       const linkedCharacter = state.characters[String(requested.characterName || requested.label || '')];
       if (requested.kind === 'pc' && linkedCharacter) normalizeCharacter(linkedCharacter);
@@ -400,7 +510,8 @@ io.on('connection', (socket) => {
         tempHp: linkedCharacter ? linkedCharacter.tempHp : 0,
         visibleToPlayers: requested.visibleToPlayers !== false,
         characterName: linkedCharacter?.name || null,
-        ownerId: linkedCharacter?.ownerId || null
+        ownerUsername: linkedCharacter?.ownerUsername || null,
+        ownerId: null
       };
     }
     state.tokens.push(token);
@@ -484,13 +595,15 @@ io.on('connection', (socket) => {
     const sheet = { ...requested };
     delete sheet._originalName;
     delete sheet.ownerId;
+    delete sheet.ownerUsername;
     delete sheet.canManage;
     delete sheet.claimed;
     sheet.name = name;
     sheet.owner = isDm(socket)
       ? String(sheet.fields?.player || original?.owner || destination?.owner || 'Dungeon Master')
       : socket.data.name;
-    sheet.ownerId = original?.ownerId || destination?.ownerId || (isDm(socket) ? null : socket.data.playerId);
+    sheet.ownerUsername = original?.ownerUsername || destination?.ownerUsername || (isDm(socket) ? null : socket.data.username);
+    sheet.ownerId = isDm(socket) ? (original?.ownerId || destination?.ownerId || null) : null;
     if (original?.combat && !sheet.combat) {
       sheet.combat = {
         conditions: original.combat.conditions,
@@ -525,10 +638,11 @@ io.on('connection', (socket) => {
 
   socket.on('character:claim', ({ name } = {}) => {
     const character = state.characters[name];
-    if (!character || isDm(socket) || character.ownerId || !ownsCharacter(socket, character)) {
+    if (!character || isDm(socket) || character.ownerUsername || !ownsCharacter(socket, character)) {
       return deny(socket, 'That character cannot be claimed by this player.');
     }
-    character.ownerId = socket.data.playerId;
+    character.ownerUsername = socket.data.username;
+    character.ownerId = null;
     character.owner = socket.data.name;
     syncCharacterTokens(character);
     persistState();
@@ -539,8 +653,10 @@ io.on('connection', (socket) => {
     const character = state.characters[name];
     if (!isDm(socket) || !character) return deny(socket, 'Only the Dungeon Master can release character ownership.');
     character.ownerId = null;
+    character.ownerUsername = null;
     state.tokens.filter(token => token.characterName === name).forEach(token => {
       token.ownerId = null;
+      token.ownerUsername = null;
       emitToken('token:update', token);
     });
     persistState();

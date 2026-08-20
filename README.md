@@ -43,16 +43,21 @@ Everyone needs to reach the same running server. Running it on your laptop only 
 
 ## What's built so far (the skeleton)
 
-- **Map & tokens**: DM uploads the battle map image. Tokens for NPCs, items and PCs live in a tray and can be moved, snapped to the grid, hidden from players and given simple HP adjustments. Pan and zoom controls work for everyone.
-- **Initiative tracker**: turn order and rounds of NPCs and player characters are all visible directly beside the map (initiative table can be toggled on and off).
+- **Map & tokens**: DM uploads the battle map image. Tokens for NPCs, items and PCs live in a tray and can be moved, snapped to the grid, hidden from players and given one-by-one HP adjustments. Pan and zoom controls work for everyone.
+- **Initiative tracker**: turn order and rounds of NPCs and player characters are all visible directly beside the map (initiative table can be toggled on and off). NPCs can enter the initiative tracker, however do not have their combat modes. 
 - **Jukebox**: add tracks by direct audio URL, playlist syncs playback position/play/pause across all clients. Adding track name for each track could get tiring?
 - **Character sheets**: a basic 5e-style sheet (abilities, HP/AC, inventory, notes) per character, added Humblewood characteristics.
-- **Character-specific dice**: select a character to roll ability checks, saving throws, skills, initiative, attacks, spell attacks etc. with the stored modifiers. d20 rolls support advantage and disadvantage and sync to the shared roll log.
+- **Character-specific dice**: Select a character to roll ability checks, saving throws, skills, initiative, attacks, spell attacks etc. with the stored modifiers. d20 rolls support advantage and disadvantage and sync to the shared roll log. Spell and combat rolls are accessible on the combat page. To unlock damage rolls on spells, simply write its roll (for example 1d10) in the spell description.
 - **Cottagecore Humblewood aesthetic**: parchment and forest tones, vine dividers, soft rounded shapes.
-- **Access restrictions**: DM access is PIN-gated. Character ownership is tied to a persistent browser identity. Token movement/character rolls are checked server-side.
+- **Access restrictions**: DM access is PIN-gated. Character ownership is tied to the "Player" field in character sheet. Players must log in with username and password. Password can be changed by DM upon request, however, username shall stay known. Token movement/character rolls are checked server-side.
 - **Function automation**: Long-rest automation. 
 
 ## Known limitations to build out next
-- No authentication so anyone with the link can join as anyone. 
 - Music playback requires direct audio file URLs. Self-hosted MP3s or a service like SoundCloud's direct stream links also work.
 - More humblewood specific vibes? 
+- For the players, on the sidebar, maybe a quick rundown of charsheet 
+- center the player tokens on grid/dynamically size tokens to fit the grid
+- look up summons waa
+- npc battle functions 
+- save set up scenes with their names (for example HumbleBar saved as a scene that can be called again at any later time, with tokens etc. still on it)
+- add remove and delete npcs functions
