@@ -4,7 +4,7 @@ const path = require('path');
 const multer = require('multer');
 
 const FRONTEND_FILES = ['index.html', 'app.js', 'style.css'];
-const APP_ROUTES = ['/', '/map', '/characters', '/jukebox', '/dice'];
+const APP_ROUTES = ['/', '/map', '/characters', '/almanac', '/jukebox', '/dice'];
 
 function frontendFile(config, filename) {
   const publicFile = path.join(config.publicDir, filename);

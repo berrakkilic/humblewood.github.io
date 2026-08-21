@@ -260,6 +260,7 @@
   <nav class="tabs" aria-label="Table pages">
     <a class="tab-btn active" data-view="map" data-route="map" href="/map">Map</a>
     <a class="tab-btn" data-view="characters" data-route="characters" href="/characters">Characters</a>
+    <a class="tab-btn" data-view="almanac" data-route="almanac" href="/almanac">Humble Almanac</a>
     <a class="tab-btn" data-view="jukebox" data-route="jukebox" href="/jukebox">Jukebox</a>
     <a class="tab-btn" data-view="dice" data-route="dice" href="/dice">Dice</a>
   </nav>
@@ -796,6 +797,44 @@
       </div>
     </section>
 
+    <!-- HUMBLE ALMANAC VIEW -->
+    <section id="view-almanac" class="view">
+      <div class="almanac-shell">
+        <header class="almanac-hero panel">
+          <div class="almanac-hero-copy">
+            <span class="almanac-eyebrow">A field guide for curious folk</span>
+            <h2>🍄 The Humble Almanac</h2>
+            <p>Search the Wood for folk, callings, backgrounds, spells, and campaign lore.</p>
+          </div>
+          <div class="almanac-search-panel">
+            <label for="almanac-search">What are you looking for?</label>
+            <div class="almanac-search-row">
+              <span aria-hidden="true">⌕</span>
+              <input type="search" id="almanac-search" autocomplete="off" placeholder="Try “Brackenmill”, “cleric”, “vulpin”, or “radiant”…">
+              <button class="almanac-search-clear hidden" id="almanac-search-clear" type="button">Clear</button>
+            </div>
+          </div>
+        </header>
+
+        <div class="almanac-toolbar" aria-label="Almanac controls">
+          <span id="almanac-results" role="status" aria-live="polite"></span>
+          <div>
+            <button class="btn-ghost" id="almanac-open-all" type="button">Open all</button>
+            <button class="btn-ghost" id="almanac-close-all" type="button">Close all</button>
+          </div>
+        </div>
+
+        <div id="almanac-categories"></div>
+        <div class="almanac-empty panel hidden" id="almanac-empty">
+          <span aria-hidden="true">🍂</span>
+          <h3>No matching leaves</h3>
+          <p>Try a folk, class, place, spell level, effect, or damage type.</p>
+        </div>
+
+        <p class="almanac-source-note">A table-friendly guide for this Humblewood campaign. Spell and character rules are condensed for quick lookup.</p>
+      </div>
+    </section>
+
     <!-- JUKEBOX VIEW -->
     <section id="view-jukebox" class="view">
       <div class="jukebox-panel panel">
@@ -988,6 +1027,8 @@
 <script src="/socket.io/socket.io.js"></script>
 <script src="/js/map-geometry.js"></script>
 <script src="/js/character-rules.js"></script>
+<script src="/js/almanac-data.js"></script>
+<script src="/js/almanac.js"></script>
 <script src="/js/router.js"></script>
 <script src="app.js"></script>
 

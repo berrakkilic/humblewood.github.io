@@ -166,11 +166,14 @@ const router = window.HumblewoodRouter.createRouter({
   routes: {
     map: { path: '/map', title: 'Map' },
     characters: { path: '/characters', title: 'Characters' },
+    almanac: { path: '/almanac', title: 'Humble Almanac' },
     jukebox: { path: '/jukebox', title: 'Jukebox' },
     dice: { path: '/dice', title: 'Dice' }
   },
   onRoute: renderRoute
 });
+
+window.HumblewoodAlmanac.mount(window.HumblewoodAlmanacData);
 
 document.getElementById('topbar-roll-btn').onclick = () => switchView('dice');
 

@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node server.js",
     "check": "node scripts/check-syntax.js",
-    "test": "npm run check && node test/router.js && node test/map-geometry.js && node test/integration.js"
+    "test": "npm run check && node test/router.js && node test/map-geometry.js && node test/character-rules.js && node test/almanac.js && node test/integration.js"
   },
   "keywords": [],
   "author": "",

@@ -25,6 +25,7 @@ const router = window.HumblewoodRouter.createRouter({
   routes: {
     map: { path: '/map' },
     characters: { path: '/characters' },
+    almanac: { path: '/almanac' },
     dice: { path: '/dice' }
   },
   fallback: 'map',
@@ -38,6 +39,10 @@ assert.equal(visited.at(-1), 'characters');
 router.navigate('dice');
 assert.equal(window.location.pathname, '/dice');
 assert.equal(router.current, 'dice');
+
+router.navigate('almanac');
+assert.equal(window.location.pathname, '/almanac');
+assert.equal(router.current, 'almanac');
 
 window.location.pathname = '/map';
 windowListeners.popstate();

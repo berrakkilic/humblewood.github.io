@@ -66,7 +66,7 @@ async function identify(io, payload) {
 async function run() {
   await serverReady();
 
-  for (const route of ['/map', '/characters', '/jukebox', '/dice']) {
+  for (const route of ['/map', '/characters', '/almanac', '/jukebox', '/dice']) {
     const response = await fetch(`http://127.0.0.1:${port}${route}`);
     assert.equal(response.status, 200, `${route} should load the frontend shell`);
     const html = await response.text();
@@ -79,6 +79,9 @@ async function run() {
     assert.match(html, /id="spell-form-damage"/);
     assert.match(html, /id="spell-preset-select"/);
     assert.match(html, /id="combat-spells"/);
+    assert.match(html, /id="view-almanac"/);
+    assert.match(html, /id="almanac-search"/);
+    assert.match(html, /js\/almanac-data\.js/);
   }
   const routerResponse = await fetch(`http://127.0.0.1:${port}/js/router.js`);
   assert.equal(routerResponse.status, 200);
@@ -86,6 +89,9 @@ async function run() {
   const geometryResponse = await fetch(`http://127.0.0.1:${port}/js/map-geometry.js`);
   assert.equal(geometryResponse.status, 200);
   assert.match(await geometryResponse.text(), /gridMeasurement/);
+  const characterRulesResponse = await fetch(`http://127.0.0.1:${port}/js/character-rules.js`);
+  assert.equal(characterRulesResponse.status, 200);
+  assert.match(await characterRulesResponse.text(), /validatePlayerCharacter/);
 
   global.window = global;
   global.self = global;
@@ -101,7 +107,17 @@ async function run() {
     role: 'player', authMode: 'register', username: 'moss', password: 'password-2', name: 'Moss'
   });
 
-  let pending = once(playerOne.socket, 'scene:update', scene => scene.playerDoodlingEnabled === true);
+  let pending = once(playerOne.socket, 'action:denied', denial => /level.*1 to 20/i.test(denial.message));
+  playerOne.socket.emit('character:save', {
+    name: 'Impossible Hero',
+    fields: {
+      species: 'Corvum (birdfolk)', subrace: 'Dusk Corvum', class: 'Rogue', subclass: 'Thief', level: '21',
+      str: '10', dex: '10', con: '10', int: '10', wis: '10', cha: '10'
+    }
+  });
+  await pending;
+
+  pending = once(playerOne.socket, 'scene:update', scene => scene.playerDoodlingEnabled === true);
   dm.socket.emit('scene:setPlayerDoodling', { enabled: true });
   await pending;
 
