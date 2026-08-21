@@ -58,5 +58,5 @@ Now hosted on `https://humblewood.sfseeger.de/` !! Yippie
 - More humblewood specific vibes? 
 - look up summons waa
 - bug: spellcasting save DC does not change after establishing int/cha/wis once and then changing to another one
-- if: certain species, then only those species' subrace allowed. same with class. characters can only level up to 20. characters only have ability scores up to 20. 
 - information lookup search page?
+- move and doodle dont work on mobile

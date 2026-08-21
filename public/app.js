@@ -6,6 +6,7 @@ const {
   positionStagePoint,
   zoomAroundPoint
 } = window.HumblewoodMapGeometry;
+const characterRules = window.HumblewoodCharacterRules;
 
 let myRole = 'dm';
 let myName = '';
@@ -63,6 +64,8 @@ const CONDITIONS = [
   'Invisible', 'Paralyzed', 'Petrified', 'Poisoned', 'Prone', 'Restrained',
   'Stunned', 'Unconscious'
 ];
+
+initializeCharacterRuleControls();
 
 // ---------------- Join flow ----------------
 document.getElementById('role-dm').onclick = () => setRole('dm');
@@ -1449,6 +1452,55 @@ function renderPlayerSidebar() {
 }
 
 // ================= CHARACTERS =================
+function replaceSelectOptions(select, options, placeholder, selected = '') {
+  select.innerHTML = '';
+  const empty = document.createElement('option');
+  empty.value = '';
+  empty.textContent = placeholder;
+  select.appendChild(empty);
+  options.forEach(value => {
+    const option = document.createElement('option');
+    option.value = value;
+    option.textContent = value;
+    select.appendChild(option);
+  });
+  const canonicalSelected = options.find(value => value.toLowerCase() === String(selected || '').trim().toLowerCase()) || '';
+  select.value = canonicalSelected;
+}
+
+function updateSubraceOptions(selected = '') {
+  const species = characterRules.canonicalSpecies(document.getElementById('sf-species').value);
+  const select = document.getElementById('sf-subrace');
+  const options = characterRules.subracesFor(species);
+  const placeholder = !species ? 'Choose a species first...' : options.length ? 'Choose a subrace...' : 'This species has no subrace';
+  replaceSelectOptions(select, options, placeholder, selected);
+  select.disabled = !species || !options.length || !editingCanEdit;
+}
+
+function updateSubclassOptions(selected = '') {
+  const className = characterRules.canonicalClass(document.getElementById('sf-class').value);
+  const select = document.getElementById('sf-subclass');
+  const options = characterRules.subclassesFor(className);
+  replaceSelectOptions(select, options, className ? 'Choose a subclass...' : 'Choose a class first...', selected);
+  select.disabled = !className || !options.length || !editingCanEdit;
+}
+
+function setCharacterRuleSelections(fields = {}) {
+  document.getElementById('sf-species').value = characterRules.canonicalSpecies(fields.species) || '';
+  updateSubraceOptions(fields.subrace);
+  document.getElementById('sf-class').value = characterRules.canonicalClass(fields.class) || '';
+  updateSubclassOptions(fields.subclass);
+}
+
+function initializeCharacterRuleControls() {
+  replaceSelectOptions(document.getElementById('sf-species'), Object.keys(characterRules.SPECIES_SUBRACES), 'Choose a species...');
+  replaceSelectOptions(document.getElementById('sf-class'), Object.keys(characterRules.CLASS_SUBCLASSES), 'Choose a class...');
+  updateSubraceOptions();
+  updateSubclassOptions();
+  document.getElementById('sf-species').addEventListener('change', () => updateSubraceOptions());
+  document.getElementById('sf-class').addEventListener('change', () => updateSubclassOptions());
+}
+
 function renderCharacters() {
   const grid = document.getElementById('char-grid');
   grid.innerHTML = '';
@@ -1525,6 +1577,7 @@ function openSheetEditor(c) {
     if (input.type === 'checkbox') input.checked = !!fields[key];
     else input.value = fields[key] ?? '';
   });
+  setCharacterRuleSelections(fields);
   editingInventory = normalizeInventory(c?.inventory);
   renderInventoryEditor();
   editingSpells = normalizeSpellList(fields['spell-list']);
@@ -1560,6 +1613,8 @@ function setSheetEditable(canEdit, hasCharacter) {
   document.getElementById('delete-sheet-btn').classList.toggle('hidden', !canEdit || !hasCharacter);
   const ownerNote = document.getElementById('sheet-owner-note');
   ownerNote.textContent = canEdit ? '' : 'Only this character’s owner or the Dungeon Master can edit it.';
+  updateSubraceOptions(document.getElementById('sf-subrace').value);
+  updateSubclassOptions(document.getElementById('sf-subclass').value);
 }
 
 function normalizeInventory(inventory) {
@@ -1906,9 +1961,14 @@ function collectCharacterFields() {
 document.getElementById('save-sheet-btn').onclick = async () => {
   if (!editingCanEdit) return;
   refreshCharacterCalculations(false);
-  const fields = collectCharacterFields();
+  let fields = collectCharacterFields();
   const name = String(fields.name || '').trim();
   if (!name) return alert('Every character needs a name.');
+  const constrainedCharacter = { fields };
+  const validationError = characterRules.validatePlayerCharacter(constrainedCharacter);
+  if (validationError) return alert(validationError);
+  characterRules.applyPlayerCharacterConstraints(constrainedCharacter);
+  fields = constrainedCharacter.fields;
   const saveButton = document.getElementById('save-sheet-btn');
   saveButton.disabled = true;
   saveButton.textContent = 'Saving…';

@@ -489,39 +489,16 @@
 
               <div class="field">
                 <label>Species of the Wood</label>
-                <input type="text" id="sf-species" list="species-suggestions" placeholder="Corvum, Luma, Raptor...">
-                <datalist id="species-suggestions">
-                  <option value="Luma (birdfolk)"><option value="Corvum (birdfolk)"><option value="Raptor (birdfolk)">
-                  <option value="Gallus (birdfolk)"><option value="Strig (birdfolk)"><option value="Vulpin (humblefolk)">
-                  <option value="Mapach (humblefolk)"><option value="Jerbeen (humblefolk)"><option value="Hedge (humblefolk)">
-                  <option value="Cervan (humblefolk)">
-                </datalist>
+                <select id="sf-species"><option value="">Choose a species...</option></select>
               </div>
               <div class="field">
                 <label>Subrace</label>
-                <input type="text" id="sf-subrace" list="subrace-suggestions" placeholder="Dusk Corvum, Grove Cervan...">
-                <datalist id="subrace-suggestions">
-                  <option value="Dusk Corvum"><option value="Kindled Corvum">
-                  <option value="Bright Gallus"><option value="Huden Gallus">
-                  <option value="Sable Luma"><option value="Sera Luma">
-                  <option value="Maran Raptor"><option value="Mistral Raptor">
-                  <option value="Stout Strig"><option value="Swift Strig">
-                  <option value="Grove Cervan"><option value="Pronghorn Cervan">
-                </datalist>
+                <select id="sf-subrace" disabled><option value="">Choose a species first...</option></select>
               </div>
-              <div class="field"><label>Class</label><input type="text" id="sf-class" list="class-suggestions" placeholder="Rogue, Cleric, Bard..."></div>
-              <div class="field"><label>Subclass</label><input type="text" id="sf-subclass" list="subclass-suggestions" placeholder="Thief, Community Domain..."></div>
-              <datalist id="class-suggestions">
-                <option value="Artificer"><option value="Barbarian"><option value="Bard"><option value="Cleric"><option value="Druid">
-                <option value="Fighter"><option value="Monk"><option value="Paladin"><option value="Ranger"><option value="Rogue">
-                <option value="Sorcerer"><option value="Warlock"><option value="Wizard">
-              </datalist>
-              <datalist id="subclass-suggestions">
-                <option value="College of the Road (Bard)"><option value="Community Domain (Cleric)"><option value="Night Domain (Cleric)">
-                <option value="Scofflaw (Fighter)">
-              </datalist>
+              <div class="field"><label>Class</label><select id="sf-class"><option value="">Choose a class...</option></select></div>
+              <div class="field"><label>Subclass</label><select id="sf-subclass" disabled><option value="">Choose a class first...</option></select></div>
 
-              <div class="field"><label>Level</label><input type="number" id="sf-level" value="1" min="1" max="20"></div>
+              <div class="field"><label>Level</label><input type="number" id="sf-level" value="1" min="1" max="20" step="1"></div>
               <div class="field"><label>Background</label><input type="text" id="sf-background" placeholder="Background"></div>
               <div class="field">
                 <label>Alignment</label>
@@ -584,12 +561,12 @@
           <div class="sheet-section section-abilities">
             <div class="sheet-section-title">Ability Scores</div>
             <div class="ability-grid ability-grid-complete">
-              <div class="ability-box"><label>STR</label><input type="number" id="sf-str" value="10"><span class="ability-mod" id="mod-str">+0</span></div>
-              <div class="ability-box"><label>DEX</label><input type="number" id="sf-dex" value="10"><span class="ability-mod" id="mod-dex">+0</span></div>
-              <div class="ability-box"><label>CON</label><input type="number" id="sf-con" value="10"><span class="ability-mod" id="mod-con">+0</span></div>
-              <div class="ability-box"><label>INT</label><input type="number" id="sf-int" value="10"><span class="ability-mod" id="mod-int">+0</span></div>
-              <div class="ability-box"><label>WIS</label><input type="number" id="sf-wis" value="10"><span class="ability-mod" id="mod-wis">+0</span></div>
-              <div class="ability-box"><label>CHA</label><input type="number" id="sf-cha" value="10"><span class="ability-mod" id="mod-cha">+0</span></div>
+              <div class="ability-box"><label>STR</label><input type="number" id="sf-str" value="10" min="1" max="20" step="1"><span class="ability-mod" id="mod-str">+0</span></div>
+              <div class="ability-box"><label>DEX</label><input type="number" id="sf-dex" value="10" min="1" max="20" step="1"><span class="ability-mod" id="mod-dex">+0</span></div>
+              <div class="ability-box"><label>CON</label><input type="number" id="sf-con" value="10" min="1" max="20" step="1"><span class="ability-mod" id="mod-con">+0</span></div>
+              <div class="ability-box"><label>INT</label><input type="number" id="sf-int" value="10" min="1" max="20" step="1"><span class="ability-mod" id="mod-int">+0</span></div>
+              <div class="ability-box"><label>WIS</label><input type="number" id="sf-wis" value="10" min="1" max="20" step="1"><span class="ability-mod" id="mod-wis">+0</span></div>
+              <div class="ability-box"><label>CHA</label><input type="number" id="sf-cha" value="10" min="1" max="20" step="1"><span class="ability-mod" id="mod-cha">+0</span></div>
             </div>
           </div>
 
@@ -1010,6 +987,7 @@
 
 <script src="/socket.io/socket.io.js"></script>
 <script src="/js/map-geometry.js"></script>
+<script src="/js/character-rules.js"></script>
 <script src="/js/router.js"></script>
 <script src="app.js"></script>
 

@@ -1,3 +1,8 @@
+const {
+  applyPlayerCharacterConstraints,
+  validatePlayerCharacter
+} = require('../../../public/js/character-rules');
+
 function registerCharacterHandlers(socket, room) {
   const {
     CONDITIONS, deny, emitCharacterUpdate, emitToken, isDm, normalizeCharacter,
@@ -26,6 +31,9 @@ function registerCharacterHandlers(socket, room) {
     delete sheet.canManage;
     delete sheet.claimed;
     sheet.name = name;
+    const validationError = validatePlayerCharacter(sheet);
+    if (validationError) return deny(socket, validationError);
+    applyPlayerCharacterConstraints(sheet);
     sheet.owner = isDm(socket)
       ? String(sheet.fields?.player || original?.owner || destination?.owner || 'Dungeon Master')
       : socket.data.name;
