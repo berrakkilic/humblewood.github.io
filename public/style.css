@@ -392,7 +392,7 @@ body[data-role="dm"] .token-tray.dm-detailed .token-list-details { display: flex
 #map-stage.fog-editing { cursor: crosshair; }
 #map-image { position: absolute; top: 0; left: 0; z-index: 0; user-select: none; pointer-events: none; }
 #empty-map { touch-action: none; }
-#doodle-canvas { position: absolute; top: 0; left: 0; z-index: 2; }
+#doodle-canvas { position: absolute; top: 0; left: 0; z-index: 2; touch-action: none; }
 #fog-canvas { position: absolute; top: 0; left: 0; z-index: 5; pointer-events: none; display: none; }
 #fog-canvas.active { display: block; }
 #ruler-overlay { position: absolute; inset: 0; z-index: 7; width: 100%; height: 100%; pointer-events: none; overflow: visible; display: none; }
@@ -426,6 +426,7 @@ body[data-role="dm"] .token-tray.dm-detailed .token-list-details { display: flex
   font-size: 20px;
   transform: translate(-50%, -50%);
   z-index: 3;
+  touch-action: none;
 }
 .token-on-map.hidden-token { opacity: 0.45; border-style: dashed; }
 .token-on-map.locked-token { cursor: not-allowed; }

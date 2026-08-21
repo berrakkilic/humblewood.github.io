@@ -18,6 +18,7 @@ let joined = false;
 let state = null;
 let selectedTool = 'move';
 let draggingToken = null;
+let draggingTokenTouchId = null;
 let dragOffset = { x: 0, y: 0 };
 let pendingTrayToken = null; // token about to be dropped from tray
 let mapScale = 1;
@@ -449,6 +450,20 @@ function renderMapTokens() {
       ${controls ? `<div class="token-controls">${controls}</div>` : ''}
     `;
     el.onmousedown = (e) => startDragToken(e, t.id);
+    el.addEventListener('touchstart', event => {
+      if (event.target.closest?.('.token-controls') || selectedTool !== 'move') return;
+      if (event.touches.length !== 1) {
+        cancelDraggedToken();
+        return;
+      }
+      const touch = event.touches[0];
+      event.preventDefault();
+      event.stopPropagation();
+      el.focus({ preventScroll: true });
+      if (startDragTokenAt(touch.clientX, touch.clientY, el, t.id)) {
+        draggingTokenTouchId = touch.identifier;
+      }
+    }, { passive: false });
     el.onkeydown = event => {
       if ((event.key === 'Enter' || event.key === ' ') && canManageCombat) {
         event.preventDefault();
@@ -458,6 +473,7 @@ function renderMapTokens() {
     };
     el.querySelectorAll('.token-controls button').forEach(button => {
       button.onmousedown = (e) => e.stopPropagation();
+      button.ontouchstart = (e) => e.stopPropagation();
       button.onclick = (e) => {
         e.stopPropagation();
         const action = button.dataset.action;
@@ -513,28 +529,39 @@ function emojiFor(kind) {
 }
 
 function startDragToken(e, id) {
-  if (selectedTool !== 'move') return;
-  const token = state.tokens.find(entry => entry.id === id);
-  if (!token?.canControl) return showToast('You can only move your own character token.');
+  if (e.button !== 0) return;
+  if (!startDragTokenAt(e.clientX, e.clientY, e.currentTarget, id)) return;
   e.preventDefault();
-  draggingToken = id;
-  const el = e.currentTarget;
-  const rect = el.getBoundingClientRect();
-  dragOffset.x = (e.clientX - (rect.left + rect.width / 2)) / mapScale;
-  dragOffset.y = (e.clientY - (rect.top + rect.height / 2)) / mapScale;
 }
 
-document.addEventListener('mousemove', (e) => {
+function startDragTokenAt(clientX, clientY, element, id) {
+  if (selectedTool !== 'move') return false;
+  const token = state.tokens.find(entry => entry.id === id);
+  if (!token?.canControl) {
+    showToast('You can only move your own character token.');
+    return false;
+  }
+  draggingToken = id;
+  const rect = element.getBoundingClientRect();
+  dragOffset.x = (clientX - (rect.left + rect.width / 2)) / mapScale;
+  dragOffset.y = (clientY - (rect.top + rect.height / 2)) / mapScale;
+  return true;
+}
+
+function moveDraggedToken(clientX, clientY) {
   if (!draggingToken) return;
   const stage = document.getElementById('map-stage');
   const rect = stage.getBoundingClientRect();
-  const x = (e.clientX - rect.left) / mapScale - dragOffset.x;
-  const y = (e.clientY - rect.top) / mapScale - dragOffset.y;
+  const x = (clientX - rect.left) / mapScale - dragOffset.x;
+  const y = (clientY - rect.top) / mapScale - dragOffset.y;
   const el = document.querySelector(`.token-on-map[data-id="${draggingToken}"]`);
-  if (el) { el.style.left = x + 'px'; el.style.top = y + 'px'; }
-});
+  if (el) {
+    el.style.left = x + 'px';
+    el.style.top = y + 'px';
+  }
+}
 
-document.addEventListener('mouseup', (e) => {
+function finishDraggedToken() {
   if (!draggingToken) return;
   const el = document.querySelector(`.token-on-map[data-id="${draggingToken}"]`);
   if (el) {
@@ -550,7 +577,45 @@ document.addEventListener('mouseup', (e) => {
     socket.emit('token:move', { id: draggingToken, x, y });
   }
   draggingToken = null;
+  draggingTokenTouchId = null;
+}
+
+function cancelDraggedToken() {
+  if (!draggingToken) return;
+  const token = state?.tokens?.find(entry => entry.id === draggingToken);
+  const el = document.querySelector(`.token-on-map[data-id="${draggingToken}"]`);
+  if (token && el) {
+    el.style.left = token.x + 'px';
+    el.style.top = token.y + 'px';
+  }
+  draggingToken = null;
+  draggingTokenTouchId = null;
+}
+
+document.addEventListener('mousemove', (e) => {
+  moveDraggedToken(e.clientX, e.clientY);
 });
+
+document.addEventListener('mouseup', () => finishDraggedToken());
+document.addEventListener('touchmove', event => {
+  if (!draggingToken || draggingTokenTouchId === null) return;
+  const touch = Array.from(event.touches).find(entry => entry.identifier === draggingTokenTouchId);
+  if (!touch) return;
+  event.preventDefault();
+  moveDraggedToken(touch.clientX, touch.clientY);
+}, { passive: false });
+document.addEventListener('touchend', event => {
+  if (!draggingToken || draggingTokenTouchId === null) return;
+  const ended = Array.from(event.changedTouches).some(entry => entry.identifier === draggingTokenTouchId);
+  if (!ended) return;
+  event.preventDefault();
+  finishDraggedToken();
+}, { passive: false });
+document.addEventListener('touchcancel', event => {
+  if (!draggingToken || draggingTokenTouchId === null) return;
+  const cancelled = Array.from(event.changedTouches).some(entry => entry.identifier === draggingTokenTouchId);
+  if (cancelled) cancelDraggedToken();
+}, { passive: false });
 
 // ---- Tool toggle ----
 document.getElementById('tool-move').onclick = () => setTool('move');
@@ -567,6 +632,7 @@ function setTool(tool) {
   if (tool === 'grid-move' && myRole !== 'dm') return;
   const previousTool = selectedTool;
   selectedTool = tool;
+  if (previousTool === 'doodle' && tool !== 'doodle') cancelDoodle();
   ['move', 'pan', 'grid-move', 'ruler', 'ping', 'doodle', 'fog-reveal', 'fog-hide'].forEach(name => {
     document.getElementById(`tool-${name}`)?.classList.toggle('active', tool === name);
   });
@@ -685,6 +751,8 @@ mapStageWrap.addEventListener('touchstart', event => {
   if (!isMapGestureTarget(event.target)) return;
   if (event.touches.length >= 2) {
     event.preventDefault();
+    cancelDraggedToken();
+    cancelDoodle();
     if (touchGesture?.type === 'ruler' || rulerAnchorPoint) clearRuler();
     touchGesture = createPinchGesture(event.touches);
   } else if (event.touches.length === 1 && selectedTool === 'ruler') {
@@ -717,6 +785,8 @@ mapStageWrap.addEventListener('touchstart', event => {
 mapStageWrap.addEventListener('touchmove', event => {
   if (event.touches.length >= 2) {
     event.preventDefault();
+    cancelDraggedToken();
+    cancelDoodle();
     if (touchGesture?.type === 'ruler' || rulerAnchorPoint) clearRuler();
     if (touchGesture?.type !== 'pinch') touchGesture = createPinchGesture(event.touches);
     const current = touchMetrics(event.touches);
@@ -1015,28 +1085,90 @@ function applyMapTransform() {
 // ---- Doodling ----
 let isDrawing = false;
 let currentPath = null;
+let doodleTouchId = null;
 const doodleCanvas = document.getElementById('doodle-canvas');
 const doodleCtx = doodleCanvas.getContext('2d');
 
 doodleCanvas.onmousedown = (e) => {
-  if (selectedTool !== 'doodle') return;
-  isDrawing = true;
-  const pos = getCanvasPos(e);
-  currentPath = { id: 'd' + Date.now(), color: document.getElementById('doodle-color').value, width: 3, points: [pos] };
+  if (e.button !== 0) return;
+  startDoodle(getCanvasPos(e));
 };
 doodleCanvas.onmousemove = (e) => {
-  if (!isDrawing || !currentPath) return;
-  const pos = getCanvasPos(e);
-  currentPath.points.push(pos);
-  drawDoodlePath(currentPath, true);
+  continueDoodle(getCanvasPos(e));
 };
-document.addEventListener('mouseup', () => {
+document.addEventListener('mouseup', () => finishDoodle());
+
+doodleCanvas.addEventListener('touchstart', event => {
+  if (selectedTool !== 'doodle') return;
+  if (event.touches.length !== 1) {
+    cancelDoodle();
+    return;
+  }
+  const touch = event.touches[0];
+  event.preventDefault();
+  if (startDoodle(getCanvasPos(touch))) doodleTouchId = touch.identifier;
+}, { passive: false });
+doodleCanvas.addEventListener('touchmove', event => {
+  if (!isDrawing || doodleTouchId === null) return;
+  if (event.touches.length !== 1) {
+    cancelDoodle();
+    return;
+  }
+  const touch = Array.from(event.touches).find(entry => entry.identifier === doodleTouchId);
+  if (!touch) return;
+  event.preventDefault();
+  continueDoodle(getCanvasPos(touch));
+}, { passive: false });
+doodleCanvas.addEventListener('touchend', event => {
+  if (!isDrawing || doodleTouchId === null) return;
+  const touch = Array.from(event.changedTouches).find(entry => entry.identifier === doodleTouchId);
+  if (!touch) return;
+  event.preventDefault();
+  continueDoodle(getCanvasPos(touch));
+  finishDoodle();
+}, { passive: false });
+doodleCanvas.addEventListener('touchcancel', event => {
+  if (doodleTouchId === null) return;
+  const cancelled = Array.from(event.changedTouches).some(entry => entry.identifier === doodleTouchId);
+  if (cancelled) cancelDoodle();
+}, { passive: false });
+
+function startDoodle(point) {
+  if (selectedTool !== 'doodle' || !canDoodle()) return false;
+  isDrawing = true;
+  currentPath = {
+    id: 'd' + Date.now(),
+    color: document.getElementById('doodle-color').value,
+    width: 3,
+    points: [point]
+  };
+  return true;
+}
+
+function continueDoodle(point) {
+  if (!isDrawing || !currentPath) return;
+  const previous = currentPath.points[currentPath.points.length - 1];
+  if (previous && Math.hypot(point.x - previous.x, point.y - previous.y) < 0.25) return;
+  currentPath.points.push(point);
+  drawDoodlePath(currentPath, true);
+}
+
+function finishDoodle() {
   if (isDrawing && currentPath && currentPath.points.length > 1) {
     socket.emit('scene:doodle:add', currentPath);
   }
   isDrawing = false;
   currentPath = null;
-});
+  doodleTouchId = null;
+}
+
+function cancelDoodle() {
+  if (!isDrawing && doodleTouchId === null) return;
+  isDrawing = false;
+  currentPath = null;
+  doodleTouchId = null;
+  if (state?.scene) redrawAllDoodles();
+}
 
 function getCanvasPos(e) {
   const rect = doodleCanvas.getBoundingClientRect();

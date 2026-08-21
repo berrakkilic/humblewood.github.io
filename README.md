@@ -59,4 +59,3 @@ Now hosted on `https://humblewood.sfseeger.de/` !! Yippie
 - look up summons waa
 - bug: spellcasting save DC does not change after establishing int/cha/wis once and then changing to another one
 - information lookup search page?
-- move and doodle dont work on mobile
