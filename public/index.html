@@ -127,10 +127,33 @@
   align-items:center;
 }
 #sheet-editor .inventory-add-row input { width:100% !important; min-width:0; }
-#sheet-editor .spell-levels { display:grid; grid-template-columns:58px 74px 74px 1fr; gap:7px; align-items:start; margin:10px 0; }
+#sheet-editor .spell-slots-grid { display:grid; grid-template-columns:58px 74px 74px; gap:7px; align-items:center; margin:10px 0; max-width:320px; }
 #sheet-editor .spell-level-head { font-size:12px; font-weight:700; opacity:.72; padding:4px; }
-#sheet-editor .spell-level-label { font-weight:700; text-align:center; padding-top:9px; }
-#sheet-editor .spell-levels textarea { min-height:46px; resize:vertical; }
+#sheet-editor .spell-level-label { font-weight:700; text-align:center; }
+#sheet-editor .spell-list-heading { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:6px; }
+#sheet-editor .spell-add-form { display:flex; flex-direction:column; gap:10px; background:var(--parchment-dark); border-radius:10px; padding:12px; margin-bottom:10px; }
+#sheet-editor .spell-add-form.hidden { display:none; }
+#sheet-editor .spell-preset-row { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:end; gap:8px; padding-bottom:10px; border-bottom:1px solid rgba(58,46,37,.12); }
+#sheet-editor .spell-form-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:9px; }
+#sheet-editor .spell-form-field { display:flex; flex-direction:column; gap:4px; min-width:0; color:var(--ink-soft); font-size:11px; font-weight:700; }
+#sheet-editor .spell-form-field input,
+#sheet-editor .spell-form-field select,
+#sheet-editor .spell-form-field textarea { width:100%; min-width:0; }
+#sheet-editor .spell-form-wide { grid-column:1 / -1; }
+#sheet-editor .spell-form-actions { display:flex; gap:8px; }
+#sheet-editor .spell-form-actions button { flex:1; }
+#sheet-editor .spell-level-group { margin-bottom:8px; }
+#sheet-editor .spell-level-group-title { font-size:12px; font-weight:700; opacity:.72; text-transform:uppercase; letter-spacing:.03em; margin:6px 0 4px; }
+#sheet-editor .spell-list-item { display:flex; align-items:flex-start; justify-content:space-between; gap:8px; background:#fffdf8; border:1px solid rgba(58,46,37,0.1); border-radius:8px; padding:6px 10px; margin-bottom:6px; }
+#sheet-editor .spell-list-item-main { min-width:0; }
+#sheet-editor .spell-list-item-name { font-weight:700; font-size:13px; }
+#sheet-editor .spell-source-badge { display:inline-block; margin-left:6px; padding:2px 6px; border-radius:999px; background:var(--moss); color:#fff; font-size:9px; line-height:1.3; vertical-align:1px; }
+#sheet-editor .spell-list-item-meta { display:flex; flex-wrap:wrap; gap:4px 8px; margin-top:3px; color:var(--forest); font-size:10px; font-weight:700; }
+#sheet-editor .spell-list-item-desc { font-size:12px; color:var(--ink-soft); line-height:1.4; margin-top:2px; }
+#sheet-editor .spell-list-item-actions { display:flex; gap:6px; flex-shrink:0; }
+#sheet-editor .spell-list-item-actions button { background:none; border:none; cursor:pointer; font-size:13px; padding:2px 4px; }
+#sheet-editor .spell-list-item-actions .edit { color:var(--forest); }
+#sheet-editor .spell-list-item-actions .del { color:var(--rose-deep); font-weight:700; }
 #sheet-editor .sheet-save-row { position:sticky; bottom:8px; z-index:5; padding:10px; border-radius:12px; backdrop-filter:blur(8px); background:rgba(250,247,240,.86); }
 #sheet-editor small { display:block; opacity:.7; line-height:1.35; margin-top:4px; }
 @media (max-width: 1450px) {
@@ -161,7 +184,10 @@
   #sheet-editor .attack-table { grid-template-columns:1fr; }
   #sheet-editor .attack-head { display:none; }
   #sheet-editor .money-grid { grid-template-columns:repeat(3,minmax(0,1fr)); }
-  #sheet-editor .spell-levels { grid-template-columns:42px 58px 58px 1fr; }
+  #sheet-editor .spell-slots-grid { grid-template-columns:42px 58px 58px; }
+  #sheet-editor .spell-form-grid, #sheet-editor .spell-preset-row { grid-template-columns:1fr; }
+  #sheet-editor .spell-form-wide { grid-column:auto; }
+  #sheet-editor .spell-preset-row button { width:100%; }
   #sheet-editor .inventory-add-row { grid-template-columns:1fr 72px; }
   #sheet-editor .inventory-add-row button { grid-column:1 / -1; width:100%; }
 }
@@ -676,19 +702,86 @@
               <div class="field"><label>Spell Save DC</label><input type="number" id="sf-spell-dc"></div>
               <div class="field"><label>Spell Attack Bonus</label><input type="number" id="sf-spell-attack"></div>
             </div>
-            <div class="field"><label>Cantrips</label><textarea id="sf-spells-0" rows="3" placeholder="Cantrips known..."></textarea></div>
-            <div class="spell-levels">
-              <div class="spell-level-head">Level</div><div class="spell-level-head">Slots</div><div class="spell-level-head">Used</div><div class="spell-level-head">Spells known / prepared</div>
-              <div class="spell-level-label">1</div><input type="number" id="sf-spell-slots-1" min="0" value="0"><input type="number" id="sf-spell-used-1" min="0" value="0"><textarea id="sf-spells-1" rows="2" placeholder="Level 1 spells..."></textarea>
-              <div class="spell-level-label">2</div><input type="number" id="sf-spell-slots-2" min="0" value="0"><input type="number" id="sf-spell-used-2" min="0" value="0"><textarea id="sf-spells-2" rows="2" placeholder="Level 2 spells..."></textarea>
-              <div class="spell-level-label">3</div><input type="number" id="sf-spell-slots-3" min="0" value="0"><input type="number" id="sf-spell-used-3" min="0" value="0"><textarea id="sf-spells-3" rows="2" placeholder="Level 3 spells..."></textarea>
-              <div class="spell-level-label">4</div><input type="number" id="sf-spell-slots-4" min="0" value="0"><input type="number" id="sf-spell-used-4" min="0" value="0"><textarea id="sf-spells-4" rows="2" placeholder="Level 4 spells..."></textarea>
-              <div class="spell-level-label">5</div><input type="number" id="sf-spell-slots-5" min="0" value="0"><input type="number" id="sf-spell-used-5" min="0" value="0"><textarea id="sf-spells-5" rows="2" placeholder="Level 5 spells..."></textarea>
-              <div class="spell-level-label">6</div><input type="number" id="sf-spell-slots-6" min="0" value="0"><input type="number" id="sf-spell-used-6" min="0" value="0"><textarea id="sf-spells-6" rows="2" placeholder="Level 6 spells..."></textarea>
-              <div class="spell-level-label">7</div><input type="number" id="sf-spell-slots-7" min="0" value="0"><input type="number" id="sf-spell-used-7" min="0" value="0"><textarea id="sf-spells-7" rows="2" placeholder="Level 7 spells..."></textarea>
-              <div class="spell-level-label">8</div><input type="number" id="sf-spell-slots-8" min="0" value="0"><input type="number" id="sf-spell-used-8" min="0" value="0"><textarea id="sf-spells-8" rows="2" placeholder="Level 8 spells..."></textarea>
-              <div class="spell-level-label">9</div><input type="number" id="sf-spell-slots-9" min="0" value="0"><input type="number" id="sf-spell-used-9" min="0" value="0"><textarea id="sf-spells-9" rows="2" placeholder="Level 9 spells..."></textarea>
+            <div class="spell-slots-grid">
+              <div class="spell-level-head">Level</div><div class="spell-level-head">Slots</div><div class="spell-level-head">Used</div>
+              <div class="spell-level-label">1</div><input type="number" id="sf-spell-slots-1" min="0" value="0"><input type="number" id="sf-spell-used-1" min="0" value="0">
+              <div class="spell-level-label">2</div><input type="number" id="sf-spell-slots-2" min="0" value="0"><input type="number" id="sf-spell-used-2" min="0" value="0">
+              <div class="spell-level-label">3</div><input type="number" id="sf-spell-slots-3" min="0" value="0"><input type="number" id="sf-spell-used-3" min="0" value="0">
+              <div class="spell-level-label">4</div><input type="number" id="sf-spell-slots-4" min="0" value="0"><input type="number" id="sf-spell-used-4" min="0" value="0">
+              <div class="spell-level-label">5</div><input type="number" id="sf-spell-slots-5" min="0" value="0"><input type="number" id="sf-spell-used-5" min="0" value="0">
+              <div class="spell-level-label">6</div><input type="number" id="sf-spell-slots-6" min="0" value="0"><input type="number" id="sf-spell-used-6" min="0" value="0">
+              <div class="spell-level-label">7</div><input type="number" id="sf-spell-slots-7" min="0" value="0"><input type="number" id="sf-spell-used-7" min="0" value="0">
+              <div class="spell-level-label">8</div><input type="number" id="sf-spell-slots-8" min="0" value="0"><input type="number" id="sf-spell-used-8" min="0" value="0">
+              <div class="spell-level-label">9</div><input type="number" id="sf-spell-slots-9" min="0" value="0"><input type="number" id="sf-spell-used-9" min="0" value="0">
             </div>
+
+            <input type="hidden" id="sf-spell-list" value="[]">
+            <div class="field spell-list-field">
+              <div class="spell-list-heading">
+                <label>Spells & cantrips</label>
+                <button type="button" class="btn-ghost" id="spell-add-btn">+ Add spell</button>
+              </div>
+              <div id="spell-add-form" class="spell-add-form hidden">
+                <div class="spell-preset-row">
+                  <label class="spell-form-field" for="spell-preset-select">Humblewood preset
+                    <select id="spell-preset-select">
+                      <option value="">Choose a setting spell...</option>
+                    </select>
+                  </label>
+                  <button type="button" class="btn-ghost" id="spell-preset-load">Load preset</button>
+                </div>
+                <div class="spell-form-grid">
+                  <label class="spell-form-field">Spell name
+                    <input type="text" id="spell-form-name" placeholder="Fire Bolt">
+                  </label>
+                  <label class="spell-form-field">Level
+                    <select id="spell-form-level">
+                      <option value="0">Cantrip</option>
+                      <option value="1">Level 1</option>
+                      <option value="2">Level 2</option>
+                      <option value="3">Level 3</option>
+                      <option value="4">Level 4</option>
+                      <option value="5">Level 5</option>
+                      <option value="6">Level 6</option>
+                      <option value="7">Level 7</option>
+                      <option value="8">Level 8</option>
+                      <option value="9">Level 9</option>
+                    </select>
+                  </label>
+                  <label class="spell-form-field">School
+                    <input type="text" id="spell-form-school" placeholder="Evocation">
+                  </label>
+                  <label class="spell-form-field">Range
+                    <input type="text" id="spell-form-range" placeholder="120 feet / Self / Touch">
+                  </label>
+                  <label class="spell-form-field">Casting time
+                    <input type="text" id="spell-form-casting-time" placeholder="1 action">
+                  </label>
+                  <label class="spell-form-field">Duration
+                    <input type="text" id="spell-form-duration" placeholder="Instantaneous / Concentration, 1 minute">
+                  </label>
+                  <label class="spell-form-field spell-form-wide">Attack / save
+                    <input type="text" id="spell-form-attack" placeholder="Ranged spell attack / DEX save / none">
+                  </label>
+                  <label class="spell-form-field spell-form-wide">Damage / healing
+                    <input type="text" id="spell-form-damage" placeholder="2d10 fire / 1d8+3 healing">
+                  </label>
+                  <label class="spell-form-field spell-form-wide">Components
+                    <input type="text" id="spell-form-components" placeholder="V, S, M (a tiny ball of bat guano)">
+                  </label>
+                  <label class="spell-form-field spell-form-wide">Effect
+                    <textarea id="spell-form-effect" rows="3" placeholder="What the spell does, conditions it applies, and any upcasting notes..."></textarea>
+                  </label>
+                </div>
+                <div class="spell-form-actions">
+                  <button type="button" class="btn-primary" id="spell-form-save">Save spell</button>
+                  <button type="button" class="btn-ghost" id="spell-form-cancel">Cancel</button>
+                </div>
+              </div>
+              <div id="spell-list"></div>
+              <p class="sidebar-help">Grouped by level. Dice entered in Damage / healing become one-click rolls in combat.</p>
+            </div>
+
             <div class="field"><label>Spellcasting notes</label><textarea id="sf-spell-notes" rows="3" placeholder="Rituals, prepared spell rules, spellbook, components, focus..."></textarea></div>
           </details>
 

@@ -73,6 +73,12 @@ async function run() {
     assert.match(html, /The Humblewood Table/);
     assert.match(html, /js\/map-geometry\.js/);
     assert.match(html, /id="zoom-fit"/);
+    assert.match(html, /id="spell-form-range"/);
+    assert.match(html, /id="spell-form-effect"/);
+    assert.match(html, /id="spell-form-attack"/);
+    assert.match(html, /id="spell-form-damage"/);
+    assert.match(html, /id="spell-preset-select"/);
+    assert.match(html, /id="combat-spells"/);
   }
   const routerResponse = await fetch(`http://127.0.0.1:${port}/js/router.js`);
   assert.equal(routerResponse.status, 200);

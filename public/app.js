@@ -28,6 +28,8 @@ let spacePanPressed = false;
 let lastFittedMapUrl = null;
 let editingOriginalName = null;
 let editingInventory = [];
+let editingSpells = [];
+let editingSpellId = null;
 let editingPortraitUrl = null;
 let pendingPortraitFile = null;
 let editingCanEdit = true;
@@ -1481,6 +1483,11 @@ function openSheetEditor(c) {
   });
   editingInventory = normalizeInventory(c?.inventory);
   renderInventoryEditor();
+  editingSpells = normalizeSpellList(fields['spell-list']);
+  if (!editingSpells.length) editingSpells = migrateLegacySpellText(fields);
+  editingSpellId = null;
+  document.getElementById('spell-add-form').classList.add('hidden');
+  renderSpellListEditor();
   renderPortraitPreview(editingPortraitUrl);
   refreshCharacterCalculations(!c);
   setSheetEditable(editingCanEdit, !!c);
@@ -1557,6 +1564,268 @@ document.getElementById('inv-add-btn').onclick = () => {
   nameInput.value = '';
   qtyInput.value = 1;
   renderInventoryEditor();
+};
+
+// ---- Spell list editor ----
+const SPELL_LEVEL_NAMES = ['Cantrip', 'Level 1', 'Level 2', 'Level 3', 'Level 4', 'Level 5', 'Level 6', 'Level 7', 'Level 8', 'Level 9'];
+const HUMBLEWOOD_SPELL_PRESETS = [
+  {
+    name: 'Ambush Prey', level: 2, school: 'Illusion', range: 'Self', castingTime: '1 action',
+    duration: '1 hour', components: 'S, M (a broken twig)', attack: 'First attack against an unaware target',
+    damage: '+1d6', source: 'Humblewood',
+    effect: 'Become invisible while you remain within 5 feet of where you cast the spell. Your first attack against a target unaware of you deals extra damage and ends the spell. The bonus damage rises by 1d6 per slot level above 2nd.'
+  },
+  {
+    name: 'Elevated Sight', level: 1, school: 'Divination', range: 'Self', castingTime: '1 action',
+    duration: 'Concentration, up to 1 minute', components: 'V, S', attack: 'None', damage: '', source: 'Humblewood',
+    effect: 'See through a movable invisible sensor up to 120 feet above you with a 360-degree view. You are blind while looking through the sensor.'
+  },
+  {
+    name: 'Feathered Reach', level: 3, school: 'Transmutation', range: 'Self', castingTime: '1 action',
+    duration: '1 minute', components: 'S, M (a small feather)', attack: 'None', damage: '', source: 'Humblewood',
+    effect: 'Your arms become wings. You gain bonus-action flight up to twice your speed but must land, an upward boost, reaction gliding, and improved jumping. Your hands must be free of shields and heavy weapons, and you cannot be encumbered.'
+  },
+  {
+    name: 'Globe of Twilight', level: 3, school: 'Conjuration', range: 'Self (15-foot radius, 15 feet high)', castingTime: '1 action',
+    duration: 'Concentration, up to 10 minutes', components: 'V, S, M (pitch and glittering sand)', attack: 'Wisdom save', damage: '', source: 'Humblewood',
+    effect: 'Create a lightly obscured twilight sphere. Chosen creatures can hide and have advantage on Stealth. Other creatures have disadvantage on Perception and can be blinded until the end of their turn on a failed save.'
+  },
+  {
+    name: 'Gust Barrier', level: 0, school: 'Evocation', range: 'Self', castingTime: '1 action',
+    duration: '1 round', components: 'S', attack: 'Constitution save after a melee hit', damage: '', source: 'Humblewood',
+    effect: 'Ranged attacks against you have disadvantage until the end of your next turn. A melee attacker that hits must save or be pushed up to 10 feet away and knocked prone.'
+  },
+  {
+    name: 'Invoke the Amaranthine', level: 3, school: 'Divination', range: 'Self; affects a visible creature within 60 feet', castingTime: '10 minutes',
+    duration: '24 hours', components: 'V, S, M (a holy symbol of the Amaranthine)', attack: 'None', damage: '', source: 'Humblewood',
+    effect: 'Roll and record two d20s, assigning each to attacks, checks, or saves. For 24 hours, use a reaction to replace a matching roll made by a visible ally or enemy within 60 feet before the outcome is known.'
+  },
+  {
+    name: 'Shape Plants', level: 4, school: 'Transmutation', range: 'Touch', castingTime: '1 action',
+    duration: 'Instantaneous; shaped form normally lasts 1 hour', components: 'V, S', attack: 'None', damage: '2d4 piercing per 5 feet moved', source: 'Humblewood',
+    effect: 'Reshape plant life in a 5-foot cube. Brambles or thorny plants can become damaging difficult terrain. A plant may agree to keep the new form; the affected cube grows by 5 feet per slot level above 4th.'
+  },
+  {
+    name: 'Spiny Shield', level: 1, school: 'Abjuration', range: 'Self', castingTime: '1 reaction',
+    duration: '1 round', components: 'V, S, M (a small quill)', attack: 'Triggers when hit by a melee attack', damage: '2d4 piercing', source: 'Humblewood',
+    effect: 'Reduce the triggering melee damage by 2d4 and deal the same amount to the attacker. The barrier also grants +2 AC against ranged attacks. Both dice effects rise by 1d4 per slot level above 1st.'
+  },
+  {
+    name: 'Stellar Bodies', level: 4, school: 'Evocation', range: 'Special; star attack reaches 120 feet', castingTime: '1 action',
+    duration: '1 minute', components: 'V, S', attack: 'Ranged spell attack; Wisdom and Constitution saves', damage: '4d8 radiant', source: 'Humblewood',
+    effect: 'Create two orbiting stars. Nearby melee attackers can take 1d8 radiant damage per star on a failed Wisdom save. Once per round, expend a star as a ranged spell attack; on a hit the target takes damage and can be blinded on a failed Constitution save.'
+  },
+  {
+    name: 'Veil of Dusk', level: 1, school: 'Abjuration', range: '60 feet', castingTime: '1 bonus action',
+    duration: 'Concentration, up to 10 minutes', components: 'V, S, M (a pinch of soot)', attack: 'None', damage: '', source: 'Humblewood',
+    effect: 'Cloak one creature in shadow and silence. The target gains +1 AC and has advantage on Stealth checks for the duration.'
+  }
+];
+
+function normalizeSpell(spell, index = 0) {
+  if (!spell || typeof spell !== 'object') return null;
+  const name = String(spell.name || '').trim();
+  if (!name) return null;
+  return {
+    id: String(spell.id || `spell-normalized-${index}`),
+    name,
+    level: Math.max(0, Math.min(9, Number(spell.level) || 0)),
+    school: String(spell.school || '').trim(),
+    range: String(spell.range || '').trim(),
+    castingTime: String(spell.castingTime || '').trim(),
+    duration: String(spell.duration || '').trim(),
+    components: String(spell.components || '').trim(),
+    attack: String(spell.attack || '').trim(),
+    damage: String(spell.damage || '').trim(),
+    effect: String(spell.effect ?? spell.description ?? '').trim(),
+    source: String(spell.source || '').trim()
+  };
+}
+
+function normalizeSpellList(raw) {
+  let list = Array.isArray(raw) ? raw : null;
+  if (typeof raw === 'string' && raw.trim()) {
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) list = parsed;
+    } catch (err) { /* not JSON, treated as empty — legacy text lives in spells-N fields */ }
+  }
+  return (list || []).map(normalizeSpell).filter(Boolean);
+}
+
+function migrateLegacySpellText(fields) {
+  const migrated = [];
+  for (let level = 0; level <= 9; level += 1) {
+    const text = String(fields?.[`spells-${level}`] || '').trim();
+    if (!text) continue;
+    text.split(/\n|;/).flatMap(line => {
+      const trimmed = line.trim();
+      return trimmed.includes(',') && !/\d+d\d+/i.test(trimmed) ? trimmed.split(',') : [trimmed];
+    }).map(name => name.trim()).filter(Boolean).forEach(name => {
+      migrated.push(normalizeSpell({ id: `spell-migrated-${level}-${migrated.length}`, name, level }, migrated.length));
+    });
+  }
+  return migrated;
+}
+
+function syncSpellListField() {
+  document.getElementById('sf-spell-list').value = JSON.stringify(editingSpells);
+}
+
+function renderSpellListEditor() {
+  const container = document.getElementById('spell-list');
+  container.innerHTML = '';
+  if (!editingSpells.length) {
+    container.innerHTML = '<p class="sidebar-help">No spells added yet.</p>';
+    syncSpellListField();
+    return;
+  }
+  const byLevel = new Map();
+  editingSpells.forEach(spell => {
+    const level = Math.max(0, Math.min(9, Number(spell.level) || 0));
+    if (!byLevel.has(level)) byLevel.set(level, []);
+    byLevel.get(level).push(spell);
+  });
+  [...byLevel.keys()].sort((a, b) => a - b).forEach(level => {
+    const group = document.createElement('div');
+    group.className = 'spell-level-group';
+    const title = document.createElement('div');
+    title.className = 'spell-level-group-title';
+    title.textContent = SPELL_LEVEL_NAMES[level];
+    group.appendChild(title);
+    byLevel.get(level).forEach(spell => {
+      const row = document.createElement('div');
+      row.className = 'spell-list-item';
+      const main = document.createElement('div');
+      main.className = 'spell-list-item-main';
+      const name = document.createElement('div');
+      name.className = 'spell-list-item-name';
+      name.textContent = spell.name;
+      if (spell.source) {
+        const source = document.createElement('span');
+        source.className = 'spell-source-badge';
+        source.textContent = spell.source;
+        name.appendChild(source);
+      }
+      main.appendChild(name);
+      const metadata = [
+        spell.school,
+        spell.range ? `Range: ${spell.range}` : '',
+        spell.attack && !/^none$/i.test(spell.attack) ? `Attack/save: ${spell.attack}` : '',
+        spell.damage ? `Damage: ${spell.damage}` : ''
+      ].filter(Boolean);
+      if (metadata.length) {
+        const meta = document.createElement('div');
+        meta.className = 'spell-list-item-meta';
+        metadata.forEach(value => {
+          const item = document.createElement('span');
+          item.textContent = value;
+          meta.appendChild(item);
+        });
+        main.appendChild(meta);
+      }
+      if (spell.effect) {
+        const desc = document.createElement('div');
+        desc.className = 'spell-list-item-desc';
+        desc.textContent = spell.effect;
+        main.appendChild(desc);
+      }
+      row.appendChild(main);
+      const actions = document.createElement('div');
+      actions.className = 'spell-list-item-actions';
+      const edit = document.createElement('button');
+      edit.type = 'button'; edit.className = 'edit'; edit.textContent = '✎'; edit.title = 'Edit spell';
+      edit.disabled = !editingCanEdit;
+      edit.onclick = () => openSpellForm(spell);
+      const del = document.createElement('button');
+      del.type = 'button'; del.className = 'del'; del.textContent = '×'; del.title = 'Remove spell';
+      del.disabled = !editingCanEdit;
+      del.onclick = () => {
+        editingSpells = editingSpells.filter(entry => entry.id !== spell.id);
+        renderSpellListEditor();
+      };
+      actions.append(edit, del);
+      row.appendChild(actions);
+      group.appendChild(row);
+    });
+    container.appendChild(group);
+  });
+  syncSpellListField();
+}
+
+function populateSpellForm(spell = {}) {
+  const form = document.getElementById('spell-add-form');
+  const normalized = normalizeSpell({ name: spell.name || ' ', ...spell }) || {};
+  form.dataset.spellSource = normalized.source || '';
+  document.getElementById('spell-form-name').value = spell.name || '';
+  document.getElementById('spell-form-level').value = normalized.level ?? '0';
+  document.getElementById('spell-form-school').value = normalized.school || '';
+  document.getElementById('spell-form-range').value = normalized.range || '';
+  document.getElementById('spell-form-casting-time').value = normalized.castingTime || '';
+  document.getElementById('spell-form-duration').value = normalized.duration || '';
+  document.getElementById('spell-form-components').value = normalized.components || '';
+  document.getElementById('spell-form-attack').value = normalized.attack || '';
+  document.getElementById('spell-form-damage').value = normalized.damage || '';
+  document.getElementById('spell-form-effect').value = normalized.effect || '';
+}
+
+function openSpellForm(spell) {
+  const form = document.getElementById('spell-add-form');
+  form.classList.remove('hidden');
+  editingSpellId = spell ? spell.id : null;
+  document.getElementById('spell-preset-select').value = '';
+  populateSpellForm(spell || {});
+  document.getElementById('spell-form-name').focus();
+}
+
+const spellPresetSelect = document.getElementById('spell-preset-select');
+HUMBLEWOOD_SPELL_PRESETS
+  .slice()
+  .sort((a, b) => a.level - b.level || a.name.localeCompare(b.name))
+  .forEach(spell => {
+    const option = document.createElement('option');
+    option.value = spell.name;
+    option.textContent = `${SPELL_LEVEL_NAMES[spell.level]} · ${spell.name}`;
+    spellPresetSelect.appendChild(option);
+  });
+
+document.getElementById('spell-preset-load').onclick = () => {
+  const preset = HUMBLEWOOD_SPELL_PRESETS.find(spell => spell.name === spellPresetSelect.value);
+  if (!preset) return showToast('Choose a Humblewood spell first.');
+  populateSpellForm(preset);
+};
+
+document.getElementById('spell-add-btn').onclick = () => openSpellForm(null);
+document.getElementById('spell-form-cancel').onclick = () => {
+  document.getElementById('spell-add-form').classList.add('hidden');
+  editingSpellId = null;
+};
+document.getElementById('spell-form-save').onclick = () => {
+  const name = document.getElementById('spell-form-name').value.trim();
+  if (!name) return alert('Give the spell a name first.');
+  const spell = normalizeSpell({
+    id: editingSpellId || `spell-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    name,
+    level: document.getElementById('spell-form-level').value,
+    school: document.getElementById('spell-form-school').value,
+    range: document.getElementById('spell-form-range').value,
+    castingTime: document.getElementById('spell-form-casting-time').value,
+    duration: document.getElementById('spell-form-duration').value,
+    components: document.getElementById('spell-form-components').value,
+    attack: document.getElementById('spell-form-attack').value,
+    damage: document.getElementById('spell-form-damage').value,
+    effect: document.getElementById('spell-form-effect').value,
+    source: document.getElementById('spell-add-form').dataset.spellSource || ''
+  });
+  if (editingSpellId) {
+    const index = editingSpells.findIndex(entry => entry.id === editingSpellId);
+    if (index !== -1) editingSpells[index] = spell;
+  } else {
+    editingSpells.push(spell);
+  }
+  editingSpellId = null;
+  document.getElementById('spell-add-form').classList.add('hidden');
+  renderSpellListEditor();
 };
 
 document.getElementById('sf-portrait').onchange = (event) => {
@@ -2176,25 +2445,58 @@ function renderCombatRolls(character, isNpc = false) {
   spells.innerHTML = '';
   (isNpc ? [] : characterSpellEntries(character)).forEach(spell => {
     const row = document.createElement('div');
-    row.className = 'combat-roll-row';
+    row.className = 'combat-roll-row combat-spell-card';
+    const info = document.createElement('div');
+    info.className = 'combat-spell-info';
+    const heading = document.createElement('div');
+    heading.className = 'combat-spell-heading';
     const name = document.createElement('span');
     name.className = 'combat-roll-name';
     name.textContent = spell.name;
     const level = document.createElement('small');
-    level.textContent = spell.level === 0 ? 'Cantrip' : `Level ${spell.level}`;
-    name.appendChild(level);
-    row.appendChild(name);
-    if (hasSpellAttack) {
-      const modifier = Number(spellAttackValue) || 0;
-      row.appendChild(makeCombatRollButton(`Attack ${signed(modifier)}`, () => rollCharacterD20(character, `${spell.name} spell attack`, modifier, { mode: mode() })));
+    level.textContent = [spell.level === 0 ? 'Cantrip' : `Level ${spell.level}`, spell.school, spell.source].filter(Boolean).join(' · ');
+    heading.append(name, level);
+    info.appendChild(heading);
+
+    const metadata = [
+      spell.castingTime ? `Cast: ${spell.castingTime}` : '',
+      spell.range ? `Range: ${spell.range}` : '',
+      spell.duration ? `Duration: ${spell.duration}` : '',
+      spell.attack && !/^none$/i.test(spell.attack) ? `Attack/save: ${spell.attack}` : '',
+      spell.damage ? `Damage: ${spell.damage}` : ''
+    ].filter(Boolean);
+    if (metadata.length) {
+      const meta = document.createElement('div');
+      meta.className = 'combat-spell-meta';
+      metadata.forEach(value => {
+        const detail = document.createElement('span');
+        detail.textContent = value;
+        meta.appendChild(detail);
+      });
+      info.appendChild(meta);
     }
-    const damage = parseDiceExpression(spell.name);
+    if (spell.effect) {
+      const effect = document.createElement('p');
+      effect.className = 'combat-spell-effect';
+      effect.textContent = spell.effect;
+      info.appendChild(effect);
+    }
+    row.appendChild(info);
+
+    const actions = document.createElement('div');
+    actions.className = 'combat-spell-actions';
+    if (hasSpellAttack && /\bspell attack\b/i.test(spell.attack)) {
+      const modifier = Number(spellAttackValue) || 0;
+      actions.appendChild(makeCombatRollButton(`Attack ${signed(modifier)}`, () => rollCharacterD20(character, `${spell.name} spell attack`, modifier, { mode: mode() })));
+    }
+    const damage = parseDiceExpression(spell.damage || spell.effect || spell.name);
     if (damage) {
-      row.appendChild(makeCombatRollButton(damage.expression, () => rollDice(damage.count, damage.sides, damage.modifier, {
+      actions.appendChild(makeCombatRollButton(`Roll ${damage.expression}`, () => rollDice(damage.count, damage.sides, damage.modifier, {
         characterName: character.name,
         label: `${spell.name} damage`
       }), true));
     }
+    if (actions.children.length) row.appendChild(actions);
     spells.appendChild(row);
   });
   if (!spells.children.length) spells.innerHTML = '<p class="empty-roll-options">No spells are listed on the sheet.</p>';
@@ -2210,6 +2512,11 @@ function makeCombatRollButton(label, onclick, damage = false) {
 }
 
 function characterSpellEntries(character) {
+  const structured = normalizeSpellList(character.fields?.['spell-list']);
+  if (structured.length) {
+    return structured
+      .sort((a, b) => a.level - b.level || a.name.localeCompare(b.name));
+  }
   const entries = [];
   for (let level = 0; level <= 9; level += 1) {
     const text = String(character.fields?.[`spells-${level}`] || '').trim();
@@ -2217,7 +2524,7 @@ function characterSpellEntries(character) {
     text.split(/\n|;/).flatMap(line => {
       const trimmed = line.trim();
       return trimmed.includes(',') && !/\d+d\d+/i.test(trimmed) ? trimmed.split(',') : [trimmed];
-    }).map(name => name.trim()).filter(Boolean).forEach(name => entries.push({ level, name }));
+    }).map(name => name.trim()).filter(Boolean).forEach(name => entries.push(normalizeSpell({ level, name }, entries.length)));
   }
   return entries;
 }
