@@ -60,4 +60,3 @@ Now hosted on `https://humblewood.sfseeger.de/` !! Yippie
 - bug: spellcasting save DC does not change after establishing int/cha/wis once and then changing to another one
 - if: certain species, then only those species' subrace allowed. same with class. characters can only level up to 20. characters only have ability scores up to 20. 
 - information lookup search page?
-- ruler does not work on mobile

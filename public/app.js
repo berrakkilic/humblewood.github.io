@@ -38,6 +38,7 @@ let toastTimer = null;
 let activeCombatTarget = null;
 let editingNpcId = null;
 let rulerStartPoint = null;
+let rulerAnchorPoint = null;
 let mapAreaDrag = null;
 let lastPointerSentAt = 0;
 let draggedInitiativeId = null;
@@ -575,6 +576,7 @@ function setTool(tool) {
   stage.classList.toggle('fog-editing', tool.startsWith('fog-'));
   if (previousTool === 'ping' && tool !== 'ping') socket.emit('pointer:hide');
   if (tool !== 'ruler') clearRuler();
+  if (tool === 'ruler' && previousTool !== 'ruler') showToast('Drag to measure, or tap a start square and then an end square.');
   clearMapAreaSelection();
 }
 
@@ -680,7 +682,22 @@ mapStageWrap.addEventListener('touchstart', event => {
   if (!isMapGestureTarget(event.target)) return;
   if (event.touches.length >= 2) {
     event.preventDefault();
+    if (touchGesture?.type === 'ruler' || rulerAnchorPoint) clearRuler();
     touchGesture = createPinchGesture(event.touches);
+  } else if (event.touches.length === 1 && selectedTool === 'ruler') {
+    event.preventDefault();
+    const touch = event.touches[0];
+    const point = getCanvasPos(touch);
+    const completingTap = !!rulerAnchorPoint;
+    touchGesture = {
+      type: 'ruler',
+      start: completingTap ? rulerAnchorPoint : point,
+      startClientX: touch.clientX,
+      startClientY: touch.clientY,
+      moved: false,
+      completingTap
+    };
+    updateRuler(touchGesture.start, point);
   } else if (event.touches.length === 1 && selectedTool === 'pan') {
     event.preventDefault();
     const touch = event.touches[0];
@@ -697,6 +714,7 @@ mapStageWrap.addEventListener('touchstart', event => {
 mapStageWrap.addEventListener('touchmove', event => {
   if (event.touches.length >= 2) {
     event.preventDefault();
+    if (touchGesture?.type === 'ruler' || rulerAnchorPoint) clearRuler();
     if (touchGesture?.type !== 'pinch') touchGesture = createPinchGesture(event.touches);
     const current = touchMetrics(event.touches);
     const wrapperRect = mapStageWrap.getBoundingClientRect();
@@ -712,6 +730,13 @@ mapStageWrap.addEventListener('touchmove', event => {
     mapScale = next.scale;
     mapPan = next.pan;
     applyMapTransform();
+  } else if (event.touches.length === 1 && touchGesture?.type === 'ruler') {
+    event.preventDefault();
+    const touch = event.touches[0];
+    if (Math.hypot(touch.clientX - touchGesture.startClientX, touch.clientY - touchGesture.startClientY) >= 8) {
+      touchGesture.moved = true;
+    }
+    updateRuler(touchGesture.start, getCanvasPos(touch));
   } else if (event.touches.length === 1 && touchGesture?.type === 'pan') {
     event.preventDefault();
     const touch = event.touches[0];
@@ -722,7 +747,20 @@ mapStageWrap.addEventListener('touchmove', event => {
 }, { passive: false });
 
 mapStageWrap.addEventListener('touchend', event => {
-  if (event.touches.length === 1 && selectedTool === 'pan') {
+  if (touchGesture?.type === 'ruler') {
+    event.preventDefault();
+    const touch = event.changedTouches[0];
+    const end = touch ? getCanvasPos(touch) : touchGesture.start;
+    if (!touchGesture.moved && !touchGesture.completingTap) {
+      rulerAnchorPoint = touchGesture.start;
+      updateRuler(rulerAnchorPoint, rulerAnchorPoint);
+      showToast('Start placed. Tap the ending square.');
+    } else {
+      updateRuler(touchGesture.start, end);
+      rulerAnchorPoint = null;
+    }
+    touchGesture = null;
+  } else if (event.touches.length === 1 && selectedTool === 'pan') {
     const touch = event.touches[0];
     touchGesture = {
       type: 'pan',
@@ -736,6 +774,10 @@ mapStageWrap.addEventListener('touchend', event => {
   }
 }, { passive: false });
 mapStageWrap.addEventListener('touchcancel', () => {
+  if (touchGesture?.type === 'ruler') {
+    if (rulerAnchorPoint) updateRuler(rulerAnchorPoint, rulerAnchorPoint);
+    else clearRuler();
+  }
   touchGesture = null;
   mapStageWrap.classList.remove('is-panning');
 });
@@ -781,6 +823,7 @@ mapStage.addEventListener('mousedown', event => {
   const point = getCanvasPos(event);
   if (selectedTool === 'ruler') {
     event.preventDefault();
+    rulerAnchorPoint = null;
     rulerStartPoint = point;
     updateRuler(point, point);
   } else if (selectedTool === 'ping') {
@@ -851,6 +894,7 @@ function updateRuler(start, end) {
 
 function clearRuler() {
   rulerStartPoint = null;
+  rulerAnchorPoint = null;
   document.getElementById('ruler-overlay').classList.remove('visible');
 }
 
