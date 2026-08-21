@@ -18,16 +18,24 @@ function registerSceneHandlers(socket, room) {
     emitSceneUpdate();
   });
 
-  socket.on('scene:setGrid', ({ gridSize, gridVisible, fitTokensToGrid } = {}) => {
+  socket.on('scene:setGrid', ({ gridSize, gridVisible, fitTokensToGrid, gridOffsetX, gridOffsetY } = {}) => {
     if (!isDm(socket)) return deny(socket, 'Only the Dungeon Master can change the grid.');
     const previousSize = state.scene.gridSize;
     if (gridSize !== undefined) state.scene.gridSize = Math.max(10, Math.min(300, Number(gridSize) || 50));
     if (gridVisible !== undefined) state.scene.gridVisible = !!gridVisible;
     if (fitTokensToGrid !== undefined) state.scene.fitTokensToGrid = !!fitTokensToGrid;
+    if (gridOffsetX !== undefined) {
+      const size = state.scene.gridSize;
+      state.scene.gridOffsetX = ((Number(gridOffsetX) || 0) % size + size) % size;
+    }
+    if (gridOffsetY !== undefined) {
+      const size = state.scene.gridSize;
+      state.scene.gridOffsetY = ((Number(gridOffsetY) || 0) % size + size) % size;
+    }
     if (state.scene.fitTokensToGrid && (previousSize !== state.scene.gridSize || fitTokensToGrid === true)) {
       state.tokens.forEach(token => {
-        token.x = snapCoordinateToCell(token.x, state.scene.gridSize);
-        token.y = snapCoordinateToCell(token.y, state.scene.gridSize);
+        token.x = snapCoordinateToCell(token.x, state.scene.gridSize, state.scene.gridOffsetX);
+        token.y = snapCoordinateToCell(token.y, state.scene.gridSize, state.scene.gridOffsetY);
       });
     }
     markSceneDirty();

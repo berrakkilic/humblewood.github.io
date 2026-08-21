@@ -264,65 +264,82 @@
 
         <div class="dm-only dm-sidebar-details" id="dm-sidebar-details">
           <div class="vine-divider"></div>
-          <h3>Set the scene</h3>
-          <input type="file" id="map-upload" accept="image/*" style="margin-bottom:6px;">
-          <button class="btn-ghost" id="clear-doodles-btn" style="width:100%;">Clear doodles</button>
+          <details class="sidebar-accordion" id="accordion-scene">
+            <summary><h3>Set the scene</h3></summary>
+            <div class="sidebar-accordion-body">
+              <input type="file" id="map-upload" accept="image/*" style="margin-bottom:6px;">
+              <button class="btn-ghost" id="clear-doodles-btn" style="width:100%;">Clear doodles</button>
 
-          <div class="scene-library">
-            <input type="text" id="scene-name-input" maxlength="80" placeholder="Scene name, e.g. HumbleBar">
-            <button class="btn-primary" id="save-scene-btn" type="button">Save current scene</button>
-            <select id="saved-scene-select" aria-label="Saved scenes">
-              <option value="">Choose a saved scene…</option>
-            </select>
-            <div class="scene-actions">
-              <button class="btn-ghost" id="load-scene-btn" type="button">Load</button>
-              <button class="btn-danger-soft" id="delete-scene-btn" type="button">Delete</button>
+              <div class="scene-library">
+                <input type="text" id="scene-name-input" maxlength="80" placeholder="Scene name, e.g. HumbleBar">
+                <button class="btn-primary" id="save-scene-btn" type="button">Save current scene</button>
+                <select id="saved-scene-select" aria-label="Saved scenes">
+                  <option value="">Choose a saved scene…</option>
+                </select>
+                <div class="scene-actions">
+                  <button class="btn-ghost" id="load-scene-btn" type="button">Load</button>
+                  <button class="btn-danger-soft" id="delete-scene-btn" type="button">Delete</button>
+                </div>
+                <p class="sidebar-help" id="scene-summary">Maps, drawings, tokens and initiative are saved together.</p>
+              </div>
+              <div class="map-permission-settings">
+                <label><input type="checkbox" id="player-doodling-toggle"> Allow player doodling</label>
+                <label><input type="checkbox" id="token-labels-toggle" checked> Show NPC/item labels to players</label>
+                <label><input type="checkbox" id="fog-enabled-toggle"> Enable fog of war</label>
+                <div class="scene-actions">
+                  <button class="btn-ghost" id="undo-fog-btn" type="button">Undo fog edit</button>
+                  <button class="btn-danger-soft" id="reset-fog-btn" type="button">Reset fog</button>
+                </div>
+                <p class="sidebar-help">Fog starts fully covered. Use Reveal or Cover on the map to edit rectangular areas.</p>
+              </div>
             </div>
-            <p class="sidebar-help" id="scene-summary">Maps, drawings, tokens and initiative are saved together.</p>
-          </div>
-          <div class="map-permission-settings">
-            <label><input type="checkbox" id="player-doodling-toggle"> Allow player doodling</label>
-            <label><input type="checkbox" id="token-labels-toggle" checked> Show NPC/item labels to players</label>
-            <label><input type="checkbox" id="fog-enabled-toggle"> Enable fog of war</label>
-            <div class="scene-actions">
-              <button class="btn-ghost" id="undo-fog-btn" type="button">Undo fog edit</button>
-              <button class="btn-danger-soft" id="reset-fog-btn" type="button">Reset fog</button>
-            </div>
-            <p class="sidebar-help">Fog starts fully covered. Use Reveal or Cover on the map to edit rectangular areas.</p>
-          </div>
+          </details>
+
           <div class="vine-divider"></div>
-          <h3>Create a token</h3>
-          <div class="token-create-form">
-          <input type="text" id="token-name" placeholder="Token name">
-          <select id="token-kind">
-            <option value="npc">NPC</option>
-            <option value="item">Item</option>
-            <option value="pc">Player character</option>
-          </select>
-          <div class="npc-create-fields" id="npc-create-fields">
-            <div class="npc-stat-inputs">
-              <label>HP <input type="number" id="npc-hp" min="1" value="10"></label>
-              <label>AC <input type="number" id="npc-ac" min="0" value="10"></label>
-              <label>Init <input type="number" id="npc-initiative" value="0"></label>
+          <details class="sidebar-accordion" id="accordion-create-token">
+            <summary><h3>Create a token</h3></summary>
+            <div class="sidebar-accordion-body">
+              <div class="token-create-form">
+              <input type="text" id="token-name" placeholder="Token name">
+              <select id="token-kind">
+                <option value="npc">NPC</option>
+                <option value="item">Item</option>
+                <option value="pc">Player character</option>
+              </select>
+              <div class="npc-create-fields" id="npc-create-fields">
+                <div class="npc-stat-inputs">
+                  <label>HP <input type="number" id="npc-hp" min="1" value="10"></label>
+                  <label>AC <input type="number" id="npc-ac" min="0" value="10"></label>
+                  <label>Init <input type="number" id="npc-initiative" value="0"></label>
+                </div>
+                <textarea id="npc-attacks" rows="3" placeholder="Attacks: Name | +4 | 1d6+2"></textarea>
+                <textarea id="npc-notes" rows="2" placeholder="Battle notes or abilities (optional)"></textarea>
+                <p class="sidebar-help">One attack per line: Name | hit bonus | damage dice</p>
+              </div>
+              <input type="file" id="token-image" accept="image/*">
+              <button class="btn-rose" id="add-token-btn">Create NPC & place</button>
+              <button class="btn-ghost hidden" id="cancel-npc-edit-btn" type="button">Cancel edit</button>
+              </div>
             </div>
-            <textarea id="npc-attacks" rows="3" placeholder="Attacks: Name | +4 | 1d6+2"></textarea>
-            <textarea id="npc-notes" rows="2" placeholder="Battle notes or abilities (optional)"></textarea>
-            <p class="sidebar-help">One attack per line: Name | hit bonus | damage dice</p>
-          </div>
-          <input type="file" id="token-image" accept="image/*">
-          <button class="btn-rose" id="add-token-btn">Create NPC & place</button>
-          <button class="btn-ghost hidden" id="cancel-npc-edit-btn" type="button">Cancel edit</button>
-          </div>
+          </details>
         </div>
         <div class="vine-divider"></div>
-        <h3>Tokens on the map</h3>
-        <div class="token-list" id="token-list"></div>
+        <details class="sidebar-accordion" id="accordion-tokens" open>
+          <summary><h3>Tokens on the map</h3></summary>
+          <div class="sidebar-accordion-body">
+            <div class="token-list" id="token-list"></div>
+          </div>
+        </details>
 
         <section class="dm-only dm-sidebar-details npc-roster-section">
           <div class="vine-divider"></div>
-          <h3>NPC roster</h3>
-          <p class="sidebar-help">Remove keeps an NPC here. Delete removes it permanently.</p>
-          <div class="npc-roster" id="npc-roster"></div>
+          <details class="sidebar-accordion" id="accordion-npc-roster">
+            <summary><h3>NPC roster</h3></summary>
+            <div class="sidebar-accordion-body">
+              <p class="sidebar-help">Remove keeps an NPC here. Delete removes it permanently.</p>
+              <div class="npc-roster" id="npc-roster"></div>
+            </div>
+          </details>
         </section>
       </aside>
 
@@ -330,6 +347,7 @@
         <div class="map-toolbar">
           <button id="tool-move" class="active">Move</button>
           <button id="tool-pan" title="Drag to move the map. You can also hold Space or use the middle mouse button.">Pan</button>
+          <button id="tool-grid-move" class="dm-only" title="Drag to align the grid to your map art.">Move grid</button>
           <button id="tool-ruler" title="Counts grid-square movement: 5 ft per horizontal or vertical square.">Ruler</button>
           <button id="tool-ping">Ping</button>
           <button id="tool-doodle" class="doodle-control hidden">Doodle</button>
@@ -343,6 +361,7 @@
           <input type="number" id="grid-size" value="50" min="10" max="300" title="Grid size (px)" style="width:56px;">
           <label class="grid-toggle"><input type="checkbox" id="snap-toggle"> Snap</label>
           <label class="grid-toggle"><input type="checkbox" id="fit-token-toggle" checked> Fit tokens</label>
+          <button id="grid-offset-reset" class="btn-ghost" type="button" title="Reset grid alignment to the map's top-left corner">Reset grid</button>
         </div>
         <div class="map-toolbar map-toolbar-bottom">
           <button id="zoom-out">−</button>

@@ -22,6 +22,7 @@ let pendingTrayToken = null; // token about to be dropped from tray
 let mapScale = 1;
 let mapPan = { x: 0, y: 0 };
 let panStart = null;
+let gridMoveStart = null;
 let touchGesture = null;
 let spacePanPressed = false;
 let lastFittedMapUrl = null;
@@ -356,7 +357,10 @@ function renderMap() {
   const empty = document.getElementById('empty-map');
   const grid = document.getElementById('grid-overlay');
   const gridSize = Math.max(10, Number(state.scene.gridSize) || 50);
+  const gridOffsetX = Number(state.scene.gridOffsetX) || 0;
+  const gridOffsetY = Number(state.scene.gridOffsetY) || 0;
   grid.style.backgroundSize = `${gridSize}px ${gridSize}px`;
+  grid.style.backgroundPosition = `${gridOffsetX}px ${gridOffsetY}px`;
   grid.classList.toggle('visible', !!state.scene.gridVisible);
   document.getElementById('grid-toggle').checked = !!state.scene.gridVisible;
   document.getElementById('grid-size').value = gridSize;
@@ -545,6 +549,7 @@ document.addEventListener('mouseup', (e) => {
 // ---- Tool toggle ----
 document.getElementById('tool-move').onclick = () => setTool('move');
 document.getElementById('tool-pan').onclick = () => setTool('pan');
+document.getElementById('tool-grid-move').onclick = () => setTool('grid-move');
 document.getElementById('tool-ruler').onclick = () => setTool('ruler');
 document.getElementById('tool-ping').onclick = () => setTool('ping');
 document.getElementById('tool-doodle').onclick = () => setTool('doodle');
@@ -553,14 +558,16 @@ document.getElementById('tool-fog-hide').onclick = () => setTool('fog-hide');
 function setTool(tool) {
   if (tool === 'doodle' && !canDoodle()) return showToast('Player doodling is not enabled for this scene.');
   if (tool.startsWith('fog-') && (myRole !== 'dm' || !state.scene.fogEnabled)) return showToast('Enable fog of war first.');
+  if (tool === 'grid-move' && myRole !== 'dm') return;
   const previousTool = selectedTool;
   selectedTool = tool;
-  ['move', 'pan', 'ruler', 'ping', 'doodle', 'fog-reveal', 'fog-hide'].forEach(name => {
+  ['move', 'pan', 'grid-move', 'ruler', 'ping', 'doodle', 'fog-reveal', 'fog-hide'].forEach(name => {
     document.getElementById(`tool-${name}`)?.classList.toggle('active', tool === name);
   });
   const stage = document.getElementById('map-stage');
   stage.classList.toggle('doodling', tool === 'doodle');
   stage.classList.toggle('panning', tool === 'pan');
+  stage.classList.toggle('grid-moving', tool === 'grid-move');
   stage.classList.toggle('measuring', tool === 'ruler');
   stage.classList.toggle('pinging', tool === 'ping');
   stage.classList.toggle('fog-editing', tool.startsWith('fog-'));
@@ -597,18 +604,51 @@ document.getElementById('reset-fog-btn').onclick = () => {
 const mapStageWrap = document.getElementById('map-stage-wrap');
 mapStageWrap.addEventListener('mousedown', (e) => {
   const canStartPan = (selectedTool === 'pan' && e.button === 0) || e.button === 1 || (spacePanPressed && e.button === 0);
+  if (selectedTool === 'grid-move' && e.button === 0 && myRole === 'dm' && isMapGestureTarget(e.target)) {
+    e.preventDefault();
+    gridMoveStart = {
+      clientX: e.clientX, clientY: e.clientY,
+      offsetX: Number(state.scene.gridOffsetX) || 0,
+      offsetY: Number(state.scene.gridOffsetY) || 0
+    };
+    return;
+  }
   if (!canStartPan || !isMapGestureTarget(e.target)) return;
   e.preventDefault();
   panStart = { clientX: e.clientX, clientY: e.clientY, x: mapPan.x, y: mapPan.y };
   mapStageWrap.classList.add('is-panning');
 });
 document.addEventListener('mousemove', (e) => {
+  if (gridMoveStart) {
+    const grid = document.getElementById('grid-overlay');
+    const gridSize = Math.max(10, Number(state.scene.gridSize) || 50);
+    const dx = (e.clientX - gridMoveStart.clientX) / mapScale;
+    const dy = (e.clientY - gridMoveStart.clientY) / mapScale;
+    const previewX = (((gridMoveStart.offsetX + dx) % gridSize) + gridSize) % gridSize;
+    const previewY = (((gridMoveStart.offsetY + dy) % gridSize) + gridSize) % gridSize;
+    grid.style.backgroundPosition = `${previewX}px ${previewY}px`;
+    gridMoveStart.currentX = previewX;
+    gridMoveStart.currentY = previewY;
+    return;
+  }
   if (!panStart) return;
   mapPan.x = panStart.x + e.clientX - panStart.clientX;
   mapPan.y = panStart.y + e.clientY - panStart.clientY;
   applyMapTransform();
 });
 document.addEventListener('mouseup', () => {
+  if (gridMoveStart) {
+    if (gridMoveStart.currentX !== undefined) {
+      socket.emit('scene:setGrid', {
+        gridSize: Number(document.getElementById('grid-size').value) || 50,
+        gridVisible: document.getElementById('grid-toggle').checked,
+        fitTokensToGrid: document.getElementById('fit-token-toggle').checked,
+        gridOffsetX: gridMoveStart.currentX,
+        gridOffsetY: gridMoveStart.currentY
+      });
+    }
+    gridMoveStart = null;
+  }
   panStart = null;
   mapStageWrap.classList.remove('is-panning');
 });
@@ -850,6 +890,15 @@ document.getElementById('fit-token-toggle').onchange = () => {
     gridSize: Number(document.getElementById('grid-size').value) || 50,
     gridVisible: document.getElementById('grid-toggle').checked,
     fitTokensToGrid: document.getElementById('fit-token-toggle').checked
+  });
+};
+document.getElementById('grid-offset-reset').onclick = () => {
+  socket.emit('scene:setGrid', {
+    gridSize: Number(document.getElementById('grid-size').value) || 50,
+    gridVisible: document.getElementById('grid-toggle').checked,
+    fitTokensToGrid: document.getElementById('fit-token-toggle').checked,
+    gridOffsetX: 0,
+    gridOffsetY: 0
   });
 };
 
@@ -1244,6 +1293,16 @@ document.getElementById('toggle-dm-sidebar-btn').onclick = () => {
   button.textContent = expanded ? 'Compact' : 'Details';
   button.setAttribute('aria-expanded', String(expanded));
 };
+
+// ---- Sidebar accordion state (remembered per-browser) ----
+document.querySelectorAll('.sidebar-accordion').forEach(details => {
+  const key = `humblewood:accordion:${details.id}`;
+  const saved = localStorage.getItem(key);
+  if (saved !== null) details.open = saved === '1';
+  details.addEventListener('toggle', () => {
+    localStorage.setItem(key, details.open ? '1' : '0');
+  });
+});
 
 function renderDmSidebarSummary() {
   const summary = document.getElementById('dm-sidebar-summary');

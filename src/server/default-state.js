@@ -4,6 +4,8 @@ function createDefaultState() {
       mapUrl: null,
       mapName: 'No map loaded',
       gridSize: 50,
+      gridOffsetX: 0,
+      gridOffsetY: 0,
       gridVisible: false,
       fitTokensToGrid: true,
       playerDoodlingEnabled: false,

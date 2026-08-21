@@ -248,6 +248,21 @@ body[data-role="dm"] .token-tray:not(.dm-detailed) .dm-sidebar-details { display
 .dm-sidebar-heading h3, .dm-sidebar-heading p { margin: 0; }
 .dm-sidebar-heading button { flex-shrink: 0; padding: 6px 8px; font-size: 10px; }
 
+.sidebar-accordion { border: 1px solid var(--moss-light, #cddac0); border-radius: 10px; background: #fffdf8; margin-bottom: 4px; overflow: hidden; }
+.sidebar-accordion summary {
+  list-style: none; cursor: pointer; padding: 8px 10px; display: flex; align-items: center; justify-content: space-between;
+  user-select: none;
+}
+.sidebar-accordion summary::-webkit-details-marker { display: none; }
+.sidebar-accordion summary h3 { margin: 0; font-size: 14px; }
+.sidebar-accordion summary::after {
+  content: '▸'; color: var(--forest); font-size: 12px; transition: transform .15s ease; margin-left: 8px;
+}
+.sidebar-accordion[open] summary::after { transform: rotate(90deg); }
+.sidebar-accordion[open] summary { border-bottom: 1px solid var(--moss-light, #cddac0); }
+.sidebar-accordion-body { padding: 10px; display: flex; flex-direction: column; gap: 8px; }
+.sidebar-accordion-body > * { margin-top: 0; }
+
 .token-tray h3 { font-size: 16px; margin-bottom: 4px; }
 
 .player-only { display: none; }
@@ -371,6 +386,7 @@ body[data-role="dm"] .token-tray.dm-detailed .token-list-details { display: flex
 }
 #map-stage.doodling { cursor: crosshair; }
 #map-stage.panning { cursor: grabbing; }
+#map-stage.grid-moving { cursor: move; }
 #map-stage.measuring { cursor: crosshair; }
 #map-stage.pinging { cursor: cell; }
 #map-stage.fog-editing { cursor: crosshair; }
@@ -808,6 +824,9 @@ body[data-role="player"] .dm-only { display: none !important; }
   .combat-roll-columns { grid-template-columns: 1fr; }
   .combat-spell-slots { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .account-reset-row { grid-template-columns: 1fr; }
+  .sheet-form { grid-template-columns: repeat(2, 1fr); }
+  .sheet-form .field.span-2, .sheet-form .field.span-4 { grid-column: span 2; }
+  .ability-grid { grid-template-columns: repeat(3, 1fr); }
 }
 
 @media (max-width: 600px) {
@@ -816,9 +835,16 @@ body[data-role="player"] .dm-only { display: none !important; }
   .role-pill { display: none; }
   .view { padding: 12px; }
   #view-map { padding: 10px; gap: 10px; }
-  .map-toolbar { max-width: calc(100% - 20px); flex-wrap: wrap; }
-  .map-toolbar-right { top: 62px; }
-  .map-toolbar-bottom { right: 10px; }
+  .map-stage-wrap { display: flex; flex-direction: column; min-height: 420px; }
+  .map-toolbar {
+    position: static; width: 100%; max-width: none; box-sizing: border-box;
+    flex-wrap: wrap; border-radius: 0; box-shadow: none;
+    border-bottom: 1px solid rgba(58,46,37,0.12);
+  }
+  .map-toolbar-right { top: auto; right: auto; }
+  .map-toolbar-bottom { top: auto; bottom: auto; left: auto; }
+  .map-toolbar button { padding: 8px 10px; font-size: 13px; }
+  #map-stage { flex: 1; min-height: 300px; }
   .character-roll-selectors { flex-direction: column; }
   .character-roll-selectors label, .character-roll-selectors select { width: 100%; }
   .dice-custom-row button { width: 100%; margin-left: 0; }
@@ -832,6 +858,9 @@ body[data-role="player"] .dm-only { display: none !important; }
   .combat-spell-slots { grid-template-columns: 1fr; }
   .combat-footer { align-items: stretch; flex-direction: column; }
   .combat-footer .btn-primary { width: 100%; }
+  .sheet-form { grid-template-columns: 1fr; }
+  .sheet-form .field.span-2, .sheet-form .field.span-4 { grid-column: span 1; }
+  .ability-grid { grid-template-columns: repeat(2, 1fr); }
 }
 
 ::-webkit-scrollbar { width: 10px; }

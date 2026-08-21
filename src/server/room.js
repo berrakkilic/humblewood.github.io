@@ -478,8 +478,9 @@ function createRoom({ dataDir, dmPin, io }) {
     if (linkedTokens.length) markSceneDirty();
   }
 
-  function snapCoordinateToCell(value, gridSize) {
-    return Math.floor(Number(value) / gridSize) * gridSize + gridSize / 2;
+  function snapCoordinateToCell(value, gridSize, gridOffset = 0) {
+    const v = Number(value) - gridOffset;
+    return Math.floor(v / gridSize) * gridSize + gridSize / 2 + gridOffset;
   }
 
   function uniqueTokenLabel(baseLabel) {
