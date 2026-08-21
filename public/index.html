@@ -260,7 +260,7 @@
   <nav class="tabs" aria-label="Table pages">
     <a class="tab-btn active" data-view="map" data-route="map" href="/map">Map</a>
     <a class="tab-btn" data-view="characters" data-route="characters" href="/characters">Characters</a>
-    <a class="tab-btn" data-view="almanac" data-route="almanac" href="/almanac">Humble Almanac</a>
+    <a class="tab-btn" data-view="almanac" data-route="almanac" href="/almanac">Mossbound Almanac</a>
     <a class="tab-btn" data-view="jukebox" data-route="jukebox" href="/jukebox">Jukebox</a>
     <a class="tab-btn" data-view="dice" data-route="dice" href="/dice">Dice</a>
   </nav>
@@ -667,7 +667,17 @@
             <div class="sheet-subgrid two-col">
               <div class="field"><label>Species / subrace traits</label><textarea id="sf-racial-traits" rows="6" placeholder="Glide, Talons, Appraising Eye, Sharp Mind..."></textarea></div>
               <div class="field"><label>Class & subclass features</label><textarea id="sf-features" rows="6" placeholder="Expertise, Channel Divinity, Action Surge..."></textarea></div>
-              <div class="field span-2"><label>Feats & other special traits</label><textarea id="sf-feats" rows="4"></textarea></div>
+              <div class="field span-2">
+                <label for="feat-preset-select">Humblewood feat preset</label>
+                <div class="feat-preset-row">
+                  <select id="feat-preset-select">
+                    <option value="">Choose a Humblewood feat...</option>
+                  </select>
+                  <button type="button" class="btn-ghost" id="feat-preset-add">Add feat</button>
+                </div>
+                <p class="sidebar-help">Glide-only feats require a birdfolk species. Custom and standard 5e feats can still be written below.</p>
+              </div>
+              <div class="field span-2"><label>Feats & other special traits</label><textarea id="sf-feats" rows="7" placeholder="Choose a Humblewood preset above, or write a standard/custom feat here..."></textarea></div>
             </div>
           </details>
 
@@ -797,14 +807,14 @@
       </div>
     </section>
 
-    <!-- HUMBLE ALMANAC VIEW -->
+    <!-- MOSSBOUND ALMANAC VIEW -->
     <section id="view-almanac" class="view">
       <div class="almanac-shell">
         <header class="almanac-hero panel">
           <div class="almanac-hero-copy">
             <span class="almanac-eyebrow">A field guide for curious folk</span>
-            <h2>🍄 The Humble Almanac</h2>
-            <p>Search the Wood for folk, callings, backgrounds, spells, and campaign lore.</p>
+            <h2>🍄 The Mossbound Almanac</h2>
+            <p>Search the Wood for folk, callings, backgrounds, feats, spells, and campaign lore.</p>
           </div>
           <div class="almanac-search-panel">
             <label for="almanac-search">What are you looking for?</label>

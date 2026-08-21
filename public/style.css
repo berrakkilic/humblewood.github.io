@@ -483,7 +483,7 @@ body[data-role="dm"] .token-tray.dm-detailed .token-list-details { display: flex
   flex-direction: column; gap: 10px; color: var(--ink-soft);
 }
 
-/* ---------- Humble Almanac view ---------- */
+/* ---------- Mossbound Almanac view ---------- */
 #view-almanac {
   background:
     radial-gradient(circle at 8% 12%, rgba(217,164,65,.12), transparent 28%),
@@ -634,6 +634,9 @@ body[data-role="dm"] .token-tray.dm-detailed .token-list-details { display: flex
 
 /* ---------- Characters view ---------- */
 #view-characters { gap: 16px; }
+.feat-preset-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; }
+.feat-preset-row select { min-width: 0; }
+.feat-preset-row button { white-space: nowrap; }
 .char-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; }
 .char-card {
   background: #fffdf8; border-radius: var(--radius); border: 1px solid rgba(58,46,37,0.1);
@@ -1004,6 +1007,8 @@ body[data-role="player"] .dm-only { display: none !important; }
   .almanac-category-toggle { justify-self: end; }
   .almanac-entry-list { padding: 9px; }
   .almanac-facts { grid-template-columns: 1fr; }
+  .feat-preset-row { grid-template-columns: 1fr; }
+  .feat-preset-row button { width: 100%; }
   #view-map { padding: 10px; gap: 10px; }
   .map-stage-wrap { display: flex; flex-direction: column; min-height: 420px; }
   .map-toolbar {

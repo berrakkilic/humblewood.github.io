@@ -7,6 +7,8 @@ const {
   zoomAroundPoint
 } = window.HumblewoodMapGeometry;
 const characterRules = window.HumblewoodCharacterRules;
+const HUMBLEWOOD_FEAT_PRESETS = (window.HumblewoodAlmanacData || [])
+  .find(category => category.id === 'feats')?.entries || [];
 
 let myRole = 'dm';
 let myName = '';
@@ -67,6 +69,7 @@ const CONDITIONS = [
 ];
 
 initializeCharacterRuleControls();
+initializeFeatPresetControls();
 
 // ---------------- Join flow ----------------
 document.getElementById('role-dm').onclick = () => setRole('dm');
@@ -166,7 +169,7 @@ const router = window.HumblewoodRouter.createRouter({
   routes: {
     map: { path: '/map', title: 'Map' },
     characters: { path: '/characters', title: 'Characters' },
-    almanac: { path: '/almanac', title: 'Humble Almanac' },
+    almanac: { path: '/almanac', title: 'Mossbound Almanac' },
     jukebox: { path: '/jukebox', title: 'Jukebox' },
     dice: { path: '/dice', title: 'Dice' }
   },
@@ -1634,6 +1637,46 @@ function initializeCharacterRuleControls() {
   updateSubclassOptions();
   document.getElementById('sf-species').addEventListener('change', () => updateSubraceOptions());
   document.getElementById('sf-class').addEventListener('change', () => updateSubclassOptions());
+}
+
+function initializeFeatPresetControls() {
+  const select = document.getElementById('feat-preset-select');
+  HUMBLEWOOD_FEAT_PRESETS.forEach(feat => {
+    const option = document.createElement('option');
+    option.value = feat.title;
+    const prerequisite = feat.facts?.find(([label]) => label === 'Prerequisite')?.[1];
+    option.textContent = prerequisite ? `${feat.title} · requires ${prerequisite}` : feat.title;
+    select.appendChild(option);
+  });
+  document.getElementById('feat-preset-add').addEventListener('click', addFeatPresetToSheet);
+}
+
+function addFeatPresetToSheet() {
+  const select = document.getElementById('feat-preset-select');
+  const feat = HUMBLEWOOD_FEAT_PRESETS.find(entry => entry.title === select.value);
+  if (!feat) return showToast('Choose a Humblewood feat first.');
+  const prerequisite = feat.facts?.find(([label]) => label === 'Prerequisite')?.[1] || '';
+  const species = characterRules.canonicalSpecies(document.getElementById('sf-species').value);
+  if (/glide trait/i.test(prerequisite) && !/\(birdfolk\)$/i.test(species)) {
+    return showToast(`${feat.title} requires the Glide trait. Choose a birdfolk species first.`);
+  }
+
+  const textarea = document.getElementById('sf-feats');
+  if (new RegExp(`(^|\\n)${feat.title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(\\n|$)`, 'i').test(textarea.value.trim())) {
+    return showToast(`${feat.title} is already on this character.`);
+  }
+
+  const details = [];
+  (feat.facts || []).forEach(([label, value]) => details.push(`${label}: ${value}`));
+  (feat.sections || []).forEach(section => {
+    if (section.text) details.push(`${section.heading}: ${section.text}`);
+    (section.items || []).forEach(item => details.push(`• ${item}`));
+  });
+  const block = [feat.title, ...details].join('\n');
+  textarea.value = [textarea.value.trim(), block].filter(Boolean).join('\n\n');
+  select.value = '';
+  textarea.focus();
+  showToast(`${feat.title} added.`);
 }
 
 function renderCharacters() {

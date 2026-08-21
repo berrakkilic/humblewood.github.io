@@ -4,6 +4,7 @@
   if (root) root.HumblewoodCharacterRules = rules;
 })(typeof window !== 'undefined' ? window : null, function createCharacterRules() {
   const ABILITY_KEYS = ['str', 'dex', 'con', 'int', 'wis', 'cha'];
+  const GLIDE_FEATS = ['Aerial Expert', 'Heavy Glider'];
 
   const SPECIES_SUBRACES = {
     'Luma (birdfolk)': ['Sable Luma', 'Sera Luma'],
@@ -105,6 +106,9 @@
       const score = Number(fields[ability]);
       if (!Number.isInteger(score) || score < 1 || score > 20) return `${ability.toUpperCase()} must be a whole number from 1 to 20.`;
     }
+    const featText = String(fields.feats || '');
+    const invalidGlideFeat = GLIDE_FEATS.find(feat => new RegExp(`(^|\\n)${feat}(\\n|$)`, 'i').test(featText));
+    if (invalidGlideFeat && !/\(birdfolk\)$/i.test(species)) return `${invalidGlideFeat} requires a species with the Glide trait.`;
     return '';
   }
 
@@ -142,6 +146,7 @@
   return {
     ABILITY_KEYS,
     CLASS_SUBCLASSES,
+    GLIDE_FEATS,
     SPECIES_SUBRACES,
     applyPlayerCharacterConstraints,
     canonicalClass,

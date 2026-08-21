@@ -18,20 +18,20 @@
           facts: [
             ['Where', 'Brackenmill'],
             ['When', 'Once each year'],
-            ['What', 'Flowers, food, ribbons, games and hopeful beginnings']
+            ['Mood', 'Flowers, food, ribbons, games, and hopeful beginnings']
           ],
           sections: [
             {
               heading: 'What visitors bring',
-              items: ['Baskets filled with flowers', 'Seeds and fresh produce', 'Breads and other baked goods', 'Ribbons, decorations and religious offerings']
+              items: ['Baskets and flowers', 'Seeds and fresh produce', 'Breads and other baked goods', 'Ribbons, decorations, and offerings']
             },
             {
               heading: 'Why everyone gathers',
-              text: 'The festival is both a joyful meeting of communities and a seasonal appeal to the Gods for healthy crops. It is the place to meet travelers, farmers, traders, craftsfolk and future adventuring companions (wink wink).'
+              text: 'The festival is both a joyful meeting of communities and a seasonal appeal for healthy crops. It is an easy place to meet travelers, farmers, traders, craftsfolk, and future adventuring companions.'
             },
             {
               heading: 'At the table',
-              text: 'Festival games, shared food, friendly rivalries, unusual wares and crowded shipping platforms make this a lively event to attend.'
+              text: 'Festival games, shared food, friendly rivalries, unusual wares, and crowded shipping platforms make this a lively first session location.'
             }
           ]
         },
@@ -327,6 +327,119 @@
           tags: ['background', 'roleplay', 'birdfolk', 'humblefolk', 'outsider', 'character building'],
           summary: 'Your folk and inherited traits can help you belong in one community while marking you as an outsider in another.',
           sections: [{ heading: 'Questions to ask', items: ['Where do you feel most at home?', 'Which assumptions do others make when they see you?', 'How do you view birdfolk and humblefolk whose lives differ from yours?', 'Which stereotype do you embrace, reject, or complicate?'] }]
+        }
+      ]
+    },
+    {
+      id: 'feats',
+      title: 'Knacks & Feats',
+      icon: '🍀',
+      description: 'Seven Humblewood feats for gliders, woodland survivors, clever thieves, and folk with unusual gifts.',
+      entries: [
+        {
+          title: 'Aerial Expert',
+          kicker: 'Feat · Requires the Glide trait',
+          tags: ['feat', 'aerial expert', 'glide', 'jump', 'dash', 'flight', 'dexterity', 'strength'],
+          summary: 'Years of practice have made you exceptionally agile in the air, able to leap farther and control a glide with far greater freedom.',
+          facts: [['Prerequisite', 'Glide trait'], ['Best for', 'Mobile birdfolk and aerial explorers']],
+          sections: [{
+            heading: 'Benefits',
+            items: [
+              'Long and high jumps no longer require a 10-foot run-up; use Strength or Dexterity and double the normal distance',
+              'Take the Dash action while gliding to travel up to one additional movement speed',
+              'Change direction freely while gliding and gain up to 10 feet of altitude once before landing'
+            ]
+          }]
+        },
+        {
+          title: 'Bandit Cunning',
+          kicker: 'Feat · Read danger and opponents',
+          tags: ['feat', 'bandit cunning', 'intelligence', 'saving throw', 'investigation', 'challenge rating', 'resistance', 'immunity'],
+          summary: 'Bandit experience has sharpened your survival instincts and taught you how to study a dangerous opponent while the fight unfolds.',
+          sections: [{
+            heading: 'Benefits',
+            items: [
+              'When making a saving throw, use your reaction to add your Intelligence modifier; refresh this ability after a long rest',
+              'In combat, study a creature you have seen fight with an Intelligence (Investigation) check against DC 10 + its challenge rating',
+              'On success, learn one resistance or immunity, condition immunity, damaging or defensive special ability, attack or reaction option, or special sense'
+            ]
+          }]
+        },
+        {
+          title: 'Heavy Glider',
+          kicker: 'Feat · Requires the Glide trait',
+          tags: ['feat', 'heavy glider', 'glide', 'heavy armor', 'heavy weapon', 'strength', 'push', 'prone'],
+          summary: 'Strength and training let you glide under loads that would ground other birdfolk—and turn your landing into a weapon.',
+          facts: [['Prerequisite', 'Glide trait'], ['Best for', 'Armored or heavy-weapon birdfolk']],
+          sections: [{
+            heading: 'Benefits',
+            items: [
+              'Glide while holding a heavy weapon and wearing heavy armor, provided you are not encumbered',
+              'Land in the space of a hostile Large or smaller creature and make an opposed Strength check',
+              'On success, push it 10 feet and knock it prone; on failure, land in the nearest unoccupied space'
+            ]
+          }]
+        },
+        {
+          title: 'Opportunistic Thief',
+          kicker: 'Feat · Perfectly timed thievery',
+          tags: ['feat', 'opportunistic thief', 'dexterity', 'sleight of hand', 'steal', 'pickpocket', 'melee'],
+          summary: 'You exploit a missed swing or momentary distraction to lift an item before its owner realizes an opportunity existed.',
+          facts: [['Ability increase', '+1 Dexterity'], ['Best for', 'Rogues, pickpockets, and quick-handed characters']],
+          sections: [{
+            heading: 'Benefits',
+            items: [
+              'When a creature misses you with a melee attack, make a Dexterity (Sleight of Hand) check against DC 10 + its Dexterity modifier',
+              'On success, steal one item that the target is not holding or wearing',
+              'After a successful out-of-combat theft, immediately conceal the object flawlessly or replace it with another object you possess'
+            ]
+          }]
+        },
+        {
+          title: 'Perfect Landing',
+          kicker: 'Feat · Fall with grace',
+          tags: ['feat', 'perfect landing', 'dexterity', 'fall damage', 'prone', 'height'],
+          summary: 'Life at great heights has taught you how to absorb a fall, keep your footing, and walk away from drops that would injure others.',
+          facts: [['Ability increase', '+1 Dexterity'], ['Best for', 'Climbers, gliders, and canopy adventurers']],
+          sections: [{
+            heading: 'Benefits',
+            items: [
+              'Fall damage uses d4s instead of d6s',
+              'Taking fall damage does not knock you prone',
+              'Ignore damage from the first 30 feet of a fall'
+            ]
+          }]
+        },
+        {
+          title: 'Speech of the Ancient Beasts',
+          kicker: 'Feat · Kinship with great creatures',
+          tags: ['feat', 'speech of the ancient beasts', 'charisma', 'beast', 'giant eagle', 'giant elk', 'giant owl', 'language'],
+          summary: 'Great beasts recognize something familiar in you, allowing you to speak with legendary creatures and approach them as kin.',
+          facts: [['Ability increase', '+1 Charisma'], ['Best for', 'Nature-focused characters and animal diplomats']],
+          sections: [{
+            heading: 'Benefits',
+            items: [
+              'Large or larger beasts begin with a friendly disposition unless you have attacked them',
+              'Gain advantage on Charisma checks made against Large or larger beasts',
+              'Speak and understand Giant Eagle, Giant Elk, and Giant Owl',
+              'Any Large or larger beast can understand you, although less intelligent beasts may grasp only simple ideas'
+            ]
+          }]
+        },
+        {
+          title: 'Woodwise',
+          kicker: 'Feat · At home in the wild',
+          tags: ['feat', 'woodwise', 'survival', 'nature', 'difficult terrain', 'lost', 'forest'],
+          summary: 'A lifetime among tangled woodland paths has made natural terrain feel readable, familiar, and easy to cross.',
+          facts: [['Skill', 'Nature or Survival proficiency'], ['Best for', 'Guides, rangers, and woodland travelers']],
+          sections: [{
+            heading: 'Benefits',
+            items: [
+              'Gain proficiency in either Nature or Survival',
+              'Ignore difficult terrain',
+              'You cannot become lost in natural surroundings except through magical means'
+            ]
+          }]
         }
       ]
     },
