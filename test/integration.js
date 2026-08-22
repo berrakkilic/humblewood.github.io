@@ -72,6 +72,7 @@ async function run() {
     const html = await response.text();
     assert.match(html, /The Humblewood Table/);
     assert.match(html, /js\/map-geometry\.js/);
+    assert.match(html, /js\/combat-state\.js/);
     assert.match(html, /id="zoom-fit"/);
     assert.match(html, /id="spell-form-range"/);
     assert.match(html, /id="spell-form-effect"/);
@@ -91,6 +92,9 @@ async function run() {
   const geometryResponse = await fetch(`http://127.0.0.1:${port}/js/map-geometry.js`);
   assert.equal(geometryResponse.status, 200);
   assert.match(await geometryResponse.text(), /gridMeasurement/);
+  const combatStateResponse = await fetch(`http://127.0.0.1:${port}/js/combat-state.js`);
+  assert.equal(combatStateResponse.status, 200);
+  assert.match(await combatStateResponse.text(), /toggleCondition/);
   const characterRulesResponse = await fetch(`http://127.0.0.1:${port}/js/character-rules.js`);
   assert.equal(characterRulesResponse.status, 200);
   assert.match(await characterRulesResponse.text(), /validatePlayerCharacter/);
@@ -176,6 +180,21 @@ async function run() {
   pending = once(playerOne.socket, 'token:update', token => token.id === duplicate.id && token.combat?.conditions?.includes('Prone'));
   dm.socket.emit('token:combat:update', { id: duplicate.id, action: 'condition:toggle', condition: 'Prone' });
   await pending;
+  pending = once(playerOne.socket, 'token:update', token => (
+    token.id === duplicate.id &&
+    token.combat?.conditions?.includes('Prone') &&
+    token.combat?.conditions?.includes('Blinded')
+  ));
+  dm.socket.emit('token:combat:update', { id: duplicate.id, action: 'condition:toggle', condition: 'Blinded' });
+  const twoConditions = await pending;
+  assert.deepEqual(twoConditions.combat.conditions, ['Prone', 'Blinded']);
+  pending = once(playerOne.socket, 'token:update', token => (
+    token.id === duplicate.id &&
+    !token.combat?.conditions?.includes('Prone') &&
+    token.combat?.conditions?.includes('Blinded')
+  ));
+  dm.socket.emit('token:combat:update', { id: duplicate.id, action: 'condition:toggle', condition: 'Prone' });
+  assert.deepEqual((await pending).combat.conditions, ['Blinded']);
 
   pending = once(dm.socket, 'initiative:update', initiative => initiative.entries.length === 1);
   dm.socket.emit('initiative:add', { name: 'Wolf', value: 18, tokenId: wolf.id });

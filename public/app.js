@@ -6,6 +6,7 @@ const {
   positionStagePoint,
   zoomAroundPoint
 } = window.HumblewoodMapGeometry;
+const combatState = window.HumblewoodCombatState;
 const characterRules = window.HumblewoodCharacterRules;
 const HUMBLEWOOD_FEAT_PRESETS = (window.HumblewoodAlmanacData || [])
   .find(category => category.id === 'feats')?.entries || [];
@@ -2595,6 +2596,7 @@ function closeCombatManager() {
 
 function combatAction(action, extra = {}) {
   if (!activeCombatTarget) return;
+  if (action === 'condition:toggle') applyOptimisticConditionToggle(extra.condition);
   if (activeCombatTarget.type === 'npc') socket.emit('token:combat:update', { id: activeCombatTarget.id, action, ...extra });
   else socket.emit('character:combat:update', { name: activeCombatTarget.id, action, ...extra });
 }
@@ -2607,6 +2609,29 @@ function activeCombatEntity() {
   }
   const character = state?.characters?.[activeCombatTarget.id];
   return character ? { type: 'character', entity: character } : null;
+}
+
+function applyOptimisticConditionToggle(condition) {
+  const target = activeCombatEntity();
+  if (!target || !CONDITIONS.includes(condition)) return;
+  const nextConditions = combatState.toggleCondition(target.entity, condition);
+
+  if (target.type === 'npc') {
+    const npc = state?.npcs?.[target.entity.npcId];
+    if (npc) combatState.setConditions(npc, nextConditions);
+  } else {
+    state.tokens
+      .filter(token => token.characterName === target.entity.name)
+      .forEach(token => combatState.setConditionBadges(token, nextConditions));
+  }
+
+  renderCombatManager();
+  renderMapTokens();
+  renderTokenTray();
+  renderCharacters();
+  renderPlayerSidebar();
+  renderNpcRoster();
+  renderDmSidebarSummary();
 }
 
 function renderCombatManager() {
