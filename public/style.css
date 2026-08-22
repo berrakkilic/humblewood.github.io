@@ -483,7 +483,7 @@ body[data-role="dm"] .token-tray.dm-detailed .token-list-details { display: flex
   flex-direction: column; gap: 10px; color: var(--ink-soft);
 }
 
-/* ---------- Mossbound Almanac view ---------- */
+/* ---------- Humble Almanac view ---------- */
 #view-almanac {
   background:
     radial-gradient(circle at 8% 12%, rgba(217,164,65,.12), transparent 28%),

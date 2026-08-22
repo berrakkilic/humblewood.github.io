@@ -19,26 +19,68 @@
     'Cervan (humblefolk)': ['Grove Cervan', 'Pronghorn Cervan']
   };
 
+  // Official D&D 5e (2014/legacy) subclasses, including setting-book and DMG
+  // options, plus the Humblewood subclasses used by this campaign. Revised
+  // 2024/5.5e subclasses are a separate ruleset and are intentionally excluded.
   const CLASS_SUBCLASSES = {
     Artificer: ['Alchemist', 'Armorer', 'Artillerist', 'Battle Smith'],
-    Barbarian: ['Path of the Berserker', 'Path of the Totem Warrior'],
-    Bard: ['College of Lore', 'College of Valor', 'College of the Road (Bard)'],
-    Cleric: [
-      'Knowledge Domain', 'Life Domain', 'Light Domain', 'Nature Domain', 'Tempest Domain',
-      'Trickery Domain', 'War Domain', 'Community Domain (Cleric)', 'Night Domain (Cleric)'
+    Barbarian: [
+      'Path of the Ancestral Guardian', 'Path of the Battlerager', 'Path of the Beast',
+      'Path of the Berserker', 'Path of the Giant', 'Path of the Storm Herald',
+      'Path of the Totem Warrior', 'Path of Wild Magic', 'Path of the Zealot'
     ],
-    Druid: ['Circle of the Land', 'Circle of the Moon'],
-    Fighter: ['Battle Master', 'Champion', 'Eldritch Knight', 'Scofflaw (Fighter)'],
-    Monk: ['Way of the Four Elements', 'Way of the Open Hand', 'Way of Shadow'],
-    Paladin: ['Oath of the Ancients', 'Oath of Devotion', 'Oath of Vengeance'],
-    Ranger: ['Beast Master', 'Hunter'],
-    Rogue: ['Arcane Trickster', 'Assassin', 'Thief'],
-    Sorcerer: ['Draconic Bloodline', 'Wild Magic'],
-    Warlock: ['The Archfey', 'The Fiend', 'The Great Old One'],
+    Bard: [
+      'College of Creation', 'College of Eloquence', 'College of Glamour', 'College of Lore',
+      'College of Spirits', 'College of Swords', 'College of Valor', 'College of Whispers',
+      'College of the Road (Bard)'
+    ],
+    Cleric: [
+      'Arcana Domain', 'Death Domain', 'Forge Domain', 'Grave Domain', 'Knowledge Domain',
+      'Life Domain', 'Light Domain', 'Nature Domain', 'Order Domain', 'Peace Domain',
+      'Tempest Domain', 'Trickery Domain', 'Twilight Domain', 'War Domain',
+      'Community Domain (Cleric)', 'Night Domain (Cleric)'
+    ],
+    Druid: [
+      'Circle of Dreams', 'Circle of the Land', 'Circle of the Moon', 'Circle of the Shepherd',
+      'Circle of Spores', 'Circle of Stars', 'Circle of Wildfire'
+    ],
+    Fighter: [
+      'Arcane Archer', 'Banneret (Purple Dragon Knight)', 'Battle Master', 'Cavalier', 'Champion',
+      'Echo Knight', 'Eldritch Knight', 'Psi Warrior', 'Rune Knight', 'Samurai',
+      'Scofflaw (Fighter)'
+    ],
+    Monk: [
+      'Way of the Ascendant Dragon', 'Way of the Astral Self', 'Way of the Drunken Master',
+      'Way of the Four Elements', 'Way of the Kensei', 'Way of the Long Death',
+      'Way of Mercy', 'Way of the Open Hand', 'Way of Shadow', 'Way of the Sun Soul'
+    ],
+    Paladin: [
+      'Oath of the Ancients', 'Oath of Conquest', 'Oath of the Crown', 'Oath of Devotion',
+      'Oath of Glory', 'Oath of Redemption', 'Oath of the Watchers', 'Oath of Vengeance',
+      'Oathbreaker'
+    ],
+    Ranger: [
+      'Beast Master', 'Drakewarden', 'Fey Wanderer', 'Gloom Stalker', 'Horizon Walker',
+      'Hunter', 'Monster Slayer', 'Swarmkeeper'
+    ],
+    Rogue: [
+      'Arcane Trickster', 'Assassin', 'Inquisitive', 'Mastermind', 'Phantom', 'Scout',
+      'Soulknife', 'Swashbuckler', 'Thief'
+    ],
+    Sorcerer: [
+      'Aberrant Mind', 'Clockwork Soul', 'Divine Soul', 'Draconic Bloodline',
+      'Lunar Sorcery', 'Shadow Magic', 'Storm Sorcery', 'Wild Magic'
+    ],
+    Warlock: [
+      'The Archfey', 'The Celestial', 'The Fathomless', 'The Fiend', 'The Genie',
+      'The Great Old One', 'The Hexblade', 'The Undead', 'The Undying'
+    ],
     Wizard: [
-      'School of Abjuration', 'School of Conjuration', 'School of Divination', 'School of Enchantment',
-      'School of Evocation', 'School of Illusion', 'School of Necromancy', 'School of Transmutation'
-    ]
+      'Bladesinging', 'Chronurgy Magic', 'Graviturgy Magic', 'Order of Scribes',
+      'School of Abjuration', 'School of Conjuration', 'School of Divination',
+      'School of Enchantment', 'School of Evocation', 'School of Illusion',
+      'School of Necromancy', 'School of Transmutation', 'War Magic'
+    ],
   };
 
   function normalized(value) {

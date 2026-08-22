@@ -169,7 +169,7 @@ const router = window.HumblewoodRouter.createRouter({
   routes: {
     map: { path: '/map', title: 'Map' },
     characters: { path: '/characters', title: 'Characters' },
-    almanac: { path: '/almanac', title: 'Mossbound Almanac' },
+    almanac: { path: '/almanac', title: 'Humble Almanac' },
     jukebox: { path: '/jukebox', title: 'Jukebox' },
     dice: { path: '/dice', title: 'Dice' }
   },

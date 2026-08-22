@@ -58,4 +58,6 @@ Now hosted on `https://humblewood.sfseeger.de/` !! Yippie
 - More humblewood specific vibes? 
 - look up summons waa
 - bug: spellcasting save DC does not change after establishing int/cha/wis once and then changing to another one
-- information lookup search page?
+- add religions and map to almanac 
+- conditions are bugged
+- automate the ac, health etc.
