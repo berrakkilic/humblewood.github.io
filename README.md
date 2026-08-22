@@ -53,5 +53,5 @@ Now hosted on `https://humblewood.sfseeger.de/` !!
 - More humblewood specific vibes? 
 - look up summons waa
 - bug: spellcasting save DC does not change after establishing int/cha/wis once and then changing to another one
-- conditions are bugged
 - automate the ac, health upgrades with level ups etc.
+- moving the map grid fucks up the snap function
