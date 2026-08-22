@@ -3,7 +3,7 @@ function registerTokenHandlers(socket, room) {
     CONDITIONS, applyNpcToToken, cloneJson, controlsToken, deny, emitCharacterUpdate,
     emitNpcRoster, emitSavedScenes, emitToken, isDm, markSceneDirty, normalizeCharacter,
     normalizeNpc, normalizeToken, npcFromToken, persistState, publicToken,
-    removeInitiativeForTokenIds, syncNpcFromToken, uniqueTokenLabel
+    removeInitiativeForTokenIds, snapCoordinateToCell, syncNpcFromToken, uniqueTokenLabel
   } = room;
   const { io, state } = room;
 
@@ -24,8 +24,8 @@ function registerTokenHandlers(socket, room) {
         label: character.name,
         kind: 'pc',
         imageUrl: character.portraitUrl || null,
-        x: state.scene.gridSize / 2,
-        y: state.scene.gridSize / 2,
+        x: snapCoordinateToCell(state.scene.gridSize / 2, state.scene.gridSize, state.scene.gridOffsetX),
+        y: snapCoordinateToCell(state.scene.gridSize / 2, state.scene.gridSize, state.scene.gridOffsetY),
         size: 44,
         sizeScale: 1,
         coordinateMode: 'center',
@@ -45,8 +45,12 @@ function registerTokenHandlers(socket, room) {
         label: String(requested.label || linkedCharacter?.name || 'Token').trim().slice(0, 100),
         kind,
         imageUrl: String(requested.imageUrl || linkedCharacter?.portraitUrl || '').slice(0, 1000) || null,
-        x: Number.isFinite(Number(requested.x)) ? Number(requested.x) : state.scene.gridSize / 2,
-        y: Number.isFinite(Number(requested.y)) ? Number(requested.y) : state.scene.gridSize / 2,
+        x: Number.isFinite(Number(requested.x))
+          ? Number(requested.x)
+          : snapCoordinateToCell(state.scene.gridSize / 2, state.scene.gridSize, state.scene.gridOffsetX),
+        y: Number.isFinite(Number(requested.y))
+          ? Number(requested.y)
+          : snapCoordinateToCell(state.scene.gridSize / 2, state.scene.gridSize, state.scene.gridOffsetY),
         size: Math.max(18, Math.min(180, Number(requested.size) || 44)),
         sizeScale: Math.max(0.35, Math.min(3, Number(requested.sizeScale) || 1)),
         coordinateMode: 'center',
@@ -159,8 +163,8 @@ function registerTokenHandlers(socket, room) {
     if (existing) return socket.emit('token:exists', publicToken(socket, existing));
     const token = applyNpcToToken(npc, {
       id: `t${Date.now()}${Math.random().toString(36).slice(2, 6)}`,
-      x: state.scene.gridSize / 2,
-      y: state.scene.gridSize / 2,
+      x: snapCoordinateToCell(state.scene.gridSize / 2, state.scene.gridSize, state.scene.gridOffsetX),
+      y: snapCoordinateToCell(state.scene.gridSize / 2, state.scene.gridSize, state.scene.gridOffsetY),
       size: 44,
       sizeScale: npc.tokenScale,
       coordinateMode: 'center',

@@ -47,4 +47,14 @@ assert.equal(diagonal.feet, 10);
 assert.deepEqual({ ...diagonal.start }, { x: 25, y: 25 });
 assert.deepEqual({ ...diagonal.end }, { x: 75, y: 75 });
 
-console.log('Map geometry checks passed: anchored wheel/pinch zoom, fit-to-view, and square-counting ruler.');
+assert.equal(geometry.snapCoordinateToCell(38, 50, 13), 38);
+assert.equal(geometry.snapCoordinateToCell(80, 50, 13), 88);
+assert.equal(geometry.snapCoordinateToCell(-30, 50, 13), -12);
+
+const offsetGrid = geometry.gridMeasurement({ x: 20, y: 15 }, { x: 75, y: 62 }, 50, 10, 5);
+assert.equal(offsetGrid.horizontalSquares, 1);
+assert.equal(offsetGrid.verticalSquares, 1);
+assert.deepEqual({ ...offsetGrid.start }, { x: 35, y: 30 });
+assert.deepEqual({ ...offsetGrid.end }, { x: 85, y: 80 });
+
+console.log('Map geometry checks passed: zoom, fit-to-view, offset-aware snapping, and offset-aware ruler cells.');

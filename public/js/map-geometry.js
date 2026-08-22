@@ -48,10 +48,24 @@
     };
   }
 
-  function gridMeasurement(start, end, gridSize) {
+  function snapCoordinateToCell(value, gridSize, gridOffset = 0) {
     const size = Math.max(1, Number(gridSize) || 1);
-    const startCell = { x: Math.floor(start.x / size), y: Math.floor(start.y / size) };
-    const endCell = { x: Math.floor(end.x / size), y: Math.floor(end.y / size) };
+    const offset = Number(gridOffset) || 0;
+    return Math.floor(((Number(value) || 0) - offset) / size) * size + size / 2 + offset;
+  }
+
+  function gridMeasurement(start, end, gridSize, gridOffsetX = 0, gridOffsetY = 0) {
+    const size = Math.max(1, Number(gridSize) || 1);
+    const offsetX = Number(gridOffsetX) || 0;
+    const offsetY = Number(gridOffsetY) || 0;
+    const startCell = {
+      x: Math.floor((start.x - offsetX) / size),
+      y: Math.floor((start.y - offsetY) / size)
+    };
+    const endCell = {
+      x: Math.floor((end.x - offsetX) / size),
+      y: Math.floor((end.y - offsetY) / size)
+    };
     const horizontalSquares = Math.abs(endCell.x - startCell.x);
     const verticalSquares = Math.abs(endCell.y - startCell.y);
     const squares = horizontalSquares + verticalSquares;
@@ -61,12 +75,12 @@
       squares,
       feet: squares * 5,
       start: {
-        x: startCell.x * size + size / 2,
-        y: startCell.y * size + size / 2
+        x: startCell.x * size + size / 2 + offsetX,
+        y: startCell.y * size + size / 2 + offsetY
       },
       end: {
-        x: endCell.x * size + size / 2,
-        y: endCell.y * size + size / 2
+        x: endCell.x * size + size / 2 + offsetX,
+        y: endCell.y * size + size / 2 + offsetY
       }
     };
   }
@@ -78,6 +92,7 @@
     fitStageInViewport,
     gridMeasurement,
     positionStagePoint,
+    snapCoordinateToCell,
     zoomAroundPoint
   };
 })(window);

@@ -196,6 +196,30 @@ async function run() {
   dm.socket.emit('token:combat:update', { id: duplicate.id, action: 'condition:toggle', condition: 'Prone' });
   assert.deepEqual((await pending).combat.conditions, ['Blinded']);
 
+  pending = once(dm.socket, 'state:full', fullState => (
+    fullState.scene.gridOffsetX === 13 && fullState.scene.gridOffsetY === 7
+  ));
+  dm.socket.emit('scene:setGrid', {
+    gridSize: 50,
+    gridVisible: true,
+    fitTokensToGrid: true,
+    gridOffsetX: 13,
+    gridOffsetY: 7
+  });
+  const offsetGridState = await pending;
+  const offsetWolf = offsetGridState.tokens.find(token => token.id === wolf.id);
+  assert.equal((offsetWolf.x - 13 - 25) % 50, 0);
+  assert.equal((offsetWolf.y - 7 - 25) % 50, 0);
+
+  pending = once(dm.socket, 'token:add', token => token.label === 'Offset Marker');
+  dm.socket.emit('token:add', { label: 'Offset Marker', kind: 'item' });
+  const offsetMarker = await pending;
+  assert.equal(offsetMarker.x, 38);
+  assert.equal(offsetMarker.y, 32);
+  pending = once(playerOne.socket, 'token:remove', removed => removed.id === offsetMarker.id);
+  dm.socket.emit('token:remove', { id: offsetMarker.id });
+  await pending;
+
   pending = once(dm.socket, 'initiative:update', initiative => initiative.entries.length === 1);
   dm.socket.emit('initiative:add', { name: 'Wolf', value: 18, tokenId: wolf.id });
   await pending;
@@ -237,7 +261,13 @@ async function run() {
   assert.equal(restored.scene.fogShapes.length, 1);
   assert.equal(restored.scene.doodlePaths.length, 1);
   assert.equal(restored.scene.showTokenLabelsToPlayers, false);
+  assert.equal(restored.scene.gridOffsetX, 13);
+  assert.equal(restored.scene.gridOffsetY, 7);
   assert.equal(restored.tokens.length, 2);
+  restored.tokens.forEach(token => {
+    assert.equal((token.x - restored.scene.gridOffsetX - 25) % 50, 0);
+    assert.equal((token.y - restored.scene.gridOffsetY - 25) % 50, 0);
+  });
   assert.deepEqual(restored.initiative.entries.map(entry => entry.id), [duplicateEntry.id, wolfEntry.id]);
   assert.equal(restored.savedScenes.length, 0);
   assert.deepEqual(restored.npcs, {});

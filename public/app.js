@@ -4,6 +4,7 @@ const {
   fitStageInViewport,
   gridMeasurement,
   positionStagePoint,
+  snapCoordinateToCell,
   zoomAroundPoint
 } = window.HumblewoodMapGeometry;
 const combatState = window.HumblewoodCombatState;
@@ -576,8 +577,8 @@ function finishDraggedToken() {
     let y = parseFloat(el.style.top);
     if (document.getElementById('snap-toggle').checked) {
       const size = Math.max(10, Number(state.scene.gridSize) || 50);
-      x = Math.floor(x / size) * size + size / 2;
-      y = Math.floor(y / size) * size + size / 2;
+      x = snapCoordinateToCell(x, size, state.scene.gridOffsetX);
+      y = snapCoordinateToCell(y, size, state.scene.gridOffsetY);
       el.style.left = x + 'px';
       el.style.top = y + 'px';
     }
@@ -960,7 +961,13 @@ function updateRuler(start, end) {
   const endDot = document.getElementById('ruler-end');
   const label = document.getElementById('ruler-label');
   const gridSize = Math.max(10, Number(state.scene.gridSize) || 50);
-  const measurement = gridMeasurement(start, end, gridSize);
+  const measurement = gridMeasurement(
+    start,
+    end,
+    gridSize,
+    state.scene.gridOffsetX,
+    state.scene.gridOffsetY
+  );
   overlay.classList.add('visible');
   line.setAttribute('x1', measurement.start.x); line.setAttribute('y1', measurement.start.y);
   line.setAttribute('x2', measurement.end.x); line.setAttribute('y2', measurement.end.y);
