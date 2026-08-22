@@ -1772,7 +1772,7 @@ function openSheetEditor(c) {
   document.getElementById('spell-add-form').classList.add('hidden');
   renderSpellListEditor();
   renderPortraitPreview(editingPortraitUrl);
-  refreshCharacterCalculations(!c);
+  refreshCharacterCalculations(!c, !c);
   setSheetEditable(editingCanEdit, !!c);
   document.getElementById('view-characters').scrollIntoView({ behavior: 'smooth' });
 }
@@ -2222,7 +2222,7 @@ function proficiencyBonus(level) {
   return 2 + Math.floor((Math.max(1, Math.min(20, Number(level) || 1)) - 1) / 4);
 }
 
-function refreshCharacterCalculations(force) {
+function refreshCharacterCalculations(force, recalculateSpell = false) {
   const level = document.getElementById('sf-level');
   const bonus = proficiencyBonus(level.value);
   document.getElementById('sf-prof-bonus').value = bonus;
@@ -2247,20 +2247,26 @@ function refreshCharacterCalculations(force) {
   if (force || passive.value === '') passive.value = 10 + Number(document.getElementById('sf-skill-perception').value || 0);
   const spellAbility = document.getElementById('sf-spell-ability').value.toLowerCase();
   if (ABILITIES.includes(spellAbility)) {
-    const spellMod = abilityModifier(document.getElementById(`sf-${spellAbility}`).value);
+    const calculated = characterRules.spellcastingValues(
+      document.getElementById(`sf-${spellAbility}`).value,
+      level.value
+    );
     const spellDc = document.getElementById('sf-spell-dc');
     const spellAttack = document.getElementById('sf-spell-attack');
-    if (spellDc.value === '') spellDc.value = 8 + bonus + spellMod;
-    if (spellAttack.value === '') spellAttack.value = bonus + spellMod;
+    if (recalculateSpell || spellDc.value === '') spellDc.value = calculated.saveDc;
+    if (recalculateSpell || spellAttack.value === '') spellAttack.value = calculated.attackBonus;
   }
 }
 
-ABILITIES.forEach(ability => document.getElementById(`sf-${ability}`).addEventListener('input', () => refreshCharacterCalculations(true)));
-document.getElementById('sf-level').addEventListener('input', () => refreshCharacterCalculations(true));
+ABILITIES.forEach(ability => document.getElementById(`sf-${ability}`).addEventListener('input', () => {
+  const spellAbility = document.getElementById('sf-spell-ability').value.toLowerCase();
+  refreshCharacterCalculations(true, ability === spellAbility);
+}));
+document.getElementById('sf-level').addEventListener('input', () => refreshCharacterCalculations(true, true));
 document.getElementById('sf-initiative').addEventListener('input', () => { initiativeManuallyEdited = true; });
 ABILITIES.forEach(ability => document.getElementById(`sf-save-${ability}-prof`).addEventListener('change', () => refreshCharacterCalculations(true)));
 Object.keys(SKILL_ABILITIES).forEach(skill => document.getElementById(`sf-skill-${skill}-prof`).addEventListener('change', () => refreshCharacterCalculations(true)));
-document.getElementById('sf-spell-ability').addEventListener('change', () => refreshCharacterCalculations(false));
+document.getElementById('sf-spell-ability').addEventListener('change', () => refreshCharacterCalculations(false, true));
 
 // ================= JUKEBOX =================
 const audioEl = document.getElementById('audio-el');

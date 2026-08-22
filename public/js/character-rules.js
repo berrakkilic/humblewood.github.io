@@ -112,6 +112,17 @@
     return [...(CLASS_SUBCLASSES[canonicalClass(className)] || [])];
   }
 
+  function spellcastingValues(abilityScore, level) {
+    const score = Number(abilityScore) || 10;
+    const modifier = Math.floor((score - 10) / 2);
+    const boundedLevel = Math.max(1, Math.min(20, Number(level) || 1));
+    const proficiency = 2 + Math.floor((boundedLevel - 1) / 4);
+    return {
+      attackBonus: proficiency + modifier,
+      saveDc: 8 + proficiency + modifier
+    };
+  }
+
   function fieldsFromCharacter(character = {}) {
     const fields = { ...(character.fields && typeof character.fields === 'object' ? character.fields : {}) };
     if (!Object.prototype.hasOwnProperty.call(fields, 'species')) fields.species = character.species ?? character.race ?? '';
@@ -193,6 +204,7 @@
     applyPlayerCharacterConstraints,
     canonicalClass,
     canonicalSpecies,
+    spellcastingValues,
     subclassesFor,
     subracesFor,
     validatePlayerCharacter

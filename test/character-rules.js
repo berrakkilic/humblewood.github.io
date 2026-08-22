@@ -42,6 +42,10 @@ assert.match(rules.validatePlayerCharacter({ fields: validFields({ species: 'Hed
 assert.equal(rules.validatePlayerCharacter({ fields: validFields({ feats: 'Aerial Expert\nPrerequisite: Glide trait' }) }), '');
 assert.deepEqual(rules.GLIDE_FEATS, ['Aerial Expert', 'Heavy Glider']);
 
+assert.deepEqual(rules.spellcastingValues(18, 5), { attackBonus: 7, saveDc: 15 });
+assert.deepEqual(rules.spellcastingValues(12, 5), { attackBonus: 4, saveDc: 12 });
+assert.deepEqual(rules.spellcastingValues(8, 17), { attackBonus: 5, saveDc: 13 });
+
 const character = {
   fields: validFields({ species: 'corvum', class: 'rogue' }),
   abilities: { str: 99 },
