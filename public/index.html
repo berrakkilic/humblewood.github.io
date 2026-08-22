@@ -499,7 +499,13 @@
               <div class="field"><label>Class</label><select id="sf-class"><option value="">Choose a class...</option></select></div>
               <div class="field"><label>Subclass</label><select id="sf-subclass" disabled><option value="">Choose a class first...</option></select></div>
 
-              <div class="field"><label>Level</label><input type="number" id="sf-level" value="1" min="1" max="20" step="1"></div>
+              <div class="field">
+                <label>Level</label>
+                <div class="level-field-row">
+                  <input type="number" id="sf-level" value="1" min="1" max="20" step="1">
+                  <button type="button" class="btn-rose" id="level-up-btn">Level up</button>
+                </div>
+              </div>
               <div class="field"><label>Background</label><input type="text" id="sf-background" placeholder="Background"></div>
               <div class="field">
                 <label>Alignment</label>
@@ -510,7 +516,7 @@
                   <option value="Lawful Evil"><option value="Neutral Evil"><option value="Chaotic Evil">
                 </datalist>
               </div>
-              <div class="field"><label>Experience</label><input type="number" id="sf-xp" min="0" value="0"></div>
+              <div class="field"><label>Experience (optional)</label><input type="number" id="sf-xp" min="0" value="0" placeholder="Not used for milestones"></div>
 
               <div class="field span-2"><label>Home</label><input type="text" id="sf-home" placeholder="A hollow beneath Cedarfall Hollow..."></div>
               <div class="field">
@@ -544,6 +550,25 @@
               <div class="field"><label>Passive Perception</label><input type="number" id="sf-passive-perception" value="10"></div>
               <div class="field"><label>Size</label><input type="text" id="sf-size" list="size-suggestions" placeholder="Small / Medium"></div>
               <datalist id="size-suggestions"><option value="Tiny"><option value="Small"><option value="Medium"><option value="Large"></datalist>
+            </div>
+            <div class="ac-calculator">
+              <div class="field">
+                <label>AC calculation</label>
+                <select id="sf-ac-method">
+                  <option value="manual">Manual</option>
+                  <option value="unarmored">Unarmored (10 + DEX)</option>
+                  <option value="light">Light armor (base + DEX)</option>
+                  <option value="medium">Medium armor (base + DEX, max +2)</option>
+                  <option value="heavy">Heavy armor (base only)</option>
+                  <option value="barbarian">Barbarian Unarmored Defense</option>
+                  <option value="monk">Monk Unarmored Defense</option>
+                  <option value="hedge">Hedge Spiny Quills</option>
+                  <option value="hedge-curled">Hedge curled up</option>
+                </select>
+              </div>
+              <div class="field"><label>Armor base</label><input type="number" id="sf-ac-base" value="10"></div>
+              <div class="field"><label>Shield / other bonus</label><input type="number" id="sf-ac-bonus" value="0"></div>
+              <p id="ac-calculation-note">Manual AC remains unchanged. Choose a method to keep AC synced with the relevant ability scores.</p>
             </div>
             <div class="death-save-row">
               <strong>Death Saves</strong>
@@ -689,6 +714,7 @@
               <div class="field"><label>Spellcasting ability</label><select id="sf-spell-ability"><option value="">—</option><option>INT</option><option>WIS</option><option>CHA</option></select></div>
               <div class="field"><label>Spell Save DC</label><input type="number" id="sf-spell-dc"></div>
               <div class="field"><label>Spell Attack Bonus</label><input type="number" id="sf-spell-attack"></div>
+              <div class="field"><label>Prepared spells</label><input type="number" id="sf-spells-prepared" readonly placeholder="Uses spells known"></div>
             </div>
             <div class="spell-slots-grid">
               <div class="spell-level-head">Level</div><div class="spell-level-head">Slots</div><div class="spell-level-head">Used</div>
@@ -928,6 +954,50 @@
 </div>
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<div class="combat-overlay level-up-overlay hidden" id="level-up-overlay" aria-hidden="true">
+  <section class="combat-modal panel level-up-modal" role="dialog" aria-modal="true" aria-labelledby="level-up-title">
+    <div class="combat-modal-header">
+      <div>
+        <p class="combat-kicker">Milestone advancement</p>
+        <h2 id="level-up-title">Level up</h2>
+        <p id="level-up-intro"></p>
+      </div>
+      <button class="btn-ghost" id="level-up-close-btn" type="button">Cancel</button>
+    </div>
+
+    <div class="level-up-columns">
+      <section class="level-up-card">
+        <h3>Hit points & hit dice</h3>
+        <p>Choose the fixed average, use the built-in die, or enter a physical die result.</p>
+        <div id="level-up-hp-rows"></div>
+        <label class="level-up-current-hp"><input type="checkbox" id="level-up-current-hp" checked> Increase current HP by the same amount</label>
+      </section>
+
+      <section class="level-up-card" id="level-up-asi-card">
+        <h3>Ability scores or feats</h3>
+        <p>Each available improvement can grant +2 to one score, +1 to two scores, or a feat instead.</p>
+        <div id="level-up-asi-rows"></div>
+      </section>
+    </div>
+
+    <section class="level-up-card">
+      <h3>What changes at these levels</h3>
+      <div id="level-up-summary" class="level-up-summary"></div>
+    </section>
+
+    <section class="level-up-card level-up-automatic-card">
+      <h3>Calculated automatically</h3>
+      <p id="level-up-automatic-summary"></p>
+      <p class="level-up-note">Armor-dependent attacks, damage bonuses, spell choices, replacement spells, feats, and multiclassing remain choices. Update those fields from the relevant class or subclass source before finishing the sheet.</p>
+    </section>
+
+    <div class="combat-footer level-up-footer">
+      <button class="btn-ghost" id="level-up-cancel-btn" type="button">Cancel level change</button>
+      <button class="btn-primary" id="level-up-apply-btn" type="button">Apply & Done</button>
+    </div>
+  </section>
+</div>
 
 <div class="combat-overlay hidden" id="combat-overlay" aria-hidden="true">
   <section class="combat-modal panel" role="dialog" aria-modal="true" aria-labelledby="combat-title">

@@ -893,6 +893,58 @@ body[data-role="player"] .dm-only { display: none !important; }
 }
 .toast.visible { opacity: 1; transform: translateY(0); }
 
+/* ---------- Character advancement ---------- */
+.level-field-row { display: grid; grid-template-columns: minmax(72px, 1fr) auto; gap: 7px; }
+.level-field-row .btn-rose { padding: 8px 10px; white-space: nowrap; }
+.ac-calculator {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.4fr) minmax(110px, .6fr) minmax(130px, .7fr);
+  gap: 10px;
+  align-items: end;
+  margin-top: 12px;
+  padding: 12px;
+  border-radius: 11px;
+  background: var(--parchment-dark);
+}
+.ac-calculator .field { margin: 0; }
+.ac-calculator p { grid-column: 1 / -1; margin: 0; color: var(--ink-soft); font-size: 11px; line-height: 1.4; }
+.level-up-overlay { z-index: 1100; }
+.level-up-modal { width: min(960px, 100%); }
+.level-up-modal h2, .level-up-modal h3, .level-up-modal h4 { color: var(--forest-deep); }
+.level-up-modal h3 { margin: 0 0 5px; font-size: 16px; }
+.level-up-modal p { color: var(--ink-soft); line-height: 1.45; }
+.level-up-modal .combat-modal-header { align-items: flex-start; margin-bottom: 14px; }
+#level-up-intro { margin: 5px 0 0; }
+.level-up-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.level-up-card { margin-bottom: 12px; padding: 14px; border-radius: 12px; background: var(--parchment-dark); }
+.level-up-card > p { margin: 3px 0 10px; font-size: 12px; }
+.level-up-hp-row {
+  display: grid;
+  grid-template-columns: 72px 1fr 1fr 76px auto;
+  gap: 7px;
+  align-items: center;
+  margin-top: 8px;
+  padding: 9px;
+  border-radius: 9px;
+  background: #fffdf8;
+}
+.level-up-hp-row label { display: flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 700; }
+.level-up-hp-row input[type="number"] { min-width: 0; padding: 6px; }
+.level-up-hp-row button { padding: 6px 8px; white-space: nowrap; }
+.level-up-current-hp { display: flex; align-items: center; gap: 7px; margin-top: 10px; font-size: 12px; font-weight: 700; }
+.level-up-asi-row { margin-top: 8px; padding: 10px; border-radius: 9px; background: #fffdf8; }
+.level-up-asi-row-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+.level-up-asi-row select, .level-up-asi-row input[type="text"] { width: 100%; }
+.level-up-asi-controls { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; margin-top: 7px; }
+.level-up-asi-controls.single { grid-template-columns: 1fr; }
+.level-up-asi-controls.hidden { display: none; }
+.level-up-summary { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.level-up-summary-level { padding: 10px; border-radius: 9px; background: #fffdf8; }
+.level-up-summary-level h4 { margin: 0 0 5px; font-size: 13px; }
+.level-up-summary-level ul { margin: 0; padding-left: 18px; color: var(--ink-soft); font-size: 12px; line-height: 1.45; }
+.level-up-note { margin-bottom: 0 !important; padding-left: 10px; border-left: 3px solid var(--gold); }
+.level-up-footer { margin-top: 4px; }
+
 /* ---------- Quick combat modal ---------- */
 .combat-overlay {
   position: fixed;
@@ -1045,6 +1097,13 @@ body[data-role="player"] .dm-only { display: none !important; }
   .combat-spell-slots { grid-template-columns: 1fr; }
   .combat-footer { align-items: stretch; flex-direction: column; }
   .combat-footer .btn-primary { width: 100%; }
+  .level-up-columns, .level-up-summary { grid-template-columns: 1fr; }
+  .level-up-hp-row { grid-template-columns: 1fr 1fr; }
+  .level-up-hp-row > strong { grid-column: 1 / -1; }
+  .level-up-hp-row input[type="number"] { grid-column: 1; }
+  .level-up-hp-row button { grid-column: 2; }
+  .ac-calculator { grid-template-columns: 1fr; }
+  .ac-calculator p { grid-column: 1; }
   .sheet-form { grid-template-columns: 1fr; }
   .sheet-form .field.span-2, .sheet-form .field.span-4 { grid-column: span 1; }
   .ability-grid { grid-template-columns: repeat(2, 1fr); }

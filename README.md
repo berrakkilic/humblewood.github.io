@@ -44,12 +44,10 @@ Now hosted on `https://humblewood.sfseeger.de/` !!
 - **Character-specific dice**: Select a character to roll ability checks, saving throws, skills, initiative, attacks, spell attacks etc. with the stored modifiers. d20 rolls support advantage and disadvantage and sync to the shared roll log. Spell and combat rolls are accessible on the combat page. To unlock damage rolls on spells, simply write its roll (for example 1d10) in the spell description.
 - **Cottagecore Humblewood aesthetic**: parchment and forest tones, vine dividers, soft rounded shapes.
 - **Access restrictions**: DM access is PIN-gated. Character ownership is tied to the "Player" field in character sheet. Players must log in with username and password. Password can be changed by DM upon request, however, username shall stay known. Token movement/character rolls are checked server-side.
-- **Function automation and Shortcuts**: Long-rest automation. NPC Duplication. Fit map to grid. Middle button of mouse to move around.
+- **Function automation and Shortcuts**: Long-rest automation. NPC Duplication. Fit map to grid. Middle button of mouse to move around. Automated level up calculations and information screens.
 - **Not tested yet - Scene saving as DM**
 - **Almanac**: provides necessary information on the Humblewood in an easily organizable and digestible collection.
 
 ## Known limitations to work out next
-- Music playback requires direct audio file URLs. Self-hosted MP3s or a service like SoundCloud's direct stream links also work.
 - More humblewood specific vibes? 
 - look up summons waa
-- automate the ac, health upgrades with level ups etc.

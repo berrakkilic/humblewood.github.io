@@ -80,6 +80,10 @@ async function run() {
     assert.match(html, /id="spell-form-damage"/);
     assert.match(html, /id="spell-preset-select"/);
     assert.match(html, /id="combat-spells"/);
+    assert.match(html, /id="level-up-overlay"/);
+    assert.match(html, /id="level-up-btn"/);
+    assert.match(html, /id="sf-ac-method"/);
+    assert.match(html, /id="sf-spells-prepared"/);
     assert.match(html, /id="view-almanac"/);
     assert.match(html, /id="almanac-search"/);
     assert.match(html, /js\/almanac-data\.js/);
@@ -97,7 +101,11 @@ async function run() {
   assert.match(await combatStateResponse.text(), /toggleCondition/);
   const characterRulesResponse = await fetch(`http://127.0.0.1:${port}/js/character-rules.js`);
   assert.equal(characterRulesResponse.status, 200);
-  assert.match(await characterRulesResponse.text(), /validatePlayerCharacter/);
+  const characterRulesSource = await characterRulesResponse.text();
+  assert.match(characterRulesSource, /validatePlayerCharacter/);
+  assert.match(characterRulesSource, /levelUpGains/);
+  assert.match(characterRulesSource, /spellSlotsFor/);
+  assert.match(characterRulesSource, /armorClass/);
   const humblewoodMapResponse = await fetch(`http://127.0.0.1:${port}/images/humblewood-expanded-nohex-v0.3.png`);
   assert.equal(humblewoodMapResponse.status, 200);
   assert.match(humblewoodMapResponse.headers.get('content-type') || '', /image\/png/);
