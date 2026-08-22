@@ -5,10 +5,36 @@
 })(typeof window !== 'undefined' ? window : null, function createAlmanacData() {
   return [
     {
+      id: 'map',
+      title: 'Map of Humblewood',
+      icon: '🗺️',
+      description: 'The regions, settlements, roads, rivers and wild places of the Wood.',
+      entries: [
+        {
+          title: 'The Humblewood',
+          kicker: 'The Wood · 499 A.A.Y.',
+          tags: ['map', 'humblewood', 'alderheart', 'brackenmill', 'heartwood', 'northumble', 'easthumble', 'westhumble', 'southumble', 'crest mountains', 'rainwood', 'vineboughs', 'talongrip coast', 'saltar port'],
+          summary: 'Humblewood stretches from the Oldeweald and Kraggermons in the west to the Rainwood and Vineboughs in the east, with Alderheart standing near its heart.',
+          facts: [
+            ['Central perch', 'Alderheart'],
+            ['Festival town', 'Brackenmill'],
+            ['Southern port', 'Saltar’s Port']
+          ],
+          image: {
+            src: '/images/humblewood-expanded-nohex-v0.3.png',
+            alt: 'Illustrated map of Humblewood showing its regions, settlements, forests, rivers, mountains and coastlines.',
+            caption: 'The Humblewood, 499 A.A.Y.'
+          },
+          wide: true,
+          openByDefault: true
+        }
+      ]
+    },
+    {
       id: 'brackenmill',
       title: 'Brackenmill & the First Bloom',
       icon: '🌼',
-      description: 'The campaign’s opening place, people, trade, and yearly celebration.',
+      description: 'The Wood’s great farming perch and its yearly celebration of the growing season.',
       entries: [
         {
           title: 'The First Bloom Festival',
@@ -30,8 +56,8 @@
               text: 'The festival is both a joyful meeting of communities and a seasonal appeal for healthy crops. It is an easy place to meet travelers, farmers, traders, craftsfolk, and future adventuring companions.'
             },
             {
-              heading: 'At the table',
-              text: 'Festival games, shared food, friendly rivalries, unusual wares, and crowded shipping platforms make this a lively first session location.'
+              heading: 'A lively gathering',
+              text: 'Festival games, shared food, friendly rivalries, unusual wares and crowded shipping platforms fill Brackenmill with activity.'
             }
           ]
         },
@@ -64,32 +90,89 @@
       ]
     },
     {
+      id: 'faith',
+      title: 'Faith & the Great Rhythm',
+      icon: '🌅',
+      description: 'Beliefs, names and customs familiar even beyond temples and shrines.',
+      entries: [
+        {
+          title: 'The Great Rhythm',
+          kicker: 'Common knowledge · The pulse of the forest',
+          tags: ['religion', 'faith', 'great rhythm', 'nature', 'seasons', 'life', 'death', 'balance'],
+          summary: 'The Great Rhythm is understood as the everlasting pulse that moves life and nature: sunrise and nightfall, flowering and harvest, birth and death, winter and renewal.',
+          sections: [
+            { heading: 'Across the Wood', text: 'Birdfolk often describe its beginning as the beating of wings. Other folk speak of hooves, paws or a tiny heartbeat. The images differ, but the idea of life moving in an endless rhythm is recognized throughout Humblewood.' }
+          ]
+        },
+        {
+          title: 'The Amaranthine',
+          kicker: 'Common knowledge · Guardians of the Rhythm',
+          tags: ['religion', 'faith', 'amaranthine', 'gods', 'great rhythm', 'birdfolk', 'humblefolk', 'shrines'],
+          summary: 'The Amaranthine are the gods of Everden and guardians of the Great Rhythm. Each is associated with a familiar part of life, nature or society.',
+          sections: [
+            { heading: 'Everyday presence', text: 'Their names appear in festivals, blessings, stories, household shrines and common expressions. Formal devotion varies widely, and birdfolk and humblefolk often tell different stories about them.' },
+            { heading: 'Dawn and night', text: 'Ardea, the Dawnmother, and Tyton, the Nightfather, are among the most widely recognized. They are associated with dawn and night, life and death, and the continuing cycle of the Rhythm.' }
+          ]
+        },
+        {
+          title: 'Familiar Amaranthine',
+          kicker: 'Common knowledge · Names heard across the Wood',
+          tags: ['religion', 'faith', 'amaranthine', 'altus', 'ardea', 'cairith', 'clhuran', 'gaspard', 'gesme', 'hanera', 'hath', 'henwin', 'kren', 'reya', 'tyton'],
+          summary: 'Most residents and well-traveled visitors recognize these names and their broad associations, whether or not they practice any faith.',
+          sections: [
+            {
+              heading: 'Widely known across birdfolk communities',
+              items: [
+                'Ardea, the Dawnmother — sunlight, life and kindness',
+                'Tyton, the Nightfather — night, death and necessary endings',
+                'Altus, the Enduring — strength, endurance and storms; closely associated with strigs',
+                'Clhuran, the Fickle — luck, fate and unpredictability; closely associated with lumas',
+                'Gesme, the Brilliant — knowledge, craft and fire; closely associated with corvums',
+                'Hanera, the Provider — crops, community and plenty; closely associated with gallus',
+                'Reya, the Explorer — wind, travel and discovery; closely associated with raptors'
+              ]
+            },
+            {
+              heading: 'Widely known across humblefolk communities',
+              items: [
+                'Cairith, the Resolute — life, resilience and protection; closely associated with cervans',
+                'Gaspard, the Champion — courage, heroism and community; closely associated with jerbeens',
+                'Hath, the Whisperer — night, secrets and the stars; closely associated with mapachs',
+                'Henwin, the Kind — shelter, nature and compassion; closely associated with hedges',
+                'Kren, the Sly — guile, predation and trickery; closely associated with vulpins'
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
       id: 'folk',
       title: 'Folk of the Wood',
       icon: '🪶',
-      description: 'The ten Humblewood player folk, with their defining traits and valid subraces.',
+      description: 'The ten folk of Humblewood and the traits for which they are known.',
       entries: [
         {
           title: 'Corvum',
           kicker: 'Birdfolk · Hungry for knowledge',
           tags: ['race', 'species', 'birdfolk', 'crow', 'dusk corvum', 'kindled corvum', 'intelligence'],
-          summary: 'Sharp-minded, observant crow-folk who trade in knowledge and often work as planners, appraisers, advisors, or subtle political operators.',
+          summary: 'Sharp-minded, observant crow-folk who trade in knowledge and often work as planners, appraisers, advisors or subtle political operators.',
           facts: [['Ability scores', '+2 Intelligence'], ['Size · Speed', 'Medium · 30 ft.'], ['Subraces', 'Dusk Corvum or Kindled Corvum'], ['Languages', 'Birdfolk; understands Auran']],
           sections: [
             { heading: 'Core traits', items: ['Glide and climbing talons', 'One learned proficiency: Arcana, History, Nature, or Religion', 'Appraising Eye reveals an object’s magical use and approximate value once per rest'] },
             { heading: 'Dusk Corvum', text: '+1 Dexterity. Skilled at hiding in dim light or darkness and proficient in Insight.' },
-            { heading: 'Kindled Corvum', text: '+1 Charisma. Persuasive or deceptive, broadly trained, and gifted with unusually accurate recall.' }
+            { heading: 'Kindled Corvum', text: '+1 Charisma. Persuasive or deceptive, broadly trained and gifted with unusually accurate recall.' }
           ]
         },
         {
           title: 'Gallus',
           kicker: 'Birdfolk · One with the Wood',
           tags: ['race', 'species', 'birdfolk', 'chicken', 'pheasant', 'bright gallus', 'huden gallus', 'wisdom'],
-          summary: 'Community-minded wildfowl who value honest work, gardening, hospitality, nature, and strong bonds with their neighbors.',
+          summary: 'Community-minded wildfowl who value honest work, gardening, hospitality, nature and strong bonds with their neighbors.',
           facts: [['Ability scores', '+2 Wisdom'], ['Size · Speed', 'Medium · 30 ft.'], ['Subraces', 'Bright Gallus or Huden Gallus'], ['Languages', 'Birdfolk; understands Auran']],
           sections: [
             { heading: 'Core traits', items: ['Glide and Wing Flap', 'Simple-weapon training and one artisan’s tool', 'Deep knowledge of their own culture and community'] },
-            { heading: 'Bright Gallus', text: '+1 Charisma. Proficient in Insight and able to inspire an ally with a d4 for their next check, attack, or save.' },
+            { heading: 'Bright Gallus', text: '+1 Charisma. Proficient in Insight and able to inspire an ally with a d4 for their next check, attack or save.' },
             { heading: 'Huden Gallus', text: '+1 Dexterity. Proficient in Nature and able to exchange simple ideas with living plants through Seedspeech.' }
           ]
         },
@@ -97,11 +180,11 @@
           title: 'Luma',
           kicker: 'Birdfolk · Peculiar in nature',
           tags: ['race', 'species', 'birdfolk', 'dove', 'pigeon', 'sable luma', 'sera luma', 'charisma', 'magic'],
-          summary: 'Small, iridescent dove- and pigeon-folk whose unusual perspective can look like distraction, luck, magical talent, or inspired brilliance.',
+          summary: 'Small, iridescent dove- and pigeon-folk whose unusual perspective can look like aloofness, luck, magical talent or inspired brilliance.',
           facts: [['Ability scores', '+2 Charisma'], ['Size · Speed', 'Small · 25 ft.'], ['Subraces', 'Sable Luma or Sera Luma'], ['Languages', 'Birdfolk; understands Auran']],
           sections: [
-            { heading: 'Core traits', items: ['Glide and Wing Flap', 'One sorcerer cantrip', 'Fated: reroll one attack, check, or save per long rest'] },
-            { heading: 'Sable Luma', text: '+1 Constitution. Difficult to read, skilled at deceiving non-lumas, and resistant to poison.' },
+            { heading: 'Core traits', items: ['Glide and Wing Flap', 'One sorcerer cantrip', 'Fated: reroll one attack, check or save per long rest'] },
+            { heading: 'Sable Luma', text: '+1 Constitution. Difficult to read, skilled at deceiving non-lumas and resistant to poison.' },
             { heading: 'Sera Luma', text: '+1 Wisdom. Proficient in Performance and able to cast charm person through song once per long rest.' }
           ]
         },
@@ -109,19 +192,19 @@
           title: 'Raptor',
           kicker: 'Birdfolk · Swift hunters',
           tags: ['race', 'species', 'birdfolk', 'hawk', 'eagle', 'maran raptor', 'mistral raptor', 'dexterity', 'archer'],
-          summary: 'Keen-eyed hunters and naturalists who prize personal bonds, patience, self-reliance, and accuracy over ceremony.',
+          summary: 'Keen-eyed hunters and naturalists who prize personal bonds, patience, self-reliance and accuracy over ceremony.',
           facts: [['Ability scores', '+2 Dexterity'], ['Size · Speed', 'Small · 25 ft.'], ['Subraces', 'Maran Raptor or Mistral Raptor'], ['Languages', 'Birdfolk; understands Auran']],
           sections: [
             { heading: 'Core traits', items: ['Glide, talons, and Perception proficiency', 'Longbow, shortbow, and spear training', 'Woodland Hunter reduces the benefit enemies gain from cover'] },
             { heading: 'Maran Raptor', text: '+1 Intelligence. A 25-foot swim speed and advantage on the first roll made as part of a readied action.' },
-            { heading: 'Mistral Raptor', text: '+1 Wisdom. Proficient in Acrobatics; attackers have disadvantage while the raptor is falling, gliding, or jumping.' }
+            { heading: 'Mistral Raptor', text: '+1 Wisdom. Proficient in Acrobatics; attackers have disadvantage while the raptor is falling, gliding or jumping.' }
           ]
         },
         {
           title: 'Strig',
           kicker: 'Birdfolk · Imposing yet kind',
           tags: ['race', 'species', 'birdfolk', 'owl', 'stout strig', 'swift strig', 'strength', 'darkvision'],
-          summary: 'Powerful owl-folk known for endurance, fair play, freedom, hunting prowess, and a willingness to protect those with less strength.',
+          summary: 'Powerful owl-folk known for endurance, fair play, freedom, hunting prowess and a willingness to protect those with less strength.',
           facts: [['Ability scores', '+2 Strength'], ['Size · Speed', 'Medium · 30 ft.'], ['Subraces', 'Stout Strig or Swift Strig'], ['Languages', 'Birdfolk; understands Auran']],
           sections: [
             { heading: 'Core traits', items: ['Glide and climbing talons', '60-foot darkvision', 'Advantage when hiding in forest terrain'] },
@@ -145,17 +228,17 @@
           title: 'Hedge',
           kicker: 'Humblefolk · Pointed mediators',
           tags: ['race', 'species', 'humblefolk', 'hedgehog', 'charisma', 'wisdom', 'quills', 'burrow'],
-          summary: 'Compassionate hedgehog-folk with a strong connection to the Great Rhythm, a gift for mediation, and formidable protective quills.',
+          summary: 'Compassionate hedgehog-folk with a strong connection to the Great Rhythm, a gift for mediation and formidable protective quills.',
           facts: [['Ability scores', '+2 Charisma, +1 Wisdom'], ['Size · Speed', 'Small · 25 ft.'], ['Subraces', 'None'], ['Languages', 'Birdfolk and Hedge']],
           sections: [
-            { heading: 'Core traits', items: ['15-foot burrowing speed through soil', 'Quills provide 14 + Dexterity modifier AC instead of armor', 'Curl Up raises base AC to 19 and can damage missed melee attackers', 'Druidcraft, animal messenger, and simple communication with bugs'] }
+            { heading: 'Core traits', items: ['15-foot burrowing speed through soil', 'Quills provide 14 + Dexterity modifier AC instead of armor', 'Curl Up raises base AC to 19 and can damage missed melee attackers', 'Druidcraft, animal messenger and simple communication with bugs'] }
           ]
         },
         {
           title: 'Jerbeen',
           kicker: 'Humblefolk · Tiny yet brave',
           tags: ['race', 'species', 'humblefolk', 'mouse', 'dexterity', 'charisma', 'team tactics', 'help'],
-          summary: 'Tiny mouse-folk whose courage, charm, long leaps, and cooperative instincts become strongest when friends stand nearby.',
+          summary: 'Tiny mouse-folk whose courage, charm, long leaps and cooperative instincts become strongest when friends stand nearby.',
           facts: [['Ability scores', '+2 Dexterity, +1 Charisma'], ['Size · Speed', 'Small · 30 ft.'], ['Subraces', 'None'], ['Languages', 'Birdfolk and Jerbeen']],
           sections: [
             { heading: 'Core traits', items: ['30-foot long jump and 15-foot high jump from a standstill', 'Can move through spaces occupied by larger creatures', 'Take Heart grants defensive advantages near a capable ally', 'Team Tactics allows the Help action as a bonus action'] }
@@ -165,7 +248,7 @@
           title: 'Mapach',
           kicker: 'Humblefolk · Cunning crafters',
           tags: ['race', 'species', 'humblefolk', 'raccoon', 'wisdom', 'constitution', 'scroungecraft', 'tinker'],
-          summary: 'Resourceful raccoon-folk who climb, sneak, improvise, and turn whatever happens to be nearby into surprisingly useful equipment.',
+          summary: 'Resourceful raccoon-folk who climb, sneak, improvise and turn whatever happens to be nearby into surprisingly useful equipment.',
           facts: [['Ability scores', '+2 Wisdom, +1 Constitution'], ['Size · Speed', 'Medium · 30 ft.'], ['Subraces', 'None'], ['Languages', 'Birdfolk and Mapach']],
           sections: [
             { heading: 'Core traits', items: ['60-foot darkvision and a 20-foot climb speed', 'Poison resilience and stealth in dim light or darkness', 'Tinker’s tools proficiency', 'In 10 minutes, Scroungecraft makes a temporary common tool or piece of adventuring gear worth no more than 30 gp; it normally lasts 1 hour'] }
@@ -175,7 +258,7 @@
           title: 'Vulpin',
           kicker: 'Humblefolk · Sophisticated yet savage',
           tags: ['race', 'species', 'humblefolk', 'fox', 'intelligence', 'charisma', 'bite', 'magic'],
-          summary: 'Ambitious fox-folk who combine intelligence, artistry, survival instinct, force of personality, and an innate talent for beguiling magic.',
+          summary: 'Ambitious fox-folk who combine intelligence, artistry, survival instinct, force of personality and an innate talent for beguiling magic.',
           facts: [['Ability scores', '+2 Intelligence, +1 Charisma'], ['Size · Speed', 'Medium · 30 ft.'], ['Subraces', 'None'], ['Languages', 'Birdfolk and Vulpin']],
           sections: [
             { heading: 'Core traits', items: ['60-foot darkvision', 'A 1d6 bite using Strength or Dexterity', 'Adds Intelligence modifier to Dexterity saving throws', 'Bewitching Guile grants charm person, then Ambush Prey and fear at later levels'] }
@@ -187,13 +270,13 @@
       id: 'callings',
       title: 'Paths & Callings',
       icon: '🗡️',
-      description: 'Class choices in Humblewood, including the setting’s special bard, cleric, and fighter options.',
+      description: 'Adventuring paths found throughout the Wood, including several local traditions.',
       entries: [
         {
-          title: 'Choosing a Class',
-          kicker: 'Character building · Step 2',
+          title: 'Adventuring Paths',
+          kicker: 'Callings beyond ordinary life',
           tags: ['class', 'all classes', 'character creation', 'artificer', 'barbarian', 'bard', 'cleric', 'druid', 'fighter', 'monk', 'paladin', 'ranger', 'rogue', 'sorcerer', 'warlock', 'wizard'],
-          summary: 'Every standard 5e class is available. Build for the personality and story you want to play rather than feeling pressured to optimize for the campaign.',
+          summary: 'Every familiar adventuring class can be found in Humblewood. A calling may grow from personality, history and circumstance rather than perfect preparation.',
           sections: [
             { heading: 'Humblewood additions', text: 'Bards may choose the College of the Road, clerics may follow the Community or Night domains, and fighters may become Scofflaws.' }
           ]
@@ -218,7 +301,7 @@
           facts: [['Class', 'Cleric'], ['Role', 'Support, recovery, and teamwork']],
           sections: [
             { heading: 'Key features', items: ['Blessing of the Hearth improves recovery during short rests at 1st level', 'Channel Divinity creates healing food at 2nd level', 'Community Watch grants a d6 boon to nearby allies’ checks, saves, or attacks at 6th level', 'Later levels improve Divine Strike and Community Watch'] },
-            { heading: 'Domain magic', text: 'The domain spell list includes several Humblewood spells. Search “Cleric” in the spell section to find compatible entries.' }
+            { heading: 'Domain magic', text: 'The domain spell list includes several Humblewood spells tied to protection, fellowship and shared strength.' }
           ]
         },
         {
@@ -248,7 +331,7 @@
       id: 'backgrounds',
       title: 'Roots & Backgrounds',
       icon: '🧺',
-      description: 'Ideas for who your character was before adventuring and how the Wood might see them.',
+      description: 'Lives, reputations and communities that may precede a folk’s adventuring days.',
       entries: [
         {
           title: 'Entertainers & Charlatans',
@@ -301,32 +384,32 @@
           title: 'Bandit Defector',
           kicker: 'Humblewood background',
           tags: ['background', 'bandit defector', 'bandit coalition', 'deception', 'survival', 'bandit routes'],
-          summary: 'You left the Bandit Coalition after a life of ambushing travelers, but old companions, old enemies, and old habits may not be ready to let you go.',
+          summary: 'A former member of the Bandit Coalition carries old routes, old habits and unfinished ties to companions and enemies from a life of ambushing travelers.',
           facts: [['Skills', 'Deception and Survival'], ['Tools', 'Disguise kit and one gaming set or musical instrument'], ['Feature', 'Bandit Routes']],
-          sections: [{ heading: 'Bandit Routes', text: 'Outside combat, your knowledge of hidden roads and escape paths lets you guide companions through forested travel with unusual speed.' }]
+          sections: [{ heading: 'Bandit Routes', text: 'Knowledge of hidden roads and escape paths allows a group to be guided through forested travel with unusual speed outside combat.' }]
         },
         {
           title: 'Grounded',
           kicker: 'Humblewood background · Birdfolk',
           tags: ['background', 'grounded', 'birdfolk', 'athletics', 'insight', 'forest floor'],
-          summary: 'You are a birdfolk who feels safer with solid earth beneath your feet. Other birdfolk may find that unusual, but the perspective helps you connect with humblefolk communities.',
+          summary: 'A Grounded birdfolk feels safer with solid earth beneath their feet. Other birdfolk may find this unusual, but the perspective often creates close ties with humblefolk communities.',
           facts: [['Skills', 'Athletics and Insight'], ['Feature', 'Find Another Path']],
-          sections: [{ heading: 'Find Another Path', text: 'You understand the undergrowth, can recall the general shape of forest-floor terrain, find routes around vertical obstacles when a route exists, and locate natural shelter while traveling.' }]
+          sections: [{ heading: 'Find Another Path', text: 'Familiarity with undergrowth aids the recall of forest-floor terrain, the discovery of routes around vertical obstacles and the search for natural shelter.' }]
         },
         {
           title: 'Wind-Touched',
           kicker: 'Humblewood background · Birdfolk',
           tags: ['background', 'wind-touched', 'birdfolk', 'acrobatics', 'performance', 'auran', 'wind'],
-          summary: 'Special markings, a strange survival, or local belief have marked you as someone blessed by the wind and perhaps destined to soar above every obstacle.',
+          summary: 'Special markings, a strange survival or local belief can mark a birdfolk as blessed by the wind and perhaps destined to soar above every obstacle.',
           facts: [['Skills', 'Acrobatics and Performance'], ['Language', 'Speaks and understands Auran'], ['Feature', 'Supernatural Presence']],
-          sections: [{ heading: 'Supernatural Presence', text: 'When you convincingly display power or skill associated with wind and air, believers may be inspired, supportive, reverent, or even worshipful.' }]
+          sections: [{ heading: 'Supernatural Presence', text: 'A convincing display of power or skill associated with wind and air may leave believers inspired, supportive, reverent or even worshipful.' }]
         },
         {
-          title: 'Belonging in the Wood',
-          kicker: 'Character prompt',
+          title: 'Place & Perception',
+          kicker: 'Life in the Wood',
           tags: ['background', 'roleplay', 'birdfolk', 'humblefolk', 'outsider', 'character building'],
-          summary: 'Your folk and inherited traits can help you belong in one community while marking you as an outsider in another.',
-          sections: [{ heading: 'Questions to ask', items: ['Where do you feel most at home?', 'Which assumptions do others make when they see you?', 'How do you view birdfolk and humblefolk whose lives differ from yours?', 'Which stereotype do you embrace, reject, or complicate?'] }]
+          summary: 'Folk and inherited traits can create belonging in one community while marking the same individual as an outsider in another.',
+          sections: [{ heading: 'Common considerations', items: ['The place that feels most like home', 'The assumptions made by strangers', 'Attitudes toward birdfolk and humblefolk whose lives differ', 'Stereotypes that are embraced, rejected or complicated'] }]
         }
       ]
     },
@@ -340,14 +423,14 @@
           title: 'Aerial Expert',
           kicker: 'Feat · Requires the Glide trait',
           tags: ['feat', 'aerial expert', 'glide', 'jump', 'dash', 'flight', 'dexterity', 'strength'],
-          summary: 'Years of practice have made you exceptionally agile in the air, able to leap farther and control a glide with far greater freedom.',
-          facts: [['Prerequisite', 'Glide trait'], ['Best for', 'Mobile birdfolk and aerial explorers']],
+          summary: 'Years of practice produce exceptional agility in the air, longer leaps and far greater control during a glide.',
+          facts: [['Prerequisite', 'Glide trait'], ['Often learned by', 'Mobile birdfolk and aerial explorers']],
           sections: [{
             heading: 'Benefits',
             items: [
-              'Long and high jumps no longer require a 10-foot run-up; use Strength or Dexterity and double the normal distance',
-              'Take the Dash action while gliding to travel up to one additional movement speed',
-              'Change direction freely while gliding and gain up to 10 feet of altitude once before landing'
+              'Long and high jumps no longer require a 10-foot run-up; Strength or Dexterity may be used and the normal distance is doubled',
+              'The Dash action may be taken while gliding to travel up to one additional movement speed',
+              'Direction may be changed freely while gliding, with up to 10 feet of altitude gained once before landing'
             ]
           }]
         },
@@ -355,12 +438,12 @@
           title: 'Bandit Cunning',
           kicker: 'Feat · Read danger and opponents',
           tags: ['feat', 'bandit cunning', 'intelligence', 'saving throw', 'investigation', 'challenge rating', 'resistance', 'immunity'],
-          summary: 'Bandit experience has sharpened your survival instincts and taught you how to study a dangerous opponent while the fight unfolds.',
+          summary: 'Bandit experience sharpens survival instincts and teaches careful study of dangerous opponents while a fight unfolds.',
           sections: [{
             heading: 'Benefits',
             items: [
-              'When making a saving throw, use your reaction to add your Intelligence modifier; refresh this ability after a long rest',
-              'In combat, study a creature you have seen fight with an Intelligence (Investigation) check against DC 10 + its challenge rating',
+              'A reaction may add the character’s Intelligence modifier to a saving throw; this ability refreshes after a long rest',
+              'In combat, a creature seen fighting may be studied with an Intelligence (Investigation) check against DC 10 + its challenge rating',
               'On success, learn one resistance or immunity, condition immunity, damaging or defensive special ability, attack or reaction option, or special sense'
             ]
           }]
@@ -369,12 +452,12 @@
           title: 'Heavy Glider',
           kicker: 'Feat · Requires the Glide trait',
           tags: ['feat', 'heavy glider', 'glide', 'heavy armor', 'heavy weapon', 'strength', 'push', 'prone'],
-          summary: 'Strength and training let you glide under loads that would ground other birdfolk—and turn your landing into a weapon.',
-          facts: [['Prerequisite', 'Glide trait'], ['Best for', 'Armored or heavy-weapon birdfolk']],
+          summary: 'Strength and training allow gliding under loads that would ground other birdfolk and can turn a landing into a weapon.',
+          facts: [['Prerequisite', 'Glide trait'], ['Often learned by', 'Armored or heavy-weapon birdfolk']],
           sections: [{
             heading: 'Benefits',
             items: [
-              'Glide while holding a heavy weapon and wearing heavy armor, provided you are not encumbered',
+              'Gliding remains possible while holding a heavy weapon and wearing heavy armor, provided the character is not encumbered',
               'Land in the space of a hostile Large or smaller creature and make an opposed Strength check',
               'On success, push it 10 feet and knock it prone; on failure, land in the nearest unoccupied space'
             ]
@@ -384,14 +467,14 @@
           title: 'Opportunistic Thief',
           kicker: 'Feat · Perfectly timed thievery',
           tags: ['feat', 'opportunistic thief', 'dexterity', 'sleight of hand', 'steal', 'pickpocket', 'melee'],
-          summary: 'You exploit a missed swing or momentary distraction to lift an item before its owner realizes an opportunity existed.',
-          facts: [['Ability increase', '+1 Dexterity'], ['Best for', 'Rogues, pickpockets, and quick-handed characters']],
+          summary: 'A missed swing or momentary distraction becomes a chance to lift an item before its owner realizes an opportunity existed.',
+          facts: [['Ability increase', '+1 Dexterity'], ['Often learned by', 'Rogues, pickpockets and quick-handed characters']],
           sections: [{
             heading: 'Benefits',
             items: [
-              'When a creature misses you with a melee attack, make a Dexterity (Sleight of Hand) check against DC 10 + its Dexterity modifier',
+              'When a creature misses the character with a melee attack, a Dexterity (Sleight of Hand) check may be made against DC 10 + its Dexterity modifier',
               'On success, steal one item that the target is not holding or wearing',
-              'After a successful out-of-combat theft, immediately conceal the object flawlessly or replace it with another object you possess'
+              'After a successful out-of-combat theft, the object may immediately be concealed flawlessly or replaced with another possessed object'
             ]
           }]
         },
@@ -399,13 +482,13 @@
           title: 'Perfect Landing',
           kicker: 'Feat · Fall with grace',
           tags: ['feat', 'perfect landing', 'dexterity', 'fall damage', 'prone', 'height'],
-          summary: 'Life at great heights has taught you how to absorb a fall, keep your footing, and walk away from drops that would injure others.',
-          facts: [['Ability increase', '+1 Dexterity'], ['Best for', 'Climbers, gliders, and canopy adventurers']],
+          summary: 'Life at great heights teaches how to absorb a fall, keep a steady footing and walk away from drops that would injure others.',
+          facts: [['Ability increase', '+1 Dexterity'], ['Often learned by', 'Climbers, gliders and canopy adventurers']],
           sections: [{
             heading: 'Benefits',
             items: [
               'Fall damage uses d4s instead of d6s',
-              'Taking fall damage does not knock you prone',
+              'Taking fall damage does not knock the character prone',
               'Ignore damage from the first 30 feet of a fall'
             ]
           }]
@@ -414,15 +497,15 @@
           title: 'Speech of the Ancient Beasts',
           kicker: 'Feat · Kinship with great creatures',
           tags: ['feat', 'speech of the ancient beasts', 'charisma', 'beast', 'giant eagle', 'giant elk', 'giant owl', 'language'],
-          summary: 'Great beasts recognize something familiar in you, allowing you to speak with legendary creatures and approach them as kin.',
-          facts: [['Ability increase', '+1 Charisma'], ['Best for', 'Nature-focused characters and animal diplomats']],
+          summary: 'Great beasts recognize a familiar kinship in some folk, allowing conversation with legendary creatures and a gentler first meeting.',
+          facts: [['Ability increase', '+1 Charisma'], ['Often learned by', 'Nature-focused characters and animal diplomats']],
           sections: [{
             heading: 'Benefits',
             items: [
-              'Large or larger beasts begin with a friendly disposition unless you have attacked them',
+              'Large or larger beasts begin with a friendly disposition unless they have been attacked by the character',
               'Gain advantage on Charisma checks made against Large or larger beasts',
               'Speak and understand Giant Eagle, Giant Elk, and Giant Owl',
-              'Any Large or larger beast can understand you, although less intelligent beasts may grasp only simple ideas'
+              'Any Large or larger beast can understand the character, although less intelligent beasts may grasp only simple ideas'
             ]
           }]
         },
@@ -431,13 +514,13 @@
           kicker: 'Feat · At home in the wild',
           tags: ['feat', 'woodwise', 'survival', 'nature', 'difficult terrain', 'lost', 'forest'],
           summary: 'A lifetime among tangled woodland paths has made natural terrain feel readable, familiar, and easy to cross.',
-          facts: [['Skill', 'Nature or Survival proficiency'], ['Best for', 'Guides, rangers, and woodland travelers']],
+          facts: [['Skill', 'Nature or Survival proficiency'], ['Often learned by', 'Guides, rangers and woodland travelers']],
           sections: [{
             heading: 'Benefits',
             items: [
               'Gain proficiency in either Nature or Survival',
               'Ignore difficult terrain',
-              'You cannot become lost in natural surroundings except through magical means'
+              'The character cannot become lost in natural surroundings except through magical means'
             ]
           }]
         }
@@ -447,40 +530,40 @@
       id: 'spells',
       title: 'Humblewood Spells',
       icon: '✨',
-      description: 'The setting’s ten special spells, organized for quick rules lookup at the table.',
+      description: 'Ten spells shaped by the creatures, skies and deep roots of Humblewood.',
       entries: [
         {
           title: 'Ambush Prey',
           kicker: '2nd-level illusion',
           tags: ['spell', 'ranger', 'vulpin', 'illusion', 'invisible', 'stealth', 'damage'],
-          summary: 'Become invisible while holding your position and empower the first attack made against a target unaware of you.',
+          summary: 'The caster becomes invisible while holding position, empowering the first attack against an unaware target.',
           facts: [['Casting', '1 action'], ['Range', 'Self'], ['Duration', '1 hour'], ['Components', 'S, M (a broken twig)'], ['Classes', 'Ranger']],
           sections: [
-            { heading: 'Effect', text: 'You are invisible and have advantage on Dexterity (Stealth) checks to remain hidden. Moving 5 feet or more from the casting position ends the invisibility.' },
-            { heading: 'Attack & damage', text: 'Your first attack against a target unaware of your presence deals an extra 1d6 damage and ends the spell. Each slot level above 2nd adds another 1d6.' }
+            { heading: 'Effect', text: 'The caster is invisible and has advantage on Dexterity (Stealth) checks to remain hidden. Moving 5 feet or more from the casting position ends the invisibility.' },
+            { heading: 'Attack & damage', text: 'The caster’s first attack against a target unaware of their presence deals an extra 1d6 damage and ends the spell. Each slot level above 2nd adds another 1d6.' }
           ]
         },
         {
           title: 'Elevated Sight',
           kicker: '1st-level divination',
           tags: ['spell', 'cleric', 'druid', 'ranger', 'warlock', 'wizard', 'divination', 'sensor', 'vision'],
-          summary: 'Project your sight through an invisible aerial sensor for a mobile, 360-degree view from above.',
+          summary: 'An invisible aerial sensor projects the caster’s sight into a mobile, 360-degree view from above.',
           facts: [['Casting', '1 action'], ['Range', 'Self; sensor up to 120 ft. above'], ['Duration', 'Concentration, up to 1 minute'], ['Components', 'V, S'], ['Classes', 'Cleric, Druid, Ranger, Warlock, Wizard']],
-          sections: [{ heading: 'Effect', text: 'The sensor travels with you and its height can be adjusted as a bonus action. You are blind while looking through it, but may switch between its view and your own during your turn.' }]
+          sections: [{ heading: 'Effect', text: 'The sensor travels with the caster and its height can be adjusted as a bonus action. The caster is blind while looking through it but may switch between the sensor’s view and normal sight during a turn.' }]
         },
         {
           title: 'Feathered Reach',
           kicker: '3rd-level transmutation',
           tags: ['spell', 'druid', 'ranger', 'transmutation', 'wings', 'glide', 'jump', 'flight'],
-          summary: 'Transform your arms into wings that support bursts of flight, powerful jumps, safe falls, and gliding movement.',
+          summary: 'The caster’s arms transform into wings that support bursts of flight, powerful jumps, safe falls and gliding movement.',
           facts: [['Casting', '1 action'], ['Range', 'Self'], ['Duration', '1 minute'], ['Components', 'S, M (a small feather)'], ['Classes', 'Druid, Ranger']],
-          sections: [{ heading: 'Effect', items: ['Fly up to twice your movement as a bonus action, but land after the move', 'Rise up to half your movement once during your turn', 'Use a reaction while falling to glide up to your movement and avoid fall damage', 'Gain advantage on Athletics checks to jump and triple normal jump distance'] }, { heading: 'Limits', text: 'Your hands must be free of shields and heavy weapons, and you cannot be encumbered.' }]
+          sections: [{ heading: 'Effect', items: ['Fly up to twice the caster’s movement as a bonus action, then land after the move', 'Rise up to half the caster’s movement once during a turn', 'Use a reaction while falling to glide up to the caster’s movement and avoid fall damage', 'Gain advantage on Athletics checks to jump and triple normal jump distance'] }, { heading: 'Limits', text: 'The caster’s hands must be free of shields and heavy weapons, and the caster cannot be encumbered.' }]
         },
         {
           title: 'Globe of Twilight',
           kicker: '3rd-level conjuration',
           tags: ['spell', 'druid', 'ranger', 'warlock', 'conjuration', 'twilight', 'stealth', 'blind'],
-          summary: 'Wrap the area around you in a star-speckled twilight that conceals chosen creatures and dazzles everyone else.',
+          summary: 'A star-speckled twilight surrounds the caster, concealing chosen creatures and dazzling everyone else.',
           facts: [['Casting', '1 action'], ['Range', 'Self · 15-ft. radius and height'], ['Duration', 'Concentration, up to 10 minutes'], ['Components', 'V, S, M (pitch and glittering sand)'], ['Classes', 'Druid, Ranger, Warlock']],
           sections: [{ heading: 'Effect', text: 'The sphere is lightly obscured and suppresses most light. Chosen creatures gain advantage on Stealth and may hide at any time. Other creatures have disadvantage on perception within the globe and must make a Wisdom save when entering or starting there or be blinded until the end of their turn.' }]
         },
@@ -488,9 +571,9 @@
           title: 'Gust Barrier',
           kicker: 'Evocation cantrip',
           tags: ['spell', 'cantrip', 'bard', 'druid', 'sorcerer', 'wizard', 'evocation', 'ranged', 'push', 'prone'],
-          summary: 'Surround yourself with defensive wind that spoils ranged attacks and throws careless melee attackers backward.',
+          summary: 'Defensive wind surrounds the caster, spoiling ranged attacks and throwing careless melee attackers backward.',
           facts: [['Casting', '1 action'], ['Range', 'Self'], ['Duration', '1 round'], ['Components', 'S'], ['Classes', 'Bard, Druid, Sorcerer, Wizard']],
-          sections: [{ heading: 'Effect', text: 'Ranged attacks against you have disadvantage until the end of your next turn.' }, { heading: 'Attack response', text: 'A melee attacker that hits you must make a Constitution save. On a failure it is pushed up to 10 feet away and knocked prone.' }]
+          sections: [{ heading: 'Effect', text: 'Ranged attacks against the caster have disadvantage until the end of the caster’s next turn.' }, { heading: 'Attack response', text: 'A melee attacker that hits the caster must make a Constitution save. On a failure it is pushed up to 10 feet away and knocked prone.' }]
         },
         {
           title: 'Invoke the Amaranthine',
@@ -514,7 +597,7 @@
           tags: ['spell', 'druid', 'ranger', 'sorcerer', 'wizard', 'abjuration', 'reaction', 'shield', 'damage', 'ac'],
           summary: 'Conjure a barrier of force-spikes that softens a melee blow, wounds the attacker, and offers cover from ranged attacks.',
           facts: [['Casting', '1 reaction'], ['Range', 'Self'], ['Duration', '1 round'], ['Components', 'V, S, M (a small quill)'], ['Classes', 'Druid, Ranger, Sorcerer, Wizard']],
-          sections: [{ heading: 'Effect & damage', text: 'When a melee attack hits you, reduce its damage by 2d4 and deal that much piercing damage to the attacker. Against ranged attacks the shield instead grants +2 AC as half cover. Each slot level above 1st adds 1d4.' }]
+          sections: [{ heading: 'Effect & damage', text: 'When a melee attack hits the caster, its damage is reduced by 2d4 and the attacker takes that much piercing damage. Against ranged attacks the shield instead grants +2 AC as half cover. Each slot level above 1st adds 1d4.' }]
         },
         {
           title: 'Stellar Bodies',
@@ -522,7 +605,7 @@
           tags: ['spell', 'cleric', 'druid', 'sorcerer', 'wizard', 'evocation', 'radiant', 'stars', 'blind', 'damage'],
           summary: 'Create two orbiting stars that punish nearby attackers or launch toward distant foes in blinding bursts.',
           facts: [['Casting', '1 action'], ['Range', 'Self; launched stars reach 120 ft.'], ['Duration', '1 minute'], ['Components', 'V, S'], ['Classes', 'Cleric, Druid, Sorcerer, Wizard']],
-          sections: [{ heading: 'Defense', text: 'A creature within 5 feet that hits you with a melee attack must make a Wisdom save or take 1d8 radiant damage for each orbiting star.' }, { heading: 'Attack & damage', text: 'Once per round, use an action to expend a star and make a ranged spell attack within 120 feet. A hit deals 4d8 radiant damage; the target then makes a Constitution save or is blinded until your next turn.' }, { heading: 'Higher levels', text: 'Create one additional star for every two slot levels above 4th.' }]
+          sections: [{ heading: 'Defense', text: 'A creature within 5 feet that hits the caster with a melee attack must make a Wisdom save or take 1d8 radiant damage for each orbiting star.' }, { heading: 'Attack & damage', text: 'Once per round, the caster may use an action to expend a star and make a ranged spell attack within 120 feet. A hit deals 4d8 radiant damage; the target then makes a Constitution save or is blinded until the caster’s next turn.' }, { heading: 'Higher levels', text: 'One additional star is created for every two slot levels above 4th.' }]
         },
         {
           title: 'Veil of Dusk',

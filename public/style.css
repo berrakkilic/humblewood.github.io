@@ -603,6 +603,7 @@ body[data-role="dm"] .token-tray.dm-detailed .token-list-details { display: flex
   border-radius: 12px;
   background: #fffdf8;
 }
+.almanac-entry-wide { grid-column: 1 / -1; }
 .almanac-entry > summary {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -616,6 +617,17 @@ body[data-role="dm"] .token-tray.dm-detailed .token-list-details { display: flex
 .almanac-entry-heading span { display: block; margin-top: 3px; color: var(--rose-deep); font-size: 10px; font-weight: 800; letter-spacing: .025em; text-transform: uppercase; }
 .almanac-entry-body { padding: 13px 15px 15px; }
 .almanac-entry-summary { margin: 0 0 12px; color: var(--ink); font-size: 13px; line-height: 1.55; }
+.almanac-entry-image { margin: 0 0 14px; }
+.almanac-entry-image a {
+  display: block;
+  overflow: hidden;
+  border: 1px solid rgba(58,46,37,.16);
+  border-radius: 12px;
+  background: var(--parchment-dark);
+  box-shadow: 0 5px 18px rgba(58,46,37,.12);
+}
+.almanac-entry-image img { display: block; width: 100%; height: auto; }
+.almanac-entry-image figcaption { margin-top: 7px; color: var(--ink-soft); font-size: 10px; text-align: center; }
 .almanac-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin: 0 0 12px; }
 .almanac-facts > div { min-width: 0; padding: 7px 8px; border-radius: 8px; background: var(--parchment); }
 .almanac-facts dt { color: var(--forest); font-size: 9px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; }

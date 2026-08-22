@@ -54,9 +54,22 @@
     `).join('');
   }
 
+  function renderImage(image) {
+    if (!image?.src) return '';
+    const caption = image.caption ? `<figcaption>${escapeHtml(image.caption)}</figcaption>` : '';
+    return `
+      <figure class="almanac-entry-image">
+        <a href="${escapeHtml(image.src)}" target="_blank" rel="noopener" title="Open full-size image">
+          <img src="${escapeHtml(image.src)}" alt="${escapeHtml(image.alt || '')}" loading="lazy">
+        </a>
+        ${caption}
+      </figure>
+    `;
+  }
+
   function renderEntry(entry, queryActive) {
     return `
-      <details class="almanac-entry" data-almanac-entry ${queryActive ? 'open' : ''}>
+      <details class="almanac-entry${entry.wide ? ' almanac-entry-wide' : ''}" data-almanac-entry ${queryActive || entry.openByDefault ? 'open' : ''}>
         <summary>
           <span class="almanac-entry-heading">
             <strong>${escapeHtml(entry.title)}</strong>
@@ -66,6 +79,7 @@
         </summary>
         <div class="almanac-entry-body">
           <p class="almanac-entry-summary">${escapeHtml(entry.summary)}</p>
+          ${renderImage(entry.image)}
           ${renderFacts(entry.facts)}
           ${renderSections(entry.sections)}
         </div>
@@ -149,5 +163,5 @@
     return { render };
   }
 
-  return { filterCategories, mount, normalizeSearch, searchableText };
+  return { filterCategories, mount, normalizeSearch, renderEntry, searchableText };
 });

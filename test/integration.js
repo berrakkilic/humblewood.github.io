@@ -82,6 +82,8 @@ async function run() {
     assert.match(html, /id="view-almanac"/);
     assert.match(html, /id="almanac-search"/);
     assert.match(html, /js\/almanac-data\.js/);
+    assert.match(html, /The Humble Almanac/);
+    assert.doesNotMatch(html, /Mossbound Almanac/i);
   }
   const routerResponse = await fetch(`http://127.0.0.1:${port}/js/router.js`);
   assert.equal(routerResponse.status, 200);
@@ -92,6 +94,10 @@ async function run() {
   const characterRulesResponse = await fetch(`http://127.0.0.1:${port}/js/character-rules.js`);
   assert.equal(characterRulesResponse.status, 200);
   assert.match(await characterRulesResponse.text(), /validatePlayerCharacter/);
+  const humblewoodMapResponse = await fetch(`http://127.0.0.1:${port}/images/humblewood-expanded-nohex-v0.3.png`);
+  assert.equal(humblewoodMapResponse.status, 200);
+  assert.match(humblewoodMapResponse.headers.get('content-type') || '', /image\/png/);
+  assert((await humblewoodMapResponse.arrayBuffer()).byteLength > 1000000);
 
   global.window = global;
   global.self = global;
