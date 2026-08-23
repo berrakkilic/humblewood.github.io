@@ -18,11 +18,15 @@ function registerSceneHandlers(socket, room) {
     emitSceneUpdate();
   });
 
-  socket.on('scene:setGrid', ({ gridSize, gridVisible, fitTokensToGrid, gridOffsetX, gridOffsetY } = {}) => {
+  socket.on('scene:setGrid', ({ gridSize, gridVisible, gridColor, snapToGrid, fitTokensToGrid, gridOffsetX, gridOffsetY } = {}) => {
     if (!isDm(socket)) return deny(socket, 'Only the Dungeon Master can change the grid.');
     const previousSize = state.scene.gridSize;
     if (gridSize !== undefined) state.scene.gridSize = Math.max(10, Math.min(300, Number(gridSize) || 50));
     if (gridVisible !== undefined) state.scene.gridVisible = !!gridVisible;
+    if (gridColor !== undefined && /^#[0-9a-f]{6}$/i.test(String(gridColor))) {
+      state.scene.gridColor = String(gridColor).toLowerCase();
+    }
+    if (snapToGrid !== undefined) state.scene.snapToGrid = !!snapToGrid;
     if (fitTokensToGrid !== undefined) state.scene.fitTokensToGrid = !!fitTokensToGrid;
     if (gridOffsetX !== undefined) {
       const size = state.scene.gridSize;

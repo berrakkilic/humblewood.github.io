@@ -12,7 +12,7 @@
       entries: [
         {
           title: 'The Humblewood',
-          kicker: 'The Wood · 499 A.A.Y.',
+          kicker: 'Where our story takes place',
           tags: ['map', 'humblewood', 'alderheart', 'brackenmill', 'heartwood', 'northumble', 'easthumble', 'westhumble', 'southumble', 'crest mountains', 'rainwood', 'vineboughs', 'talongrip coast', 'saltar port'],
           summary: 'Humblewood stretches from the Oldeweald and Kraggermons in the west to the Rainwood and Vineboughs in the east, with Alderheart standing near its heart.',
           facts: [
@@ -23,7 +23,7 @@
           image: {
             src: '/images/humblewood-expanded-nohex-v0.3.png',
             alt: 'Illustrated map of Humblewood showing its regions, settlements, forests, rivers, mountains and coastlines.',
-            caption: 'The Humblewood, 499 A.A.Y.'
+            caption: 'The Humblewood'
           },
           wide: true,
           openByDefault: true

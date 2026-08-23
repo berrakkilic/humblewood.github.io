@@ -226,6 +226,13 @@ function createRoom({ dataDir, dmPin, io }) {
         tokens: Array.isArray(saved.tokens) ? saved.tokens : [],
         initiative: { ...defaultState.initiative, ...(saved.initiative || {}) }
       };
+      // A deployment restarts the server. Restore these requested map defaults
+      // even when an older persisted state had the toggles switched off.
+      state.scene.fogEnabled = true;
+      state.scene.snapToGrid = true;
+      if (!/^#[0-9a-f]{6}$/i.test(String(state.scene.gridColor || ''))) {
+        state.scene.gridColor = defaultState.scene.gridColor;
+      }
       if (!Array.isArray(state.scene.doodlePaths)) state.scene.doodlePaths = [];
       if (!Array.isArray(state.scene.fogShapes)) state.scene.fogShapes = [];
       if (!Array.isArray(state.initiative.entries)) state.initiative.entries = [];

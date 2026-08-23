@@ -375,6 +375,10 @@ body[data-role="dm"] .token-tray.dm-detailed .token-list-details { display: flex
 .map-toolbar #zoom-level { font-size: 13px; font-weight: 700; color: var(--forest); min-width: 42px; text-align: center; }
 .grid-toggle { display: flex; align-items: center; gap: 4px; font-size: 13px; font-weight: 600; color: var(--forest); cursor: pointer; }
 .grid-toggle input { width: auto; }
+.grid-color-control input[type="color"] {
+  width: 28px; height: 24px; padding: 1px; border: 1px solid var(--tan);
+  border-radius: 6px; background: #fff; cursor: pointer;
+}
 
 #map-stage {
   position: relative;
@@ -405,11 +409,12 @@ body[data-role="dm"] .token-tray.dm-detailed .token-list-details { display: flex
 #map-area-selection.reveal { border-color: #b8f0c0; background: rgba(108,190,122,.22); }
 #map-area-selection.hide { border-color: #ebb0bd; background: rgba(155,70,83,.25); }
 #grid-overlay {
+  --grid-color: #3a2e25;
   position: absolute; top: 0; left: 0; right: 0; bottom: 0;
-  pointer-events: none; display: none; z-index: 1;
+  pointer-events: none; display: none; z-index: 1; opacity: .45;
   background-image:
-    linear-gradient(to right, rgba(58,46,37,0.28) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(58,46,37,0.28) 1px, transparent 1px);
+    linear-gradient(to right, var(--grid-color) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--grid-color) 1px, transparent 1px);
 }
 #grid-overlay.visible { display: block; }
 

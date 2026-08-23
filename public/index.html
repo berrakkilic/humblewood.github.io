@@ -312,7 +312,7 @@
               <div class="map-permission-settings">
                 <label><input type="checkbox" id="player-doodling-toggle"> Allow player doodling</label>
                 <label><input type="checkbox" id="token-labels-toggle" checked> Show NPC/item labels to players</label>
-                <label><input type="checkbox" id="fog-enabled-toggle"> Enable fog of war</label>
+                <label><input type="checkbox" id="fog-enabled-toggle" checked> Enable fog of war</label>
                 <div class="scene-actions">
                   <button class="btn-ghost" id="undo-fog-btn" type="button">Undo fog edit</button>
                   <button class="btn-danger-soft" id="reset-fog-btn" type="button">Reset fog</button>
@@ -375,7 +375,7 @@
           <button id="tool-move" class="active">Move</button>
           <button id="tool-pan" title="Drag to move the map. You can also hold Space or use the middle mouse button.">Pan</button>
           <button id="tool-grid-move" class="dm-only" title="Drag to align the grid to your map art.">Move grid</button>
-          <button id="tool-ruler" title="Drag to measure, or tap a start square and then an end square. Counts 5 ft per horizontal or vertical square.">Ruler</button>
+          <button id="tool-ruler" title="Drag to measure, or if you're on mobile, tap a start square and then an end square. Counts 5 ft per horizontal or vertical square.">Ruler</button>
           <button id="tool-ping">Ping</button>
           <button id="tool-doodle" class="doodle-control hidden">Doodle</button>
           <input type="color" id="doodle-color" value="#d98a9e" class="doodle-control hidden" title="Drawing color" style="width:30px; border:none; background:none;">
@@ -386,7 +386,10 @@
         <div class="map-toolbar map-toolbar-right dm-only">
           <label class="grid-toggle"><input type="checkbox" id="grid-toggle"> Grid</label>
           <input type="number" id="grid-size" value="50" min="10" max="300" title="Grid size (px)" style="width:56px;">
-          <label class="grid-toggle"><input type="checkbox" id="snap-toggle"> Snap</label>
+          <label class="grid-toggle grid-color-control" title="Choose the grid line colour">
+            Colour <input type="color" id="grid-color" value="#3a2e25" aria-label="Grid colour">
+          </label>
+          <label class="grid-toggle"><input type="checkbox" id="snap-toggle" checked> Snap</label>
           <label class="grid-toggle"><input type="checkbox" id="fit-token-toggle" checked> Fit tokens</label>
           <button id="grid-offset-reset" class="btn-ghost" type="button" title="Reset grid alignment to the map's top-left corner">Reset grid</button>
         </div>

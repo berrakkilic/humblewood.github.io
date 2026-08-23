@@ -378,11 +378,17 @@ function renderMap() {
   const gridSize = Math.max(10, Number(state.scene.gridSize) || 50);
   const gridOffsetX = Number(state.scene.gridOffsetX) || 0;
   const gridOffsetY = Number(state.scene.gridOffsetY) || 0;
+  const gridColor = /^#[0-9a-f]{6}$/i.test(String(state.scene.gridColor || ''))
+    ? state.scene.gridColor
+    : '#3a2e25';
   grid.style.backgroundSize = `${gridSize}px ${gridSize}px`;
   grid.style.backgroundPosition = `${gridOffsetX}px ${gridOffsetY}px`;
+  grid.style.setProperty('--grid-color', gridColor);
   grid.classList.toggle('visible', !!state.scene.gridVisible);
   document.getElementById('grid-toggle').checked = !!state.scene.gridVisible;
   document.getElementById('grid-size').value = gridSize;
+  document.getElementById('grid-color').value = gridColor;
+  document.getElementById('snap-toggle').checked = state.scene.snapToGrid !== false;
   document.getElementById('fit-token-toggle').checked = state.scene.fitTokensToGrid !== false;
   if (!Array.isArray(state.scene.doodlePaths)) state.scene.doodlePaths = [];
   if (!Array.isArray(state.scene.fogShapes)) state.scene.fogShapes = [];
@@ -657,7 +663,7 @@ function setTool(tool) {
   stage.classList.toggle('fog-editing', tool.startsWith('fog-'));
   if (previousTool === 'ping' && tool !== 'ping') socket.emit('pointer:hide');
   if (tool !== 'ruler') clearRuler();
-  if (tool === 'ruler' && previousTool !== 'ruler') showToast('Drag to measure, or tap a start square and then an end square.');
+  if (tool === 'ruler' && previousTool !== 'ruler') showToast('Drag to measure, or if you\'re on mobile, tap a start square and then an end square.');
   clearMapAreaSelection();
 }
 
@@ -727,6 +733,8 @@ document.addEventListener('mouseup', () => {
       socket.emit('scene:setGrid', {
         gridSize: Number(document.getElementById('grid-size').value) || 50,
         gridVisible: document.getElementById('grid-toggle').checked,
+        gridColor: document.getElementById('grid-color').value,
+        snapToGrid: document.getElementById('snap-toggle').checked,
         fitTokensToGrid: document.getElementById('fit-token-toggle').checked,
         gridOffsetX: gridMoveStart.currentX,
         gridOffsetY: gridMoveStart.currentY
@@ -1012,6 +1020,8 @@ document.getElementById('grid-toggle').onchange = () => {
   socket.emit('scene:setGrid', {
     gridSize: Number(document.getElementById('grid-size').value) || 50,
     gridVisible: document.getElementById('grid-toggle').checked,
+    gridColor: document.getElementById('grid-color').value,
+    snapToGrid: document.getElementById('snap-toggle').checked,
     fitTokensToGrid: document.getElementById('fit-token-toggle').checked
   });
 };
@@ -1019,6 +1029,29 @@ document.getElementById('grid-size').onchange = () => {
   socket.emit('scene:setGrid', {
     gridSize: Number(document.getElementById('grid-size').value) || 50,
     gridVisible: document.getElementById('grid-toggle').checked,
+    gridColor: document.getElementById('grid-color').value,
+    snapToGrid: document.getElementById('snap-toggle').checked,
+    fitTokensToGrid: document.getElementById('fit-token-toggle').checked
+  });
+};
+document.getElementById('grid-color').oninput = event => {
+  document.getElementById('grid-overlay').style.setProperty('--grid-color', event.target.value);
+};
+document.getElementById('grid-color').onchange = () => {
+  socket.emit('scene:setGrid', {
+    gridSize: Number(document.getElementById('grid-size').value) || 50,
+    gridVisible: document.getElementById('grid-toggle').checked,
+    gridColor: document.getElementById('grid-color').value,
+    snapToGrid: document.getElementById('snap-toggle').checked,
+    fitTokensToGrid: document.getElementById('fit-token-toggle').checked
+  });
+};
+document.getElementById('snap-toggle').onchange = () => {
+  socket.emit('scene:setGrid', {
+    gridSize: Number(document.getElementById('grid-size').value) || 50,
+    gridVisible: document.getElementById('grid-toggle').checked,
+    gridColor: document.getElementById('grid-color').value,
+    snapToGrid: document.getElementById('snap-toggle').checked,
     fitTokensToGrid: document.getElementById('fit-token-toggle').checked
   });
 };
@@ -1026,6 +1059,8 @@ document.getElementById('fit-token-toggle').onchange = () => {
   socket.emit('scene:setGrid', {
     gridSize: Number(document.getElementById('grid-size').value) || 50,
     gridVisible: document.getElementById('grid-toggle').checked,
+    gridColor: document.getElementById('grid-color').value,
+    snapToGrid: document.getElementById('snap-toggle').checked,
     fitTokensToGrid: document.getElementById('fit-token-toggle').checked
   });
 };
@@ -1033,6 +1068,8 @@ document.getElementById('grid-offset-reset').onclick = () => {
   socket.emit('scene:setGrid', {
     gridSize: Number(document.getElementById('grid-size').value) || 50,
     gridVisible: document.getElementById('grid-toggle').checked,
+    gridColor: document.getElementById('grid-color').value,
+    snapToGrid: document.getElementById('snap-toggle').checked,
     fitTokensToGrid: document.getElementById('fit-token-toggle').checked,
     gridOffsetX: 0,
     gridOffsetY: 0

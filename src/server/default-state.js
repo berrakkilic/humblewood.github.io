@@ -7,10 +7,12 @@ function createDefaultState() {
       gridOffsetX: 0,
       gridOffsetY: 0,
       gridVisible: false,
+      gridColor: '#3a2e25',
+      snapToGrid: true,
       fitTokensToGrid: true,
       playerDoodlingEnabled: false,
       showTokenLabelsToPlayers: true,
-      fogEnabled: false,
+      fogEnabled: true,
       fogShapes: [],
       doodlePaths: []
     },

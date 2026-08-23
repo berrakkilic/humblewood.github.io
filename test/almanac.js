@@ -12,6 +12,7 @@ const mapMarkup = almanac.renderEntry(map.entries[0], false);
 assert.match(mapMarkup, /almanac-entry-wide/);
 assert.match(mapMarkup, /humblewood-expanded-nohex-v0\.3\.png/);
 assert.match(mapMarkup, /<details[^>]* open>/);
+assert.doesNotMatch(JSON.stringify(data), /A\.A\.Y\./);
 
 const faith = data.find(category => category.id === 'faith');
 assert.equal(faith.entries.length, 3);

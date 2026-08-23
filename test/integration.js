@@ -118,6 +118,8 @@ async function run() {
   const io = require('../node_modules/socket.io/client-dist/socket.io.js');
 
   const dm = await identify(io, { role: 'dm', name: 'Guide', dmPin: 'test-pin' });
+  assert.equal(dm.state.scene.fogEnabled, true);
+  assert.equal(dm.state.scene.snapToGrid, true);
   const playerOne = await identify(io, {
     role: 'player', authMode: 'register', username: 'hazel', password: 'password-1', name: 'Hazel'
   });
@@ -205,11 +207,16 @@ async function run() {
   assert.deepEqual((await pending).combat.conditions, ['Blinded']);
 
   pending = once(dm.socket, 'state:full', fullState => (
-    fullState.scene.gridOffsetX === 13 && fullState.scene.gridOffsetY === 7
+    fullState.scene.gridOffsetX === 13 &&
+    fullState.scene.gridOffsetY === 7 &&
+    fullState.scene.gridColor === '#ffffff' &&
+    fullState.scene.snapToGrid === true
   ));
   dm.socket.emit('scene:setGrid', {
     gridSize: 50,
     gridVisible: true,
+    gridColor: '#ffffff',
+    snapToGrid: true,
     fitTokensToGrid: true,
     gridOffsetX: 13,
     gridOffsetY: 7
@@ -271,6 +278,8 @@ async function run() {
   assert.equal(restored.scene.showTokenLabelsToPlayers, false);
   assert.equal(restored.scene.gridOffsetX, 13);
   assert.equal(restored.scene.gridOffsetY, 7);
+  assert.equal(restored.scene.gridColor, '#ffffff');
+  assert.equal(restored.scene.snapToGrid, true);
   assert.equal(restored.tokens.length, 2);
   restored.tokens.forEach(token => {
     assert.equal((token.x - restored.scene.gridOffsetX - 25) % 50, 0);
