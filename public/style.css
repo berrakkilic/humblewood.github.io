@@ -11,6 +11,7 @@
   --moss-light: #a9bf98;
   --rose: #d98a9e;
   --rose-deep: #b8617a;
+  --rose-pale: #f5dfe5;
   --gold: #d9a441;
   --gold-deep: #b5822a;
   --panel-shadow: 0 6px 18px rgba(58, 46, 37, 0.18);
@@ -795,7 +796,29 @@ body[data-role="player"] .dm-only { display: none !important; }
 /* ---------- Dice view ---------- */
 #view-dice { align-items: center; }
 .dice-panel { max-width: 1100px; width: 100%; margin: 0 auto; }
+.dice-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; }
+.dice-heading h2 { margin-bottom: 0; }
 .dice-intro { color: var(--ink-soft); margin: 6px 0 16px; }
+.dm-private-roll-toggle { flex: 0 0 auto; margin-top: 2px; }
+.dm-private-roll-toggle.active {
+  border-color: var(--rose-deep);
+  background: var(--rose-pale);
+  color: var(--rose-deep);
+}
+.dice-panel.dm-private-mode { box-shadow: inset 0 0 0 2px rgba(145, 61, 83, .3), var(--panel-shadow); }
+.dm-private-roll-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 16px;
+  padding: 10px 13px;
+  border: 1px solid rgba(145, 61, 83, .35);
+  border-radius: 11px;
+  background: var(--rose-pale);
+  color: var(--rose-deep);
+  font-size: 13px;
+}
+.dm-private-roll-banner strong { white-space: nowrap; }
 .character-roller {
   background: var(--parchment-dark);
   border: 1px solid rgba(58,46,37,0.1);
@@ -873,6 +896,22 @@ body[data-role="player"] .dm-only { display: none !important; }
 }
 .roll-entry.crit .total { color: var(--gold-deep); }
 .roll-entry.fumble .total { color: #a33; }
+.roll-entry.private {
+  border: 1px solid rgba(145, 61, 83, .32);
+  background: var(--rose-pale);
+}
+.private-roll-badge {
+  display: inline-block;
+  margin-left: 7px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: var(--rose-deep);
+  color: #fffdf8;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .02em;
+  vertical-align: 1px;
+}
 
 /* ---------- Initiative on the map ---------- */
 .initiative-panel { max-width: 560px; width: 100%; margin: 0 auto; }
@@ -1140,6 +1179,9 @@ body[data-role="player"] .dm-only { display: none !important; }
   .character-roll-selectors { flex-direction: column; }
   .character-roll-selectors label, .character-roll-selectors select { width: 100%; }
   .dice-custom-row button { width: 100%; margin-left: 0; }
+  .dice-heading { align-items: stretch; flex-direction: column; gap: 0; }
+  .dm-private-roll-toggle { align-self: flex-start; margin-bottom: 12px; }
+  .dm-private-roll-banner { align-items: flex-start; flex-direction: column; gap: 3px; }
   .combat-overlay { padding: 0; align-items: end; }
   .combat-modal { max-height: 92vh; border-radius: 18px 18px 0 0; padding: 18px; }
   .combat-vitals { grid-template-columns: 1fr; }

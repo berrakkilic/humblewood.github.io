@@ -963,15 +963,24 @@
     <!-- DICE VIEW -->
     <section id="view-dice" class="view">
       <div class="dice-panel panel">
-        <h2>Roll the bones</h2>
-        <p class="dice-intro">Choose a character and the correct 5e modifier is added automatically.</p>
+        <div class="dice-heading">
+          <div>
+            <h2>Roll the bones</h2>
+            <p class="dice-intro">Choose a character or NPC and the correct 5e modifier is added automatically.</p>
+          </div>
+          <button class="btn-ghost dm-only dm-private-roll-toggle" id="dm-private-roll-toggle" type="button" aria-pressed="false">Shared rolls</button>
+        </div>
+        <div class="dm-private-roll-banner dm-only hidden" id="dm-private-roll-banner" role="status">
+          <strong>Private DM mode</strong>
+          <span>Rolls made on this Dice screen are visible only to you and do not enter the shared roll log.</span>
+        </div>
 
         <section class="character-roller" aria-labelledby="character-roller-title">
           <div class="character-roller-heading">
-            <h3 id="character-roller-title">Character rolls</h3>
+            <h3 id="character-roller-title">Creature rolls</h3>
             <div class="character-roll-selectors">
               <label>
-                Character
+                Character / NPC
                 <select id="dice-character"></select>
               </label>
               <label>
@@ -1010,7 +1019,7 @@
         </div>
 
         <div class="vine-divider"></div>
-        <h3>Roll log</h3>
+        <h3 id="roll-log-title">Roll log</h3>
         <div class="roll-log" id="roll-log"></div>
       </div>
     </section>

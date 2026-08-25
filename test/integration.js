@@ -51,6 +51,22 @@ function once(socket, event, predicate = () => true, timeout = 3000) {
   });
 }
 
+function expectNoEvent(socket, event, predicate = () => true, timeout = 350) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      socket.off(event, handler);
+      resolve();
+    }, timeout);
+    const handler = data => {
+      if (!predicate(data)) return;
+      clearTimeout(timer);
+      socket.off(event, handler);
+      reject(new Error(`Unexpected ${event}: ${JSON.stringify(data)}`));
+    };
+    socket.on(event, handler);
+  });
+}
+
 async function identify(io, payload) {
   const socket = io(`http://127.0.0.1:${port}`, { transports: ['websocket'], forceNew: true });
   clients.push(socket);
@@ -79,6 +95,8 @@ async function run() {
     assert.match(html, /id="spell-form-attack"/);
     assert.match(html, /id="spell-form-damage"/);
     assert.match(html, /id="spell-preset-select"/);
+    assert.match(html, /id="dm-private-roll-toggle"/);
+    assert.match(html, /id="dm-private-roll-banner"/);
     assert.match(html, /id="new-npc-sheet-btn"/);
     assert.match(html, /id="npc-statblock-import-btn"/);
     assert.match(html, /id="attack-preset-select"/);
@@ -134,7 +152,27 @@ async function run() {
     role: 'player', authMode: 'register', username: 'moss', password: 'password-2', name: 'Moss'
   });
 
-  let pending = once(playerOne.socket, 'action:denied', denial => /level.*1 to 20/i.test(denial.message));
+  let pending = once(playerOne.socket, 'action:denied', denial => /only the dungeon master can make private rolls/i.test(denial.message));
+  playerOne.socket.emit('roll:make', { count: 1, sides: 20, private: true, label: 'Forbidden private roll' });
+  await pending;
+
+  const hiddenRandomFromPlayerOne = expectNoEvent(playerOne.socket, 'roll:made', entry => entry.label === 'Secret weather roll');
+  const hiddenRandomFromPlayerTwo = expectNoEvent(playerTwo.socket, 'roll:made', entry => entry.label === 'Secret weather roll');
+  const hiddenRandomFromSharedDmLog = expectNoEvent(dm.socket, 'roll:made', entry => entry.label === 'Secret weather roll');
+  const privateRandomPromise = once(dm.socket, 'roll:private', entry => entry.label === 'Secret weather roll');
+  dm.socket.emit('roll:make', {
+    count: 1, sides: 20, modifier: 3, private: true, label: 'Secret weather roll', initiativeName: 'Secret weather'
+  });
+  const privateRandom = await privateRandomPromise;
+  assert.equal(privateRandom.private, true);
+  assert.equal(privateRandom.name, 'Guide');
+  await Promise.all([hiddenRandomFromPlayerOne, hiddenRandomFromPlayerTwo, hiddenRandomFromSharedDmLog]);
+
+  pending = once(playerOne.socket, 'roll:made', entry => entry.label === 'Public weather roll');
+  dm.socket.emit('roll:make', { count: 1, sides: 6, private: false, label: 'Public weather roll' });
+  assert.equal((await pending).name, 'Guide');
+
+  pending = once(playerOne.socket, 'action:denied', denial => /level.*1 to 20/i.test(denial.message));
   playerOne.socket.emit('character:save', {
     name: 'Impossible Hero',
     fields: {
@@ -215,6 +253,26 @@ async function run() {
   assert.equal(ashMage.spells[0].name, 'Fire Bolt');
   assert.equal(ashMage.combat.spellSlots[1].total, 4);
 
+  const hiddenNpcFromPlayer = expectNoEvent(playerOne.socket, 'roll:made', entry => entry.label === 'Secret Fire Bolt');
+  const privateNpcPromise = once(dm.socket, 'roll:private', entry => entry.label === 'Secret Fire Bolt');
+  dm.socket.emit('roll:make', {
+    count: 1, sides: 20, modifier: 5, mode: 'advantage', npcId: ashMage.id,
+    private: true, label: 'Secret Fire Bolt'
+  });
+  const privateNpcRoll = await privateNpcPromise;
+  assert.equal(privateNpcRoll.npcId, ashMage.id);
+  assert.equal(privateNpcRoll.name, 'Guide as Ash Mage');
+  assert.equal(privateNpcRoll.rolls.length, 2);
+  await hiddenNpcFromPlayer;
+
+  pending = once(playerOne.socket, 'roll:made', entry => entry.label === 'Shared Fire Bolt');
+  dm.socket.emit('roll:make', {
+    count: 1, sides: 20, modifier: 5, npcId: ashMage.id, private: false, label: 'Shared Fire Bolt'
+  });
+  const sharedNpcRoll = await pending;
+  assert.equal(sharedNpcRoll.npcId, ashMage.id);
+  assert.equal(sharedNpcRoll.name, 'Guide as Ash Mage');
+
   pending = once(dm.socket, 'token:add', token => token.npcId === ashMage.id);
   const playerNpcTokenPromise = once(playerOne.socket, 'token:add', token => token.npcId === ashMage.id);
   dm.socket.emit('npc:place', { id: ashMage.id });
@@ -273,6 +331,11 @@ async function run() {
     gridOffsetY: 7
   });
   const offsetGridState = await pending;
+  assert(offsetGridState.rollLog.some(entry => entry.label === 'Public weather roll'));
+  assert(offsetGridState.rollLog.some(entry => entry.label === 'Shared Fire Bolt'));
+  assert(!offsetGridState.rollLog.some(entry => entry.label === 'Secret weather roll'));
+  assert(!offsetGridState.rollLog.some(entry => entry.label === 'Secret Fire Bolt'));
+  assert(!offsetGridState.initiative.entries.some(entry => entry.name === 'Secret weather'));
   const offsetWolf = offsetGridState.tokens.find(token => token.id === wolf.id);
   assert.equal((offsetWolf.x - 13 - 25) % 50, 0);
   assert.equal((offsetWolf.y - 7 - 25) % 50, 0);
