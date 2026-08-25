@@ -187,8 +187,8 @@
       id: '5e-guard', source: 'Core 5e', name: 'Guard',
       statBlock: `Guard\nMedium humanoid (any race), any alignment\nArmor Class 16 (chain shirt, shield)\nHit Points 11 (2d8 + 2)\nSpeed 30 ft.\nSTR DEX CON INT WIS CHA\n13 (+1) 12 (+1) 12 (+1) 10 (+0) 11 (+0) 10 (+0)\nSkills Perception +2\nSenses passive Perception 12\nLanguages any one language\nChallenge 1/8 (25 XP)\nActions\nSpear. Melee or Ranged Weapon Attack: +3 to hit, reach 5 ft. or range 20/60 ft., one target. Hit: 4 (1d6 + 1) piercing damage, or 5 (1d8 + 1) when used with two hands in melee.`
     },
-    {
-      id: '5e-noble', source: 'Core 5e', name: 'Noble',
+    { 
+      id: '5e-noble', source: 'Core 5e', name: 'Noble', 
       statBlock: `Noble\nMedium humanoid (any race), any alignment\nArmor Class 15 (breastplate)\nHit Points 9 (2d8)\nSpeed 30 ft.\nSTR DEX CON INT WIS CHA\n11 (+0) 12 (+1) 11 (+0) 12 (+1) 14 (+2) 16 (+3)\nSkills Deception +5, Insight +4, Persuasion +5\nSenses passive Perception 12\nLanguages any two languages\nChallenge 1/8 (25 XP)\nActions\nRapier. Melee Weapon Attack: +3 to hit, reach 5 ft., one target. Hit: 5 (1d8 + 1) piercing damage.`
     },
     {
@@ -197,7 +197,7 @@
     },
     {
       id: '5e-priest', source: 'Core 5e', name: 'Priest',
-      statBlock: `Priest\nMedium humanoid (any race), any alignment\nArmor Class 13 (chain shirt)\nHit Points 27 (5d8 + 5)\nSpeed 25 ft.\nSTR DEX CON INT WIS CHA\n10 (+0) 10 (+0) 12 (+1) 13 (+1) 16 (+3) 13 (+1)\nSkills Medicine +7, Persuasion +3, Religion +4\nSenses passive Perception 13\nLanguages any two languages\nChallenge 2 (450 XP)\nDivine Eminence. As a bonus action, the priest can expend a spell slot to add radiant damage to its melee weapon attacks for the turn.\nSpellcasting. The priest is a 5th-level spellcaster. Its spellcasting ability is Wisdom (spell save DC 13, +5 to hit with spell attacks).\nCantrips (at will): light, sacred flame, thaumaturgy\n1st level (4 slots): cure wounds, guiding bolt\n2nd level (3 slots): lesser restoration, spiritual weapon\n3rd level (2 slots): dispel magic, spirit guardians\nActions\nMace. Melee Weapon Attack: +2 to hit, reach 5 ft., one target. Hit: 3 (1d6) bludgeoning damage.\n Reactions \n Parry. The noble adds 2 AC to its AC against one melee attack that would hit it. To do so, the noble must see the attacker and be wielding a melee weapon`
+      statBlock: `Priest\nMedium humanoid (any race), any alignment\nArmor Class 13 (chain shirt)\nHit Points 27 (5d8 + 5)\nSpeed 25 ft.\nSTR DEX CON INT WIS CHA\n10 (+0) 10 (+0) 12 (+1) 13 (+1) 16 (+3) 13 (+1)\nSkills Medicine +7, Persuasion +3, Religion +4\nSenses passive Perception 13\nLanguages any two languages\nChallenge 2 (450 XP)\nDivine Eminence. As a bonus action, the priest can expend a spell slot to add radiant damage to its melee weapon attacks for the turn.\nSpellcasting. The priest is a 5th-level spellcaster. Its spellcasting ability is Wisdom (spell save DC 13, +5 to hit with spell attacks).\nCantrips (at will): light, sacred flame, thaumaturgy\n1st level (4 slots): cure wounds, guiding bolt\n2nd level (3 slots): lesser restoration, spiritual weapon\n3rd level (2 slots): dispel magic, spirit guardians\nActions\nMace. Melee Weapon Attack: +2 to hit, reach 5 ft., one target. Hit: 3 (1d6) bludgeoning damage.`
     },
     {
       id: '5e-veteran', source: 'Core 5e', name: 'Veteran',

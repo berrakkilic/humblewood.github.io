@@ -42,6 +42,33 @@ assert.match(rules.validatePlayerCharacter({ fields: validFields({ species: 'Hed
 assert.equal(rules.validatePlayerCharacter({ fields: validFields({ feats: 'Aerial Expert\nPrerequisite: Glide trait' }) }), '');
 assert.deepEqual(rules.GLIDE_FEATS, ['Aerial Expert', 'Heavy Glider']);
 
+assert.deepEqual(Object.keys(rules.SPECIES_TRAITS).sort(), Object.keys(rules.SPECIES_SUBRACES).sort());
+Object.entries(rules.SPECIES_SUBRACES).forEach(([species, subraces]) => {
+  const baseTraits = rules.automaticSpeciesTraitText(species);
+  assert.match(baseTraits, new RegExp(species.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  assert.match(baseTraits, /Ability scores:/);
+  assert.match(baseTraits, /Core traits/);
+  subraces.forEach(subrace => {
+    assert.match(rules.automaticSpeciesTraitText(species, subrace), new RegExp(subrace));
+  });
+});
+const duskTraits = rules.automaticSpeciesTraitText('Corvum', 'Dusk Corvum');
+assert.match(duskTraits, /Dusk Corvum/);
+assert.doesNotMatch(rules.automaticSpeciesTraitText('Corvum', 'Sera Luma'), /Sera Luma/);
+const customTraits = 'Custom campaign trait: Friend of the Alderheart.';
+const mergedTraits = rules.mergeAutomaticSpeciesTraits(customTraits, duskTraits);
+assert.match(mergedTraits, /^Custom campaign trait:/);
+assert.equal((mergedTraits.match(/\[Automatic Humblewood species traits\]/g) || []).length, 1);
+const changedTraits = rules.mergeAutomaticSpeciesTraits(
+  mergedTraits,
+  rules.automaticSpeciesTraitText('Corvum', 'Kindled Corvum')
+);
+assert.match(changedTraits, /Kindled Corvum/);
+assert.doesNotMatch(changedTraits, /Dusk Corvum/);
+assert.match(changedTraits, /^Custom campaign trait:/);
+assert.equal(rules.mergeAutomaticSpeciesTraits(changedTraits, ''), customTraits);
+assert.equal(rules.mergeAutomaticSpeciesTraits(duskTraits, duskTraits), duskTraits, 'automatic trait merging is idempotent');
+
 assert.deepEqual(rules.spellcastingValues(18, 5), { attackBonus: 7, saveDc: 15 });
 assert.deepEqual(rules.spellcastingValues(12, 5), { attackBonus: 4, saveDc: 12 });
 assert.deepEqual(rules.spellcastingValues(8, 17), { attackBonus: 5, saveDc: 13 });

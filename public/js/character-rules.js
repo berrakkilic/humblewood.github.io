@@ -189,6 +189,147 @@
     'Cervan (humblefolk)': ['Grove Cervan', 'Pronghorn Cervan']
   };
 
+  const AUTO_SPECIES_TRAITS_START = '[Automatic Humblewood species traits]';
+  const AUTO_SPECIES_TRAITS_END = '[/Automatic Humblewood species traits]';
+
+  // Concise sheet-ready summaries of the Humblewood folk rules. These mirror
+  // the campaign almanac while keeping the generated textarea block useful at
+  // the table. A marked block lets the UI refresh generated rules without
+  // replacing any notes the player added themselves.
+  const SPECIES_TRAITS = {
+    'Corvum (birdfolk)': {
+      abilityScores: '+2 Intelligence',
+      sizeSpeed: 'Medium; 30 ft.',
+      languages: 'Birdfolk; understands Auran',
+      core: [
+        'Glide and climbing talons.',
+        'Learned: proficiency in Arcana, History, Nature, or Religion.',
+        'Appraising Eye: once per rest, learn an object\'s magical use and approximate value.'
+      ],
+      subraces: {
+        'Dusk Corvum': ['+1 Dexterity. Skilled at hiding in dim light or darkness and proficient in Insight.'],
+        'Kindled Corvum': ['+1 Charisma. Persuasive or deceptive, broadly trained, and gifted with unusually accurate recall.']
+      }
+    },
+    'Gallus (birdfolk)': {
+      abilityScores: '+2 Wisdom',
+      sizeSpeed: 'Medium; 30 ft.',
+      languages: 'Birdfolk; understands Auran',
+      core: [
+        'Glide and Wing Flap.',
+        'Militia Training: proficiency with simple weapons and one artisan\'s tool.',
+        'Gallus Lore: deep knowledge of gallus culture and community.'
+      ],
+      subraces: {
+        'Bright Gallus': ['+1 Charisma. Proficient in Insight and able to inspire an ally with a d4 for its next check, attack, or save.'],
+        'Huden Gallus': ['+1 Dexterity. Proficient in Nature and able to exchange simple ideas with living plants through Seedspeech.']
+      }
+    },
+    'Luma (birdfolk)': {
+      abilityScores: '+2 Charisma',
+      sizeSpeed: 'Small; 25 ft.',
+      languages: 'Birdfolk; understands Auran',
+      core: [
+        'Glide and Wing Flap.',
+        'Touched: learn one sorcerer cantrip.',
+        'Fated: reroll one attack roll, ability check, or saving throw per long rest.'
+      ],
+      subraces: {
+        'Sable Luma': ['+1 Constitution. Difficult to read, skilled at deceiving non-lumas, and resistant to poison.'],
+        'Sera Luma': ['+1 Wisdom. Proficient in Performance and able to cast charm person through song once per long rest.']
+      }
+    },
+    'Raptor (birdfolk)': {
+      abilityScores: '+2 Dexterity',
+      sizeSpeed: 'Small; 25 ft.',
+      languages: 'Birdfolk; understands Auran',
+      core: [
+        'Glide, talons, and proficiency in Perception.',
+        'Hunter\'s Training: proficiency with the longbow, shortbow, and spear.',
+        'Woodland Hunter: enemies gain less benefit from cover against your attacks.'
+      ],
+      subraces: {
+        'Maran Raptor': ['+1 Intelligence. A 25-foot swim speed and advantage on the first roll made as part of a readied action.'],
+        'Mistral Raptor': ['+1 Wisdom. Proficient in Acrobatics; attackers have disadvantage while you are falling, gliding, or jumping.']
+      }
+    },
+    'Strig (birdfolk)': {
+      abilityScores: '+2 Strength',
+      sizeSpeed: 'Medium; 30 ft.',
+      languages: 'Birdfolk; understands Auran',
+      core: [
+        'Glide and climbing talons.',
+        'Darkvision out to 60 feet.',
+        'Patterned Feathers: advantage when hiding in forest terrain.'
+      ],
+      subraces: {
+        'Stout Strig': ['+1 Constitution. Proficient in Intimidation and able to grapple as a bonus action after a successful talon attack.'],
+        'Swift Strig': ['+1 Dexterity. A 35-foot walking speed and proficiency in Survival.']
+      }
+    },
+    'Cervan (humblefolk)': {
+      abilityScores: '+2 Constitution',
+      sizeSpeed: 'Medium; 30 ft.',
+      languages: 'Birdfolk; spoken Cervan',
+      core: [
+        'Practical: proficiency in Athletics, Medicine, Nature, or Survival.',
+        'Surge of Vigor: after a devastating hit, restore 1d12 + Constitution modifier hit points once per long rest.'
+      ],
+      subraces: {
+        'Grove Cervan': ['+1 Dexterity. A 35-foot speed, powerful standing leaps, and disadvantage on opportunity attacks made against you.'],
+        'Pronghorn Cervan': ['+1 Strength. Doubled carrying power, antler attacks, and a charging strike that can push an enemy.']
+      }
+    },
+    'Hedge (humblefolk)': {
+      abilityScores: '+2 Charisma, +1 Wisdom',
+      sizeSpeed: 'Small; 25 ft.',
+      languages: 'Birdfolk and Hedge',
+      core: [
+        'Burrow: 15-foot burrowing speed through soil.',
+        'Quills: while unarmored, AC is 14 + Dexterity modifier.',
+        'Curl Up: raise base AC to 19 and damage some melee attackers that miss you.',
+        'Forest Magic: druidcraft, animal messenger, and simple communication with bugs.'
+      ],
+      subraces: {}
+    },
+    'Jerbeen (humblefolk)': {
+      abilityScores: '+2 Dexterity, +1 Charisma',
+      sizeSpeed: 'Small; 30 ft.',
+      languages: 'Birdfolk and Jerbeen',
+      core: [
+        'Standing Leap: long jump up to 30 feet and high jump up to 15 feet from a standstill.',
+        'Nimble: move through spaces occupied by larger creatures.',
+        'Take Heart: gain defensive advantages while near a capable ally.',
+        'Team Tactics: take the Help action as a bonus action.'
+      ],
+      subraces: {}
+    },
+    'Mapach (humblefolk)': {
+      abilityScores: '+2 Wisdom, +1 Constitution',
+      sizeSpeed: 'Medium; 30 ft.',
+      languages: 'Birdfolk and Mapach',
+      core: [
+        'Darkvision out to 60 feet and a 20-foot climb speed.',
+        'Resilience: resistant to poison and skilled at hiding in dim light or darkness.',
+        'Proficiency with tinker\'s tools.',
+        'Scroungecraft: in 10 minutes, make a temporary common tool or piece of adventuring gear worth no more than 30 gp; it normally lasts 1 hour.'
+      ],
+      subraces: {}
+    },
+    'Vulpin (humblefolk)': {
+      abilityScores: '+2 Intelligence, +1 Charisma',
+      sizeSpeed: 'Medium; 30 ft.',
+      languages: 'Birdfolk and Vulpin',
+      core: [
+        'Darkvision out to 60 feet.',
+        'Bite: a 1d6 natural weapon using Strength or Dexterity.',
+        'Evasive: add your Intelligence modifier to Dexterity saving throws.',
+        'Bewitching Guile: gain charm person, then Ambush Prey at 3rd level and fear at 5th level.'
+      ],
+      subraces: {}
+    }
+  };
+
   // Official D&D 5e (2014/legacy) subclasses, including setting-book and DMG
   // options, plus the Humblewood subclasses used by this campaign. Revised
   // 2024/5.5e subclasses are a separate ruleset and are intentionally excluded.
@@ -276,6 +417,40 @@
 
   function subracesFor(species) {
     return [...(SPECIES_SUBRACES[canonicalSpecies(species)] || [])];
+  }
+
+  function automaticSpeciesTraitText(species, subrace = '') {
+    const canonicalSpeciesName = canonicalSpecies(species);
+    const definition = SPECIES_TRAITS[canonicalSpeciesName];
+    if (!definition) return '';
+    const canonicalSubrace = canonicalFromList(subrace, subracesFor(canonicalSpeciesName));
+    const lines = [
+      AUTO_SPECIES_TRAITS_START,
+      canonicalSpeciesName,
+      `Ability scores: ${definition.abilityScores}`,
+      `Size / speed: ${definition.sizeSpeed}`,
+      `Languages: ${definition.languages}`,
+      '',
+      'Core traits',
+      ...definition.core.map(trait => `- ${trait}`)
+    ];
+    if (canonicalSubrace && definition.subraces[canonicalSubrace]) {
+      lines.push('', canonicalSubrace, ...definition.subraces[canonicalSubrace].map(trait => `- ${trait}`));
+    }
+    lines.push(AUTO_SPECIES_TRAITS_END);
+    return lines.join('\n');
+  }
+
+  function mergeAutomaticSpeciesTraits(existingText, automaticText) {
+    const escapedStart = AUTO_SPECIES_TRAITS_START.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const escapedEnd = AUTO_SPECIES_TRAITS_END.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const generatedBlock = new RegExp(`${escapedStart}[\\s\\S]*?${escapedEnd}`, 'g');
+    const preserved = String(existingText || '')
+      .replace(generatedBlock, '')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+    const generated = String(automaticText || '').trim();
+    return [preserved, generated].filter(Boolean).join('\n\n');
   }
 
   function subclassesFor(className) {
@@ -512,13 +687,17 @@
 
   return {
     ABILITY_KEYS,
+    AUTO_SPECIES_TRAITS_END,
+    AUTO_SPECIES_TRAITS_START,
     CLASS_PROGRESSIONS,
     CLASS_SUBCLASSES,
     GLIDE_FEATS,
     HUMBLEWOOD_SPECIES_FEATURES,
     HUMBLEWOOD_SUBCLASS_FEATURES,
     SPECIES_SUBRACES,
+    SPECIES_TRAITS,
     abilityModifier,
+    automaticSpeciesTraitText,
     armorClass,
     asiLevelsBetween,
     applyPlayerCharacterConstraints,
@@ -532,6 +711,7 @@
     hitPointGain,
     levelUpHitPointIncrease,
     levelUpGains,
+    mergeAutomaticSpeciesTraits,
     preparedSpellCount,
     proficiencyBonus,
     spellSlotsFor,

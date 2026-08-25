@@ -1687,6 +1687,22 @@ function updateSubraceOptions(selected = '') {
   select.disabled = !species || !options.length || !editingCanEdit;
 }
 
+function syncAutomaticSpeciesTraits(force = false) {
+  const field = document.getElementById('sf-racial-traits');
+  if (!field) return;
+  const current = field.value || '';
+  const hasAutomaticBlock = current.includes(characterRules.AUTO_SPECIES_TRAITS_START);
+  // An older sheet may contain hand-written race notes. Preserve those on
+  // open; if the player actively changes a choice, append the marked automatic
+  // block alongside their notes instead of replacing anything.
+  if (!force && current.trim() && !hasAutomaticBlock) return;
+  const automatic = characterRules.automaticSpeciesTraitText(
+    document.getElementById('sf-species').value,
+    document.getElementById('sf-subrace').value
+  );
+  field.value = characterRules.mergeAutomaticSpeciesTraits(current, automatic);
+}
+
 function updateSubclassOptions(selected = '') {
   const className = characterRules.canonicalClass(document.getElementById('sf-class').value);
   const select = document.getElementById('sf-subclass');
@@ -1698,6 +1714,7 @@ function updateSubclassOptions(selected = '') {
 function setCharacterRuleSelections(fields = {}) {
   document.getElementById('sf-species').value = characterRules.canonicalSpecies(fields.species) || '';
   updateSubraceOptions(fields.subrace);
+  syncAutomaticSpeciesTraits();
   document.getElementById('sf-class').value = characterRules.canonicalClass(fields.class) || '';
   updateSubclassOptions(fields.subclass);
 }
@@ -1709,7 +1726,11 @@ function initializeCharacterRuleControls() {
   updateSubclassOptions();
   document.getElementById('sf-species').addEventListener('change', () => {
     updateSubraceOptions();
+    syncAutomaticSpeciesTraits(true);
     applyRecommendedArmorMethod();
+  });
+  document.getElementById('sf-subrace').addEventListener('change', () => {
+    syncAutomaticSpeciesTraits(true);
   });
   document.getElementById('sf-class').addEventListener('change', () => {
     updateSubclassOptions();
