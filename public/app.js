@@ -9,6 +9,7 @@ const {
 } = window.HumblewoodMapGeometry;
 const combatState = window.HumblewoodCombatState;
 const characterRules = window.HumblewoodCharacterRules;
+const creationPresets = window.HumblewoodCreationPresets;
 const HUMBLEWOOD_FEAT_PRESETS = (window.HumblewoodAlmanacData || [])
   .find(category => category.id === 'feats')?.entries || [];
 
@@ -34,6 +35,8 @@ let spacePanPressed = false;
 let lastFittedMapUrl = null;
 let editingOriginalName = null;
 let editingInventory = [];
+let editingAttacks = [];
+let editingAttackId = null;
 let editingSpells = [];
 let editingSpellId = null;
 let editingPortraitUrl = null;
@@ -47,6 +50,7 @@ let acMethodManuallySelected = false;
 let toastTimer = null;
 let activeCombatTarget = null;
 let editingNpcId = null;
+let editingNpcSheetId = null;
 let rulerStartPoint = null;
 let rulerAnchorPoint = null;
 let mapAreaDrag = null;
@@ -76,6 +80,8 @@ const CONDITIONS = [
 
 initializeCharacterRuleControls();
 initializeFeatPresetControls();
+initializeAttackPresetControls();
+initializeNpcPresetControls();
 
 // ---------------- Join flow ----------------
 document.getElementById('role-dm').onclick = () => setRole('dm');
@@ -275,15 +281,32 @@ socket.on('token:remove', ({ id }) => {
   renderCharacters();
 });
 
-socket.on('npcs:update', npcs => { state.npcs = npcs || {}; renderNpcRoster(); renderDmSidebarSummary(); });
+socket.on('npcs:update', npcs => {
+  state.npcs = npcs || {};
+  renderNpcRoster();
+  renderDmSidebarSummary();
+  renderCharacters();
+  if (activeCombatTarget?.type === 'npc') renderCombatManager();
+});
 socket.on('scenes:update', scenes => { state.savedScenes = scenes || []; renderSavedScenes(); });
 socket.on('scene:active', ({ name }) => { state.activeSceneName = name || null; renderSavedScenes(); renderDmSidebarSummary(); });
 socket.on('scene:saved', ({ name }) => showToast(`Saved scene “${name}”.`));
 socket.on('scene:loaded', ({ name }) => showToast(`Loaded scene “${name}”.`));
 socket.on('scene:deleted', ({ name }) => showToast(`Deleted saved scene “${name}”.`));
-socket.on('npc:saved', ({ name }) => { resetNpcEditor(); showToast(`Saved ${name}.`); });
+socket.on('npc:saved', ({ id, name }) => {
+  resetNpcEditor();
+  if (editingNpcSheetId === id || (editingNpcSheetId === '__new__' && state.npcs?.[id])) {
+    editingNpcSheetId = null;
+    document.getElementById('sheet-editor').classList.add('hidden');
+  }
+  showToast(`Saved ${name}.`);
+});
 socket.on('npc:deleted', ({ id, name }) => {
   if (editingNpcId === id) resetNpcEditor();
+  if (editingNpcSheetId === id) {
+    editingNpcSheetId = null;
+    document.getElementById('sheet-editor').classList.add('hidden');
+  }
   showToast(`Deleted ${name}.`);
 });
 
@@ -1797,7 +1820,9 @@ function addFeatPresetToSheet() {
 function renderCharacters() {
   const grid = document.getElementById('char-grid');
   grid.innerHTML = '';
-  Object.values(state.characters).forEach(c => {
+  const characters = Object.values(state.characters || {}).sort((a, b) => a.name.localeCompare(b.name));
+  if (!characters.length) grid.innerHTML = '<p class="empty-character-grid">No player characters yet.</p>';
+  characters.forEach(c => {
     const card = document.createElement('div');
     card.className = 'char-card';
     const canEdit = canEditCharacter(c);
@@ -1847,28 +1872,91 @@ function renderCharacters() {
     });
     grid.appendChild(card);
   });
+
+  const npcGrid = document.getElementById('npc-sheet-grid');
+  if (!npcGrid) return;
+  npcGrid.innerHTML = '';
+  const npcs = Object.values(state.npcs || {}).sort((a, b) => a.name.localeCompare(b.name));
+  if (!npcs.length) {
+    npcGrid.innerHTML = '<p class="empty-character-grid">No NPCs yet. Create one from a preset or paste a stat block.</p>';
+    return;
+  }
+  npcs.forEach(npc => {
+    const token = state.tokens.find(entry => entry.npcId === npc.id);
+    const fields = npc.sheet?.fields || {};
+    const descriptor = fields.background || (npc.sheet ? 'Full NPC sheet' : 'Quick NPC');
+    const challenge = npc.sheet?.challenge ? ` · CR ${npc.sheet.challenge}` : '';
+    const card = document.createElement('div');
+    card.className = 'char-card npc-sheet-card';
+    card.innerHTML = `
+      <div class="card-top">
+        <div class="card-portrait">${npc.imageUrl ? `<img src="${escapeAttr(npc.imageUrl)}" alt="">` : '🦊'}</div>
+        <div><h3>${escapeHtml(npc.name)}</h3><div class="meta">${escapeHtml(descriptor)}${escapeHtml(challenge)}</div></div>
+        <span class="npc-sheet-badge">NPC</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-pill">HP ${Number(token?.hp ?? npc.hp) || 0}/${Number(npc.maxHp) || 0}</span>
+        ${Number(token?.tempHp ?? npc.tempHp) ? `<span class="stat-pill temp-hp-pill">+${Number(token?.tempHp ?? npc.tempHp)} temp</span>` : ''}
+        <span class="stat-pill">AC ${Number(npc.ac) || 0}</span>
+        <span class="stat-pill">Init ${signed(npc.initiativeModifier)}</span>
+      </div>
+      <div class="char-card-actions">
+        <button type="button" class="btn-ghost npc-sheet-open-btn">${npc.sheet ? 'Open full sheet' : 'Expand to full sheet'}</button>
+        <button type="button" class="btn-rose npc-sheet-combat-btn" ${token ? '' : 'disabled'}>⚔ Combat</button>
+        <button type="button" class="btn-ghost npc-sheet-initiative-btn" ${token ? '' : 'disabled'}>🎲 Initiative</button>
+        <button type="button" class="btn-ghost npc-sheet-map-btn">${token ? 'Remove from map' : 'Put on map'}</button>
+        <button type="button" class="btn-danger-soft npc-sheet-delete-btn">Delete</button>
+      </div>
+    `;
+    card.querySelector('.npc-sheet-open-btn').onclick = () => openSheetEditor(npc, { npc: true });
+    card.querySelector('.npc-sheet-combat-btn').onclick = () => token && openNpcCombatManager(token.id);
+    card.querySelector('.npc-sheet-initiative-btn').onclick = () => token && rollNpcInitiative(token, 'normal');
+    card.querySelector('.npc-sheet-map-btn').onclick = () => {
+      if (token) socket.emit('token:remove', { id: token.id });
+      else socket.emit('npc:place', { id: npc.id });
+    };
+    card.querySelector('.npc-sheet-delete-btn').onclick = () => {
+      if (confirm(`Permanently delete ${npc.name}? It will also be removed from every saved scene.`)) socket.emit('npc:delete', { id: npc.id });
+    };
+    npcGrid.appendChild(card);
+  });
 }
 
-document.getElementById('new-sheet-btn').onclick = () => openSheetEditor(null);
+document.getElementById('new-sheet-btn').onclick = () => openSheetEditor(null, { npc: false });
+document.getElementById('new-npc-sheet-btn').onclick = () => openSheetEditor(null, { npc: true });
 document.getElementById('close-sheet-btn').onclick = () => {
   closeLevelUpDialog(false);
+  editingNpcSheetId = null;
   document.getElementById('sheet-editor').classList.add('hidden');
 };
 
-function openSheetEditor(c) {
+function openSheetEditor(c, options = {}) {
+  const isNpc = !!options.npc;
   const form = document.getElementById('sheet-form');
   form.reset();
   closeLevelUpDialog(false);
   document.getElementById('sheet-editor').classList.remove('hidden');
-  document.getElementById('sheet-editor-title').textContent = c ? 'Edit ' + c.name : 'New character';
-  editingOriginalName = c ? c.name : null;
-  editingCanEdit = canEditCharacter(c);
+  document.getElementById('sheet-editor-title').textContent = c
+    ? `Edit ${c.name}${isNpc ? ' · NPC' : ''}`
+    : (isNpc ? 'New NPC stat block' : 'New character');
+  editingNpcSheetId = isNpc ? (c?.id || '__new__') : null;
+  editingOriginalName = !isNpc && c ? c.name : null;
+  editingCanEdit = isNpc ? myRole === 'dm' : canEditCharacter(c);
   pendingPortraitFile = null;
-  editingPortraitUrl = c?.portraitUrl || null;
-  const fields = c?.fields || legacyCharacterFields(c);
+  editingPortraitUrl = (isNpc ? c?.imageUrl : c?.portraitUrl) || null;
+  const fields = isNpc
+    ? (c?.sheet?.fields || legacyNpcFields(c))
+    : (c?.fields || legacyCharacterFields(c));
   editingBaseLevel = Math.max(1, Math.min(20, Number(fields.level ?? c?.level) || 1));
   acMethodManuallySelected = !!c || !!fields['ac-method'];
   initiativeManuallyEdited = !!c && fields.initiative !== '' && fields.initiative !== undefined;
+  document.getElementById('npc-sheet-tools').classList.toggle('hidden', !isNpc);
+  document.getElementById('level-up-btn').classList.toggle('hidden', isNpc);
+  document.getElementById('save-sheet-btn').textContent = isNpc ? 'Save NPC' : 'Save character';
+  form.dataset.npcChallenge = isNpc ? (c?.sheet?.challenge || '') : '';
+  document.getElementById('npc-statblock-import').value = '';
+  document.getElementById('npc-sheet-preset').value = '';
+  ABILITIES.forEach(ability => { document.getElementById(`sf-${ability}`).max = isNpc ? '30' : '20'; });
   form.querySelectorAll('[id^="sf-"]').forEach(input => {
     if (input.type === 'file') return;
     const key = input.id.slice(3);
@@ -1878,15 +1966,20 @@ function openSheetEditor(c) {
   });
   setCharacterRuleSelections(fields);
   if (!c && !fields['ac-method']) applyRecommendedArmorMethod();
-  editingInventory = normalizeInventory(c?.inventory);
+  editingInventory = normalizeInventory(isNpc ? c?.sheet?.inventory : c?.inventory);
   renderInventoryEditor();
-  editingSpells = normalizeSpellList(fields['spell-list']);
+  editingAttacks = normalizeAttackList(isNpc ? (c?.sheet?.attacks || c?.attacks) : c?.attacks);
+  editingAttackId = null;
+  document.getElementById('attack-add-form').classList.add('hidden');
+  renderAttackEditor();
+  editingSpells = normalizeSpellList(fields['spell-list'] || (isNpc ? c?.spells : null));
+  if (isNpc && !editingSpells.length) editingSpells = normalizeSpellList(c?.spells);
   if (!editingSpells.length) editingSpells = migrateLegacySpellText(fields);
   editingSpellId = null;
   document.getElementById('spell-add-form').classList.add('hidden');
   renderSpellListEditor();
   renderPortraitPreview(editingPortraitUrl);
-  refreshCharacterCalculations(!c, !c);
+  refreshCharacterCalculations(!c, !c && !isNpc);
   setSheetEditable(editingCanEdit, !!c);
   document.getElementById('view-characters').scrollIntoView({ behavior: 'smooth' });
 }
@@ -1898,6 +1991,18 @@ function legacyCharacterFields(c) {
     hp: c.hp ?? 10, maxhp: c.maxHp ?? 10, ac: c.ac ?? 10, speed: c.speed || '30 ft', notes: c.notes || ''
   };
   ABILITIES.forEach(ability => { fields[ability] = c.abilities?.[ability] ?? 10; });
+  return fields;
+}
+
+function legacyNpcFields(npc) {
+  if (!npc) return {};
+  const fields = {
+    name: npc.name || '', level: '1', hp: npc.hp ?? npc.maxHp ?? 10, maxhp: npc.maxHp ?? 10,
+    temphp: npc.tempHp ?? 0, ac: npc.ac ?? 10, initiative: npc.initiativeModifier ?? 0,
+    speed: '30 ft.', 'ac-method': 'manual', 'ac-base': npc.ac ?? 10,
+    'attacks-notes': npc.notes || '', notes: npc.notes || ''
+  };
+  ABILITIES.forEach(ability => { fields[ability] = npc.sheet?.abilities?.[ability] ?? 10; });
   return fields;
 }
 
@@ -1965,6 +2070,183 @@ document.getElementById('inv-add-btn').onclick = () => {
   renderInventoryEditor();
 };
 
+// ---- Reusable attack editor ----
+function normalizeAttack(attack, index = 0) {
+  if (!attack || typeof attack !== 'object') return null;
+  const name = String(attack.name || '').trim();
+  if (!name) return null;
+  return {
+    id: String(attack.id || `attack-normalized-${index}`),
+    name,
+    bonus: String(attack.bonus || '').trim(),
+    damage: String(attack.damage || '').trim(),
+    details: String(attack.details || '').trim(),
+    source: String(attack.source || '').trim()
+  };
+}
+
+function normalizeAttackList(raw) {
+  return (Array.isArray(raw) ? raw : []).map(normalizeAttack).filter(Boolean);
+}
+
+function initializeAttackPresetControls() {
+  const select = document.getElementById('attack-preset-select');
+  creationPresets.ATTACK_PRESETS.forEach(preset => {
+    const option = document.createElement('option');
+    option.value = preset.name;
+    option.textContent = `${preset.name}${preset.properties ? ` · ${preset.properties}` : ''}`;
+    select.appendChild(option);
+  });
+  document.getElementById('attack-add-btn').onclick = () => openAttackForm(null);
+  document.getElementById('attack-form-cancel').onclick = closeAttackForm;
+  document.getElementById('attack-preset-load').onclick = () => {
+    const preset = creationPresets.ATTACK_PRESETS.find(entry => entry.name === select.value);
+    if (!preset) return showToast('Choose an attack preset first.');
+    const scores = Object.fromEntries(ABILITIES.map(ability => [ability, document.getElementById(`sf-${ability}`).value]));
+    populateAttackForm(creationPresets.attackPresetValues(preset, scores, document.getElementById('sf-prof-bonus').value));
+  };
+  document.getElementById('attack-form-save').onclick = () => {
+    const name = document.getElementById('attack-form-name').value.trim();
+    if (!name) return showToast('Give the attack a name first.');
+    const value = normalizeAttack({
+      id: editingAttackId || `attack-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      name,
+      bonus: document.getElementById('attack-form-bonus').value,
+      damage: document.getElementById('attack-form-damage').value,
+      details: document.getElementById('attack-form-details').value,
+      source: document.getElementById('attack-add-form').dataset.attackSource || ''
+    });
+    if (editingAttackId) {
+      const index = editingAttacks.findIndex(entry => entry.id === editingAttackId);
+      if (index !== -1) editingAttacks[index] = value;
+    } else {
+      editingAttacks.push(value);
+    }
+    closeAttackForm();
+    renderAttackEditor();
+  };
+}
+
+function populateAttackForm(value = {}) {
+  document.getElementById('attack-add-form').dataset.attackSource = value.source || '';
+  document.getElementById('attack-form-name').value = value.name || '';
+  document.getElementById('attack-form-bonus').value = value.bonus || '';
+  document.getElementById('attack-form-damage').value = value.damage || '';
+  document.getElementById('attack-form-details').value = value.details || '';
+}
+
+function openAttackForm(value) {
+  editingAttackId = value?.id || null;
+  document.getElementById('attack-add-form').classList.remove('hidden');
+  document.getElementById('attack-preset-select').value = '';
+  populateAttackForm(value || {});
+  document.getElementById('attack-form-name').focus();
+}
+
+function closeAttackForm() {
+  editingAttackId = null;
+  document.getElementById('attack-add-form').classList.add('hidden');
+}
+
+function renderAttackEditor() {
+  const list = document.getElementById('attack-list');
+  list.innerHTML = '';
+  if (!editingAttacks.length) {
+    list.innerHTML = '<p class="sidebar-help">No attacks configured yet.</p>';
+    return;
+  }
+  editingAttacks.forEach(value => {
+    const row = document.createElement('div');
+    row.className = 'attack-list-item';
+    row.innerHTML = `
+      <span class="attack-list-name">${escapeHtml(value.name)}</span>
+      <span class="attack-list-value">${escapeHtml(value.bonus || 'No roll')}</span>
+      <span class="attack-list-value">${escapeHtml(value.damage || 'No damage')}</span>
+      ${value.details ? `<span class="attack-list-details">${escapeHtml(value.details)}</span>` : ''}
+      <span class="attack-list-actions">
+        <button type="button" class="edit" title="Edit attack">✎</button>
+        <button type="button" class="del" title="Remove attack">×</button>
+      </span>
+    `;
+    const edit = row.querySelector('.edit');
+    const remove = row.querySelector('.del');
+    edit.disabled = !editingCanEdit;
+    remove.disabled = !editingCanEdit;
+    edit.onclick = () => openAttackForm(value);
+    remove.onclick = () => {
+      editingAttacks = editingAttacks.filter(entry => entry.id !== value.id);
+      renderAttackEditor();
+    };
+    list.appendChild(row);
+  });
+}
+
+// ---- NPC preset and pasted stat-block importer ----
+function initializeNpcPresetControls() {
+  const select = document.getElementById('npc-sheet-preset');
+  const groups = new Map();
+  creationPresets.NPC_PRESETS.forEach(preset => {
+    if (!groups.has(preset.source)) {
+      const group = document.createElement('optgroup');
+      group.label = preset.source;
+      groups.set(preset.source, group);
+      select.appendChild(group);
+    }
+    const option = document.createElement('option');
+    option.value = preset.id;
+    option.textContent = preset.name;
+    groups.get(preset.source).appendChild(option);
+  });
+  document.getElementById('npc-sheet-preset-load').onclick = () => {
+    const preset = creationPresets.NPC_PRESETS.find(entry => entry.id === select.value);
+    if (!preset) return showToast('Choose an NPC preset first.');
+    applyImportedStatBlock(creationPresets.parseStatBlock(preset.statBlock, {
+      name: preset.name,
+      spellPresets: allSpellPresets()
+    }));
+  };
+  document.getElementById('npc-statblock-import-btn').onclick = () => {
+    const text = document.getElementById('npc-statblock-import').value;
+    applyImportedStatBlock(creationPresets.parseStatBlock(text, { spellPresets: allSpellPresets() }));
+  };
+  document.getElementById('npc-statblock-clear-btn').onclick = () => {
+    document.getElementById('npc-statblock-import').value = '';
+  };
+}
+
+function applyImportedStatBlock(parsed) {
+  if (parsed.error) return showToast(parsed.error);
+  const form = document.getElementById('sheet-form');
+  form.reset();
+  const fields = parsed.fields || {};
+  form.querySelectorAll('[id^="sf-"]').forEach(input => {
+    if (input.type === 'file') return;
+    const key = input.id.slice(3);
+    if (!Object.prototype.hasOwnProperty.call(fields, key)) return;
+    if (input.type === 'checkbox') input.checked = !!fields[key];
+    else input.value = fields[key] ?? '';
+  });
+  setCharacterRuleSelections(fields);
+  acMethodManuallySelected = true;
+  initiativeManuallyEdited = true;
+  editingInventory = [];
+  renderInventoryEditor();
+  editingAttacks = normalizeAttackList(parsed.attacks);
+  closeAttackForm();
+  renderAttackEditor();
+  editingSpells = normalizeSpellList(parsed.spells);
+  editingSpellId = null;
+  document.getElementById('spell-add-form').classList.add('hidden');
+  renderSpellListEditor();
+  form.dataset.npcChallenge = parsed.challenge || '';
+  refreshCharacterCalculations(false, false);
+  document.getElementById('sf-ac').value = fields.ac || '10';
+  document.getElementById('sf-ac-method').value = 'manual';
+  refreshArmorClass();
+  document.getElementById('sf-name').focus();
+  showToast(`${parsed.name} imported. Review it, add a portrait if wanted, then save.`);
+}
+
 // ---- Spell list editor ----
 const SPELL_LEVEL_NAMES = ['Cantrip', 'Level 1', 'Level 2', 'Level 3', 'Level 4', 'Level 5', 'Level 6', 'Level 7', 'Level 8', 'Level 9'];
 const HUMBLEWOOD_SPELL_PRESETS = [
@@ -2020,6 +2302,10 @@ const HUMBLEWOOD_SPELL_PRESETS = [
     effect: 'Cloak one creature in shadow and silence. The target gains +1 AC and has advantage on Stealth checks for the duration.'
   }
 ];
+
+function allSpellPresets() {
+  return [...HUMBLEWOOD_SPELL_PRESETS, ...creationPresets.STANDARD_SPELL_PRESETS];
+}
 
 function normalizeSpell(spell, index = 0) {
   if (!spell || typeof spell !== 'object') return null;
@@ -2178,21 +2464,54 @@ function openSpellForm(spell) {
 }
 
 const spellPresetSelect = document.getElementById('spell-preset-select');
-HUMBLEWOOD_SPELL_PRESETS
-  .slice()
-  .sort((a, b) => a.level - b.level || a.name.localeCompare(b.name))
-  .forEach(spell => {
-    const option = document.createElement('option');
-    option.value = spell.name;
-    option.textContent = `${SPELL_LEVEL_NAMES[spell.level]} · ${spell.name}`;
-    spellPresetSelect.appendChild(option);
+['Humblewood', 'Core 5e'].forEach(source => {
+  const group = document.createElement('optgroup');
+  group.label = source;
+  allSpellPresets()
+    .filter(spell => spell.source === source)
+    .sort((a, b) => a.level - b.level || a.name.localeCompare(b.name))
+    .forEach(spell => {
+      const option = document.createElement('option');
+      option.value = `${source}::${spell.name}`;
+      option.textContent = `${SPELL_LEVEL_NAMES[spell.level]} · ${spell.name}`;
+      group.appendChild(option);
+    });
+  spellPresetSelect.appendChild(group);
+});
+
+function selectedSpellPreset() {
+  const [source, ...nameParts] = spellPresetSelect.value.split('::');
+  const name = nameParts.join('::');
+  return allSpellPresets().find(spell => spell.source === source && spell.name === name);
+}
+
+function addSpellNames(raw) {
+  const names = String(raw || '').split(/[,;\n]/).map(name => name.trim()).filter(Boolean);
+  if (!names.length) return showToast('Enter at least one spell name.');
+  let added = 0;
+  names.forEach(name => {
+    if (editingSpells.some(existing => existing.name.toLowerCase() === name.toLowerCase())) return;
+    const preset = creationPresets.findSpellPreset(name, allSpellPresets());
+    editingSpells.push(normalizeSpell({
+      ...(preset || {}),
+      id: `spell-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      name: preset?.name || name,
+      level: preset?.level || 0,
+      source: preset?.source || 'Custom list'
+    }));
+    added += 1;
   });
+  renderSpellListEditor();
+  document.getElementById('spell-bulk-list').value = '';
+  showToast(added ? `Added ${added} spell${added === 1 ? '' : 's'}.` : 'Those spells are already on the sheet.');
+}
 
 document.getElementById('spell-preset-load').onclick = () => {
-  const preset = HUMBLEWOOD_SPELL_PRESETS.find(spell => spell.name === spellPresetSelect.value);
-  if (!preset) return showToast('Choose a Humblewood spell first.');
+  const preset = selectedSpellPreset();
+  if (!preset) return showToast('Choose a spell preset first.');
   populateSpellForm(preset);
 };
+document.getElementById('spell-bulk-add').onclick = () => addSpellNames(document.getElementById('spell-bulk-list').value);
 
 document.getElementById('spell-add-btn').onclick = () => openSpellForm(null);
 document.getElementById('spell-form-cancel').onclick = () => {
@@ -2263,12 +2582,15 @@ document.getElementById('save-sheet-btn').onclick = async () => {
   refreshCharacterCalculations(false);
   let fields = collectCharacterFields();
   const name = String(fields.name || '').trim();
-  if (!name) return alert('Every character needs a name.');
-  const constrainedCharacter = { fields };
-  const validationError = characterRules.validatePlayerCharacter(constrainedCharacter);
-  if (validationError) return alert(validationError);
-  characterRules.applyPlayerCharacterConstraints(constrainedCharacter);
-  fields = constrainedCharacter.fields;
+  const isNpc = !!editingNpcSheetId;
+  if (!name) return alert(`Every ${isNpc ? 'NPC' : 'character'} needs a name.`);
+  if (!isNpc) {
+    const constrainedCharacter = { fields };
+    const validationError = characterRules.validatePlayerCharacter(constrainedCharacter);
+    if (validationError) return alert(validationError);
+    characterRules.applyPlayerCharacterConstraints(constrainedCharacter);
+    fields = constrainedCharacter.fields;
+  }
   const saveButton = document.getElementById('save-sheet-btn');
   saveButton.disabled = true;
   saveButton.textContent = 'Saving…';
@@ -2277,7 +2599,7 @@ document.getElementById('save-sheet-btn').onclick = async () => {
   } catch (error) {
     showToast('The portrait could not be uploaded. Please try again.');
     saveButton.disabled = false;
-    saveButton.textContent = 'Save character';
+    saveButton.textContent = isNpc ? 'Save NPC' : 'Save character';
     return;
   }
 
@@ -2301,9 +2623,7 @@ document.getElementById('save-sheet-btn').onclick = async () => {
     skills: Object.fromEntries(Object.keys(SKILL_ABILITIES).map(skill => [skill, {
       proficient: !!fields[`skill-${skill}-prof`], modifier: num(`skill-${skill}`)
     }])),
-    attacks: [1, 2, 3].map(index => ({
-      name: fields[`attack-${index}-name`] || '', bonus: fields[`attack-${index}-bonus`] || '', damage: fields[`attack-${index}-damage`] || ''
-    })).filter(attack => attack.name || attack.bonus || attack.damage),
+    attacks: editingAttacks.map(attack => ({ ...attack })),
     spellcasting: {
       className: fields['spell-class'] || '', ability: fields['spell-ability'] || '',
       saveDc: num('spell-dc'), attackBonus: num('spell-attack')
@@ -2312,14 +2632,58 @@ document.getElementById('save-sheet-btn').onclick = async () => {
     notes: fields.notes || '',
     fields
   };
-  socket.emit('character:save', sheet);
-  document.getElementById('sheet-editor').classList.add('hidden');
+  if (isNpc) {
+    const existing = editingNpcSheetId === '__new__' ? null : state.npcs?.[editingNpcSheetId];
+    const spellSlots = {};
+    for (let level = 1; level <= 9; level += 1) {
+      const total = Math.max(0, Number(fields[`spell-slots-${level}`]) || 0);
+      spellSlots[level] = {
+        total,
+        used: Math.max(0, Math.min(total, Number(fields[`spell-used-${level}`]) || 0))
+      };
+    }
+    const npcPayload = {
+      ...(existing ? { id: existing.id } : {}),
+      name,
+      imageUrl: editingPortraitUrl,
+      hp: num('hp', 10), maxHp: Math.max(1, num('maxhp', 10)), tempHp: Math.max(0, num('temphp')),
+      ac: num('ac', 10), initiativeModifier: num('initiative'),
+      attacks: sheet.attacks,
+      spells: editingSpells.map(spell => ({ ...spell })),
+      spellcasting: sheet.spellcasting,
+      notes: fields['attacks-notes'] || fields.notes || '',
+      combat: {
+        ...(existing?.combat || {}),
+        spellSlots
+      },
+      sheet: {
+        ...sheet,
+        portraitUrl: editingPortraitUrl,
+        challenge: document.getElementById('sheet-form').dataset.npcChallenge || existing?.sheet?.challenge || '',
+        spells: editingSpells.map(spell => ({ ...spell }))
+      }
+    };
+    socket.emit(existing ? 'npc:update' : 'npc:create', npcPayload);
+  } else {
+    socket.emit('character:save', sheet);
+    document.getElementById('sheet-editor').classList.add('hidden');
+  }
   saveButton.disabled = false;
-  saveButton.textContent = 'Save character';
-  showToast(`${name} saved.`);
+  saveButton.textContent = isNpc ? 'Save NPC' : 'Save character';
+  if (!isNpc) showToast(`${name} saved.`);
 };
 
 document.getElementById('delete-sheet-btn').onclick = () => {
+  if (editingNpcSheetId) {
+    if (editingNpcSheetId !== '__new__' && confirm(`Delete ${state.npcs?.[editingNpcSheetId]?.name || 'this NPC'}?`)) {
+      socket.emit('npc:delete', { id: editingNpcSheetId });
+    } else if (editingNpcSheetId !== '__new__') {
+      return;
+    }
+    editingNpcSheetId = null;
+    document.getElementById('sheet-editor').classList.add('hidden');
+    return;
+  }
   if (editingOriginalName && confirm(`Delete ${editingOriginalName}?`)) {
     socket.emit('character:remove', { name: editingOriginalName });
   } else if (editingOriginalName) {
@@ -3073,7 +3437,8 @@ function renderCombatManager() {
   notes.classList.toggle('hidden', !isNpc || !entity.notes);
   notes.textContent = isNpc ? (entity.notes || '') : '';
   document.getElementById('combat-death-section').classList.toggle('hidden', isNpc);
-  document.getElementById('combat-spell-slots-section').classList.toggle('hidden', isNpc);
+  const hasSpellSlots = Object.values(combat.spellSlots || {}).some(slot => Number(slot.total) > 0);
+  document.getElementById('combat-spell-slots-section').classList.toggle('hidden', isNpc && !hasSpellSlots);
   document.getElementById('combat-long-rest-btn').textContent = isNpc ? 'Restore NPC' : 'Complete long rest';
   renderCombatRolls(entity, isNpc);
   document.getElementById('combat-concentration').checked = !!combat.concentration;
@@ -3122,14 +3487,17 @@ function renderCombatRolls(character, isNpc = false) {
   initiativeButton.textContent = `Initiative ${signed(initiativeModifier)}`;
   initiativeButton.onclick = () => isNpc ? rollNpcInitiative(character, mode()) : rollCharacterInitiative(character, mode());
 
-  const spellAttackValue = isNpc ? null : (character.spellcasting?.attackBonus ?? character.fields?.['spell-attack']);
+  const spellAttackValue = character.spellcasting?.attackBonus ?? character.fields?.['spell-attack'];
   const hasSpellAttack = spellAttackValue !== '' && spellAttackValue !== undefined && spellAttackValue !== null;
   const spellAttackButton = document.getElementById('combat-spell-attack-roll');
   spellAttackButton.classList.toggle('hidden', !hasSpellAttack);
   if (hasSpellAttack) {
     const spellModifier = Number(spellAttackValue) || 0;
     spellAttackButton.textContent = `Spell attack ${signed(spellModifier)}`;
-    spellAttackButton.onclick = () => rollCharacterD20(character, 'Spell attack', spellModifier, { mode: mode() });
+    spellAttackButton.onclick = () => {
+      if (isNpc) rollNpcD20(character, 'Spell attack', spellModifier, mode());
+      else rollCharacterD20(character, 'Spell attack', spellModifier, { mode: mode() });
+    };
   }
 
   const spellDcValue = character.spellcasting?.saveDc ?? character.fields?.['spell-dc'];
@@ -3146,6 +3514,7 @@ function renderCombatRolls(character, isNpc = false) {
     const name = document.createElement('span');
     name.className = 'combat-roll-name';
     name.textContent = attack.name;
+    if (attack.details) name.title = attack.details;
     row.appendChild(name);
     const bonusMatch = String(attack.bonus || '').match(/[+-]?\d+/);
     if (bonusMatch) {
@@ -3169,7 +3538,7 @@ function renderCombatRolls(character, isNpc = false) {
 
   const spells = document.getElementById('combat-spells');
   spells.innerHTML = '';
-  (isNpc ? [] : characterSpellEntries(character)).forEach(spell => {
+  (isNpc ? normalizeSpellList(character.spells) : characterSpellEntries(character)).forEach(spell => {
     const row = document.createElement('div');
     row.className = 'combat-roll-row combat-spell-card';
     const info = document.createElement('div');
@@ -3213,12 +3582,16 @@ function renderCombatRolls(character, isNpc = false) {
     actions.className = 'combat-spell-actions';
     if (hasSpellAttack && /\bspell attack\b/i.test(spell.attack)) {
       const modifier = Number(spellAttackValue) || 0;
-      actions.appendChild(makeCombatRollButton(`Attack ${signed(modifier)}`, () => rollCharacterD20(character, `${spell.name} spell attack`, modifier, { mode: mode() })));
+      actions.appendChild(makeCombatRollButton(`Attack ${signed(modifier)}`, () => {
+        if (isNpc) rollNpcD20(character, `${spell.name} spell attack`, modifier, mode());
+        else rollCharacterD20(character, `${spell.name} spell attack`, modifier, { mode: mode() });
+      }));
     }
     const damage = parseDiceExpression(spell.damage || spell.effect || spell.name);
     if (damage) {
       actions.appendChild(makeCombatRollButton(`Roll ${damage.expression}`, () => rollDice(damage.count, damage.sides, damage.modifier, {
-        characterName: character.name,
+        characterName: isNpc ? null : character.name,
+        tokenId: isNpc ? character.id : null,
         label: `${spell.name} damage`
       }), true));
     }

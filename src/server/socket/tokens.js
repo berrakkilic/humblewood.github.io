@@ -72,6 +72,9 @@ function registerTokenHandlers(socket, room) {
           ac: requested.ac,
           initiativeModifier: requested.initiativeModifier,
           attacks: requested.attacks,
+          spells: requested.spells,
+          spellcasting: requested.spellcasting,
+          sheet: requested.sheet,
           notes: requested.notes
         });
         state.npcs[npc.id] = npc;
@@ -155,6 +158,18 @@ function registerTokenHandlers(socket, room) {
     if (duplicate.kind === 'npc') emitNpcRoster();
   });
 
+  socket.on('npc:create', (requested = {}) => {
+    if (!isDm(socket)) return deny(socket, 'Only the Dungeon Master can create NPCs.');
+    const npc = normalizeNpc({
+      ...requested,
+      id: `npc_${Date.now()}${Math.random().toString(36).slice(2, 7)}`
+    });
+    state.npcs[npc.id] = npc;
+    persistState();
+    emitNpcRoster();
+    socket.emit('npc:saved', { id: npc.id, name: npc.name });
+  });
+
   socket.on('npc:place', ({ id } = {}) => {
     if (!isDm(socket)) return deny(socket, 'Only the Dungeon Master can place NPCs.');
     const npc = state.npcs[String(id || '')];
@@ -188,7 +203,10 @@ function registerTokenHandlers(socket, room) {
       ...requested,
       id: existing.id,
       imageUrl: requested.imageUrl === undefined ? existing.imageUrl : requested.imageUrl,
-      combat: existing.combat
+      combat: {
+        ...existing.combat,
+        spellSlots: requested.combat?.spellSlots || existing.combat?.spellSlots
+      }
     });
     state.npcs[updated.id] = updated;
     state.tokens.filter(token => token.npcId === updated.id).forEach(token => {
@@ -220,6 +238,17 @@ function registerTokenHandlers(socket, room) {
         token.ac = updated.ac;
         token.initiativeModifier = updated.initiativeModifier;
         token.attacks = cloneJson(updated.attacks);
+        token.spells = cloneJson(updated.spells);
+        token.spellcasting = cloneJson(updated.spellcasting);
+        const previousCombat = token.combat && typeof token.combat === 'object' ? token.combat : {};
+        token.combat = cloneJson(updated.combat);
+        token.combat.conditions = Array.isArray(previousCombat.conditions) ? previousCombat.conditions : [];
+        token.combat.concentration = !!previousCombat.concentration;
+        token.combat.exhaustion = Number(previousCombat.exhaustion) || 0;
+        Object.entries(token.combat.spellSlots || {}).forEach(([level, slot]) => {
+          const previousUsed = previousCombat.spellSlots?.[level]?.used;
+          slot.used = Math.max(0, Math.min(slot.total, Number(previousUsed) || 0));
+        });
         token.notes = updated.notes;
       });
       saved.initiative.entries
@@ -279,11 +308,18 @@ function registerTokenHandlers(socket, room) {
       combat.concentration = !!payload.value;
     } else if (payload.action === 'exhaustion') {
       combat.exhaustion = Math.max(0, Math.min(6, combat.exhaustion + Math.sign(Number(payload.delta) || 0)));
+    } else if (payload.action === 'spellSlot') {
+      const level = Math.max(1, Math.min(9, Number(payload.level) || 1));
+      const slot = combat.spellSlots[level];
+      slot.used = Math.max(0, Math.min(slot.total, slot.used + Math.sign(Number(payload.delta) || 0)));
+    } else if (payload.action === 'restoreAllSlots') {
+      Object.values(combat.spellSlots).forEach(slot => { slot.used = 0; });
     } else if (payload.action === 'longRest') {
       token.hp = token.maxHp;
       token.tempHp = 0;
       combat.concentration = false;
       combat.exhaustion = Math.max(0, combat.exhaustion - 1);
+      Object.values(combat.spellSlots).forEach(slot => { slot.used = 0; });
     } else {
       return;
     }

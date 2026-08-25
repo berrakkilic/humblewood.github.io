@@ -79,6 +79,10 @@ async function run() {
     assert.match(html, /id="spell-form-attack"/);
     assert.match(html, /id="spell-form-damage"/);
     assert.match(html, /id="spell-preset-select"/);
+    assert.match(html, /id="new-npc-sheet-btn"/);
+    assert.match(html, /id="npc-statblock-import-btn"/);
+    assert.match(html, /id="attack-preset-select"/);
+    assert.match(html, /js\/creation-presets\.js/);
     assert.match(html, /id="combat-spells"/);
     assert.match(html, /id="level-up-overlay"/);
     assert.match(html, /id="level-up-btn"/);
@@ -106,6 +110,9 @@ async function run() {
   assert.match(characterRulesSource, /levelUpGains/);
   assert.match(characterRulesSource, /spellSlotsFor/);
   assert.match(characterRulesSource, /armorClass/);
+  const creationPresetsResponse = await fetch(`http://127.0.0.1:${port}/js/creation-presets.js`);
+  assert.equal(creationPresetsResponse.status, 200);
+  assert.match(await creationPresetsResponse.text(), /parseStatBlock/);
   const humblewoodMapResponse = await fetch(`http://127.0.0.1:${port}/images/humblewood-expanded-nohex-v0.3.png`);
   assert.equal(humblewoodMapResponse.status, 200);
   assert.match(humblewoodMapResponse.headers.get('content-type') || '', /image\/png/);
@@ -186,6 +193,50 @@ async function run() {
   assert.equal(duplicate.label, 'Wolf 2');
   assert.notEqual(duplicate.npcId, wolf.npcId);
   assert.equal(duplicate.x, wolf.x + 50);
+
+  const npcRosterPromise = once(dm.socket, 'npcs:update', npcs => Object.values(npcs).some(npc => npc.name === 'Ash Mage'));
+  const npcSavedPromise = once(dm.socket, 'npc:saved', result => result.name === 'Ash Mage');
+  dm.socket.emit('npc:create', {
+    name: 'Ash Mage', hp: 33, maxHp: 33, ac: 14, initiativeModifier: 2,
+    attacks: [{ name: 'Quarterstaff', bonus: '+4', damage: '1d6+2 bludgeoning', details: 'Reach 5 ft.' }],
+    spells: [{ name: 'Fire Bolt', level: 0, attack: 'Ranged spell attack', damage: '1d10 fire', source: 'Core 5e' }],
+    spellcasting: { className: 'NPC spellcaster', ability: 'INT', saveDc: 13, attackBonus: 5 },
+    combat: { spellSlots: { 1: { total: 4, used: 0 }, 2: { total: 2, used: 0 } } },
+    sheet: {
+      name: 'Ash Mage', challenge: '2', attacks: [{ name: 'Quarterstaff', bonus: '+4', damage: '1d6+2 bludgeoning' }],
+      spells: [{ name: 'Fire Bolt', level: 0, attack: 'Ranged spell attack', damage: '1d10 fire' }],
+      fields: { name: 'Ash Mage', hp: '33', maxhp: '33', ac: '14', int: '16', 'spell-slots-1': '4', 'spell-slots-2': '2' }
+    }
+  });
+  const [npcRoster, savedNpc] = await Promise.all([npcRosterPromise, npcSavedPromise]);
+  const ashMage = Object.values(npcRoster).find(npc => npc.name === 'Ash Mage');
+  assert.equal(savedNpc.id, ashMage.id);
+  assert.equal(ashMage.sheet.challenge, '2');
+  assert.equal(ashMage.spells[0].name, 'Fire Bolt');
+  assert.equal(ashMage.combat.spellSlots[1].total, 4);
+
+  pending = once(dm.socket, 'token:add', token => token.npcId === ashMage.id);
+  const playerNpcTokenPromise = once(playerOne.socket, 'token:add', token => token.npcId === ashMage.id);
+  dm.socket.emit('npc:place', { id: ashMage.id });
+  const [ashMageToken, playerAshMageToken] = await Promise.all([pending, playerNpcTokenPromise]);
+  assert.equal(ashMageToken.spellcasting.attackBonus, 5);
+  assert.equal(ashMageToken.combat.spellSlots[2].total, 2);
+  assert.equal(playerAshMageToken.spells, undefined, 'NPC spell lists must remain DM-only');
+  assert.equal(playerAshMageToken.attacks, undefined, 'NPC attacks must remain DM-only');
+  pending = once(dm.socket, 'token:update', token => token.id === ashMageToken.id && token.combat.spellSlots[1].used === 1);
+  dm.socket.emit('token:combat:update', { id: ashMageToken.id, action: 'spellSlot', level: 1, delta: 1 });
+  await pending;
+  pending = once(dm.socket, 'token:update', token => (
+    token.id === ashMageToken.id && token.combat.spellSlots[1].total === 5 && token.combat.spellSlots[1].used === 1
+  ));
+  dm.socket.emit('npc:update', {
+    id: ashMage.id, name: 'Ash Mage', hp: 33, maxHp: 33, ac: 14, initiativeModifier: 2,
+    combat: { spellSlots: { 1: { total: 5, used: 1 }, 2: { total: 2, used: 0 } } }
+  });
+  await pending;
+  pending = once(dm.socket, 'token:remove', removed => removed.id === ashMageToken.id);
+  dm.socket.emit('token:remove', { id: ashMageToken.id });
+  await pending;
 
   pending = once(playerOne.socket, 'token:update', token => token.id === duplicate.id && token.combat?.conditions?.includes('Prone'));
   dm.socket.emit('token:combat:update', { id: duplicate.id, action: 'condition:toggle', condition: 'Prone' });

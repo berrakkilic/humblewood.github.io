@@ -27,11 +27,79 @@ function createRoom({ dataDir, dmPin, io }) {
 
   function cleanAttacks(attacks) {
     if (!Array.isArray(attacks)) return [];
-    return attacks.slice(0, 30).map(attack => ({
+    return attacks.slice(0, 60).map(attack => ({
+      id: String(attack?.id || '').slice(0, 140),
       name: String(attack?.name || '').trim().slice(0, 100),
       bonus: String(attack?.bonus || '').trim().slice(0, 30),
-      damage: String(attack?.damage || '').trim().slice(0, 80)
+      damage: String(attack?.damage || '').trim().slice(0, 80),
+      details: String(attack?.details || '').trim().slice(0, 1200),
+      source: String(attack?.source || '').trim().slice(0, 80)
     })).filter(attack => attack.name);
+  }
+
+  function cleanSpells(spells) {
+    if (!Array.isArray(spells)) return [];
+    return spells.slice(0, 300).map((spell, index) => ({
+      id: String(spell?.id || `spell-${index}`).slice(0, 140),
+      name: String(spell?.name || '').trim().slice(0, 100),
+      level: Math.max(0, Math.min(9, Number(spell?.level) || 0)),
+      school: String(spell?.school || '').trim().slice(0, 80),
+      range: String(spell?.range || '').trim().slice(0, 160),
+      castingTime: String(spell?.castingTime || '').trim().slice(0, 160),
+      duration: String(spell?.duration || '').trim().slice(0, 160),
+      components: String(spell?.components || '').trim().slice(0, 500),
+      attack: String(spell?.attack || '').trim().slice(0, 160),
+      damage: String(spell?.damage || '').trim().slice(0, 160),
+      effect: String(spell?.effect || '').trim().slice(0, 3000),
+      source: String(spell?.source || '').trim().slice(0, 80)
+    })).filter(spell => spell.name);
+  }
+
+  function cleanNpcSheet(sheet) {
+    if (!sheet || typeof sheet !== 'object') return null;
+    const fields = {};
+    Object.entries(sheet.fields && typeof sheet.fields === 'object' ? sheet.fields : {}).slice(0, 500).forEach(([key, value]) => {
+      const safeKey = String(key).slice(0, 100);
+      const maximumLength = safeKey === 'spell-list' ? 250000 : 12000;
+      fields[safeKey] = typeof value === 'boolean' ? value : String(value ?? '').slice(0, maximumLength);
+    });
+    return {
+      name: String(sheet.name || fields.name || '').trim().slice(0, 100),
+      portraitUrl: String(sheet.portraitUrl || '').slice(0, 1000) || null,
+      challenge: String(sheet.challenge || '').trim().slice(0, 20),
+      species: String(sheet.species || '').slice(0, 100),
+      race: String(sheet.race || '').slice(0, 100),
+      subrace: String(sheet.subrace || '').slice(0, 100),
+      charClass: String(sheet.charClass || '').slice(0, 100),
+      subclass: String(sheet.subclass || '').slice(0, 100),
+      level: Math.max(1, Math.min(20, Number(sheet.level) || 1)),
+      hp: Math.max(0, Math.min(9999, Number(sheet.hp) || 0)),
+      maxHp: Math.max(1, Math.min(9999, Number(sheet.maxHp) || 1)),
+      tempHp: Math.max(0, Math.min(9999, Number(sheet.tempHp) || 0)),
+      ac: Math.max(0, Math.min(99, Number(sheet.ac) || 10)),
+      initiativeModifier: Math.max(-99, Math.min(99, Number(sheet.initiativeModifier) || 0)),
+      speed: String(sheet.speed || '').slice(0, 160),
+      abilities: Object.fromEntries(['str', 'dex', 'con', 'int', 'wis', 'cha'].map(ability => [
+        ability, Math.max(1, Math.min(30, Number(sheet.abilities?.[ability]) || 10))
+      ])),
+      saves: sheet.saves && typeof sheet.saves === 'object' ? cloneJson(sheet.saves) : {},
+      skills: sheet.skills && typeof sheet.skills === 'object' ? cloneJson(sheet.skills) : {},
+      attacks: cleanAttacks(sheet.attacks),
+      spells: cleanSpells(sheet.spells),
+      spellcasting: {
+        className: String(sheet.spellcasting?.className || '').slice(0, 100),
+        ability: String(sheet.spellcasting?.ability || '').slice(0, 20),
+        saveDc: Math.max(0, Math.min(99, Number(sheet.spellcasting?.saveDc) || 0)),
+        attackBonus: Math.max(-99, Math.min(99, Number(sheet.spellcasting?.attackBonus) || 0))
+      },
+      inventory: Array.isArray(sheet.inventory) ? sheet.inventory.slice(0, 300).map((item, index) => ({
+        id: String(item?.id || `item-${index}`).slice(0, 140),
+        name: String(item?.name || '').trim().slice(0, 200),
+        qty: Math.max(1, Math.min(9999, Number(item?.qty) || 1))
+      })).filter(item => item.name) : [],
+      notes: String(sheet.notes || '').slice(0, 12000),
+      fields
+    };
   }
 
   function normalizeNpc(npc) {
@@ -46,12 +114,36 @@ function createRoom({ dataDir, dmPin, io }) {
     npc.initiativeModifier = Math.max(-99, Math.min(99, Number(npc.initiativeModifier) || 0));
     npc.tokenScale = Math.max(0.35, Math.min(3, Number(npc.tokenScale ?? npc.sizeScale) || 1));
     npc.attacks = cleanAttacks(npc.attacks);
+    npc.spells = cleanSpells(npc.spells || npc.sheet?.spells);
+    const spellSaveDcRaw = npc.sheet?.fields?.['spell-dc'] ?? npc.spellcasting?.saveDc;
+    const spellAttackRaw = npc.sheet?.fields?.['spell-attack'] ?? npc.spellcasting?.attackBonus;
+    npc.spellcasting = {
+      className: String(npc.spellcasting?.className || npc.sheet?.spellcasting?.className || '').slice(0, 100),
+      ability: String(npc.spellcasting?.ability || npc.sheet?.spellcasting?.ability || '').slice(0, 20),
+      saveDc: spellSaveDcRaw === '' || spellSaveDcRaw === undefined || spellSaveDcRaw === null
+        ? null
+        : Math.max(0, Math.min(99, Number(spellSaveDcRaw) || 0)),
+      attackBonus: spellAttackRaw === '' || spellAttackRaw === undefined || spellAttackRaw === null
+        ? null
+        : Math.max(-99, Math.min(99, Number(spellAttackRaw) || 0))
+    };
+    npc.sheet = cleanNpcSheet(npc.sheet);
     npc.notes = String(npc.notes || '').slice(0, 4000);
     const combat = npc.combat && typeof npc.combat === 'object' ? npc.combat : {};
+    const spellSlots = {};
+    for (let level = 1; level <= 9; level += 1) {
+      const stored = combat.spellSlots?.[level] || combat.spellSlots?.[String(level)] || {};
+      const total = Math.max(0, Math.min(99, Number(stored.total ?? npc.sheet?.fields?.[`spell-slots-${level}`]) || 0));
+      spellSlots[level] = {
+        total,
+        used: Math.max(0, Math.min(total, Number(stored.used ?? npc.sheet?.fields?.[`spell-used-${level}`]) || 0))
+      };
+    }
     npc.combat = {
       conditions: Array.isArray(combat.conditions) ? combat.conditions.filter(condition => CONDITIONS.has(condition)) : [],
       concentration: !!combat.concentration,
-      exhaustion: Math.max(0, Math.min(6, Number(combat.exhaustion) || 0))
+      exhaustion: Math.max(0, Math.min(6, Number(combat.exhaustion) || 0)),
+      spellSlots
     };
     return npc;
   }
@@ -68,6 +160,8 @@ function createRoom({ dataDir, dmPin, io }) {
       initiativeModifier: token.initiativeModifier,
       tokenScale: token.sizeScale,
       attacks: token.attacks,
+      spells: token.spells,
+      spellcasting: token.spellcasting,
       notes: token.notes,
       combat: token.combat
     });
@@ -105,6 +199,8 @@ function createRoom({ dataDir, dmPin, io }) {
       token.ac = npc.ac;
       token.initiativeModifier = npc.initiativeModifier;
       token.attacks = npc.attacks;
+      token.spells = npc.spells;
+      token.spellcasting = npc.spellcasting;
       token.notes = npc.notes;
       token.combat = npc.combat;
     }
@@ -115,12 +211,16 @@ function createRoom({ dataDir, dmPin, io }) {
     (tokens || []).filter(token => token.kind === 'npc').forEach(token => {
       normalizeToken(token);
       const fromToken = npcFromToken(token);
-      if (overwrite || !state.npcs[fromToken.id]) state.npcs[fromToken.id] = fromToken;
+      const existing = state.npcs[fromToken.id];
+      if (overwrite || !existing) state.npcs[fromToken.id] = normalizeNpc({ ...existing, ...fromToken, sheet: existing?.sheet || null });
     });
   }
 
   function syncNpcFromToken(token) {
-    if (token?.kind === 'npc') state.npcs[token.npcId] = npcFromToken(token);
+    if (token?.kind === 'npc') {
+      const existing = state.npcs[token.npcId];
+      state.npcs[token.npcId] = normalizeNpc({ ...existing, ...npcFromToken(token), sheet: existing?.sheet || null });
+    }
   }
 
   function applyNpcToToken(npc, token) {
@@ -136,6 +236,8 @@ function createRoom({ dataDir, dmPin, io }) {
     token.ac = npc.ac;
     token.initiativeModifier = npc.initiativeModifier;
     token.attacks = cloneJson(npc.attacks);
+    token.spells = cloneJson(npc.spells);
+    token.spellcasting = cloneJson(npc.spellcasting);
     token.notes = npc.notes;
     token.combat = cloneJson(npc.combat);
     return normalizeToken(token);
@@ -368,6 +470,12 @@ function createRoom({ dataDir, dmPin, io }) {
 
   function publicToken(socket, token) {
     const { ownerId, ownerUsername, ...safe } = token;
+    if (!isDm(socket) && token.kind === 'npc') {
+      delete safe.attacks;
+      delete safe.spells;
+      delete safe.spellcasting;
+      delete safe.notes;
+    }
     const characterCombat = token.characterName ? state.characters[token.characterName]?.combat : null;
     const conditionBadges = characterCombat ? {
       conditions: [...(characterCombat.conditions || [])],

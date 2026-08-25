@@ -446,11 +446,25 @@
 
     <!-- CHARACTERS VIEW -->
     <section id="view-characters" class="view">
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
-        <h2>Character sheets</h2>
-        <button class="btn-primary" style="width:auto; padding:10px 18px;" id="new-sheet-btn">+ New character</button>
+      <div class="character-view-heading">
+        <div>
+          <h2>Characters & NPC sheets</h2>
+          <p>Player characters and full DM-controlled stat blocks live together here.</p>
+        </div>
+        <div class="character-create-actions">
+          <button class="btn-primary" id="new-sheet-btn">+ New character</button>
+          <button class="btn-rose dm-only" id="new-npc-sheet-btn">+ New NPC</button>
+        </div>
       </div>
+      <h3 class="character-list-heading">Player characters</h3>
       <div class="char-grid" id="char-grid"></div>
+      <div class="dm-only npc-sheet-list-section">
+        <div class="character-list-heading-row">
+          <h3 class="character-list-heading">NPC stat blocks</h3>
+          <p>These stay DM-owned even though they use the complete sheet editor.</p>
+        </div>
+        <div class="char-grid" id="npc-sheet-grid"></div>
+      </div>
 
       <section class="panel account-admin dm-only" id="account-admin">
         <div class="account-admin-heading">
@@ -478,6 +492,30 @@
         </div>
         <div class="vine-divider"></div>
         <form class="sheet-form" id="sheet-form">
+          <section class="npc-sheet-tools hidden" id="npc-sheet-tools">
+            <div class="npc-sheet-tools-heading">
+              <div>
+                <h4>Fast NPC creation</h4>
+                <p>Start from a preset, or paste a standard 5e/Humblewood stat block copied from a PDF.</p>
+              </div>
+              <span class="npc-mode-badge">DM-only NPC</span>
+            </div>
+            <div class="npc-preset-controls">
+              <label class="field">NPC preset
+                <select id="npc-sheet-preset"><option value="">Choose a stat block...</option></select>
+              </label>
+              <button type="button" class="btn-ghost" id="npc-sheet-preset-load">Apply preset</button>
+            </div>
+            <label class="field">Paste complete stat block
+              <textarea id="npc-statblock-import" rows="8" placeholder="Name&#10;Medium humanoid, neutral good&#10;Armor Class 14...&#10;Hit Points 27...&#10;STR DEX CON INT WIS CHA...&#10;Actions..."></textarea>
+            </label>
+            <div class="npc-import-actions">
+              <button type="button" class="btn-primary" id="npc-statblock-import-btn">Import & fill sheet</button>
+              <button type="button" class="btn-ghost" id="npc-statblock-clear-btn">Clear pasted text</button>
+            </div>
+            <p class="sidebar-help">Import fills abilities, saves, skills, attacks, spellcasting, spell slots, traits, and combat notes. You can review every field before saving.</p>
+          </section>
+
           <!-- IDENTITY -->
           <div class="sheet-section section-character">
             <div class="sheet-section-title">Character</div>
@@ -643,12 +681,29 @@
           <!-- ATTACKS -->
           <details class="sheet-section section-attacks" open>
             <summary>Attacks & Actions</summary>
-            <div class="attack-table">
-              <div class="attack-head">Name</div><div class="attack-head">Attack / DC</div><div class="attack-head">Damage / Type</div>
-              <input type="text" id="sf-attack-1-name" placeholder="Rapier"><input type="text" id="sf-attack-1-bonus" placeholder="+5"><input type="text" id="sf-attack-1-damage" placeholder="1d8+3 piercing">
-              <input type="text" id="sf-attack-2-name"><input type="text" id="sf-attack-2-bonus"><input type="text" id="sf-attack-2-damage">
-              <input type="text" id="sf-attack-3-name"><input type="text" id="sf-attack-3-bonus"><input type="text" id="sf-attack-3-damage">
+            <div class="attack-list-heading">
+              <p class="sidebar-help">Add as many attacks as the stat block needs. Presets calculate the attack and damage modifiers from the current ability scores.</p>
+              <button type="button" class="btn-ghost" id="attack-add-btn">+ Add attack</button>
             </div>
+            <div class="attack-add-form hidden" id="attack-add-form">
+              <div class="attack-preset-row">
+                <label class="field">Weapon / natural attack preset
+                  <select id="attack-preset-select"><option value="">Choose an attack...</option></select>
+                </label>
+                <button type="button" class="btn-ghost" id="attack-preset-load">Load preset</button>
+              </div>
+              <div class="attack-form-grid">
+                <label class="field">Name<input type="text" id="attack-form-name" placeholder="Rapier"></label>
+                <label class="field">Attack / DC<input type="text" id="attack-form-bonus" placeholder="+5 or DC 13 DEX"></label>
+                <label class="field">Damage / type<input type="text" id="attack-form-damage" placeholder="1d8+3 piercing"></label>
+                <label class="field attack-form-details">Reach, range, rider, or effect<textarea id="attack-form-details" rows="2" placeholder="Reach 5 ft.; target is grappled on a hit..."></textarea></label>
+              </div>
+              <div class="attack-form-actions">
+                <button type="button" class="btn-primary" id="attack-form-save">Save attack</button>
+                <button type="button" class="btn-ghost" id="attack-form-cancel">Cancel</button>
+              </div>
+            </div>
+            <div class="attack-list" id="attack-list"></div>
             <div class="field"><label>Actions, bonus actions, reactions & combat notes</label><textarea id="sf-attacks-notes" rows="4" placeholder="Sneak Attack, Talons, Glide, special actions..."></textarea></div>
           </details>
 
@@ -740,12 +795,18 @@
               </div>
               <div id="spell-add-form" class="spell-add-form hidden">
                 <div class="spell-preset-row">
-                  <label class="spell-form-field" for="spell-preset-select">Humblewood preset
+                  <label class="spell-form-field" for="spell-preset-select">Spell preset
                     <select id="spell-preset-select">
-                      <option value="">Choose a setting spell...</option>
+                      <option value="">Choose a Humblewood or core 5e spell...</option>
                     </select>
                   </label>
                   <button type="button" class="btn-ghost" id="spell-preset-load">Load preset</button>
+                </div>
+                <div class="spell-bulk-row">
+                  <label class="spell-form-field">Add a whole spell list by name
+                    <textarea id="spell-bulk-list" rows="2" placeholder="fire bolt, light, magic missile; shield"></textarea>
+                  </label>
+                  <button type="button" class="btn-ghost" id="spell-bulk-add">Add list</button>
                 </div>
                 <div class="spell-form-grid">
                   <label class="spell-form-field">Spell name
@@ -1111,6 +1172,7 @@
 <script src="/js/map-geometry.js"></script>
 <script src="/js/combat-state.js"></script>
 <script src="/js/character-rules.js"></script>
+<script src="/js/creation-presets.js"></script>
 <script src="/js/almanac-data.js"></script>
 <script src="/js/almanac.js"></script>
 <script src="/js/router.js"></script>
