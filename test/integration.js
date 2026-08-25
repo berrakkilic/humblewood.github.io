@@ -128,6 +128,7 @@ async function run() {
   assert.match(characterRulesSource, /levelUpGains/);
   assert.match(characterRulesSource, /spellSlotsFor/);
   assert.match(characterRulesSource, /armorClass/);
+  assert.match(characterRulesSource, /automaticClassFeatureText/);
   const creationPresetsResponse = await fetch(`http://127.0.0.1:${port}/js/creation-presets.js`);
   assert.equal(creationPresetsResponse.status, 200);
   assert.match(await creationPresetsResponse.text(), /parseStatBlock/);

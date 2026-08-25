@@ -1711,6 +1711,23 @@ function syncAutomaticSpeciesTraits(force = false) {
   field.value = characterRules.mergeAutomaticSpeciesTraits(current, automatic);
 }
 
+function syncAutomaticClassFeatures(force = false) {
+  const field = document.getElementById('sf-features');
+  if (!field) return;
+  const current = field.value || '';
+  const hasAutomaticBlock = current.includes(characterRules.AUTO_CLASS_FEATURES_START);
+  // Preserve feature notes from older sheets until the player actively
+  // changes class, subclass, or level. Generated content is isolated inside
+  // its own block so future updates never replace hand-written choices.
+  if (!force && current.trim() && !hasAutomaticBlock) return;
+  const automatic = characterRules.automaticClassFeatureText(
+    document.getElementById('sf-class').value,
+    document.getElementById('sf-subclass').value,
+    document.getElementById('sf-level').value
+  );
+  field.value = characterRules.mergeAutomaticClassFeatures(current, automatic);
+}
+
 function updateSubclassOptions(selected = '') {
   const className = characterRules.canonicalClass(document.getElementById('sf-class').value);
   const select = document.getElementById('sf-subclass');
@@ -1725,6 +1742,7 @@ function setCharacterRuleSelections(fields = {}) {
   syncAutomaticSpeciesTraits();
   document.getElementById('sf-class').value = characterRules.canonicalClass(fields.class) || '';
   updateSubclassOptions(fields.subclass);
+  syncAutomaticClassFeatures();
 }
 
 function initializeCharacterRuleControls() {
@@ -1742,9 +1760,11 @@ function initializeCharacterRuleControls() {
   });
   document.getElementById('sf-class').addEventListener('change', () => {
     updateSubclassOptions();
+    syncAutomaticClassFeatures(true);
     applyClassDefaults();
   });
   document.getElementById('sf-subclass').addEventListener('change', () => {
+    syncAutomaticClassFeatures(true);
     applySpellcastingDefaults();
     updateSpellSlotsForLevel();
     refreshCharacterCalculations(false, true);
@@ -2826,7 +2846,10 @@ ABILITIES.forEach(ability => document.getElementById(`sf-${ability}`).addEventLi
   if (ability === 'con') refreshNewCharacterHitPoints();
   refreshCharacterCalculations(true, ability === spellAbility);
 }));
-document.getElementById('sf-level').addEventListener('input', () => refreshCharacterCalculations(true, true));
+document.getElementById('sf-level').addEventListener('input', () => {
+  refreshCharacterCalculations(true, true);
+  syncAutomaticClassFeatures(true);
+});
 document.getElementById('sf-initiative').addEventListener('input', () => { initiativeManuallyEdited = true; });
 ABILITIES.forEach(ability => document.getElementById(`sf-save-${ability}-prof`).addEventListener('change', () => refreshCharacterCalculations(true)));
 Object.keys(SKILL_ABILITIES).forEach(skill => document.getElementById(`sf-skill-${skill}-prof`).addEventListener('change', () => refreshCharacterCalculations(true)));
@@ -2857,6 +2880,7 @@ function closeLevelUpDialog(resetLevel = true) {
     suppressLevelUpPrompt = false;
     refreshCharacterCalculations(true, true);
   }
+  syncAutomaticClassFeatures(true);
   pendingLevelUp = null;
   overlay.classList.add('hidden');
   overlay.setAttribute('aria-hidden', 'true');

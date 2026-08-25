@@ -69,6 +69,52 @@ assert.match(changedTraits, /^Custom campaign trait:/);
 assert.equal(rules.mergeAutomaticSpeciesTraits(changedTraits, ''), customTraits);
 assert.equal(rules.mergeAutomaticSpeciesTraits(duskTraits, duskTraits), duskTraits, 'automatic trait merging is idempotent');
 
+const fighterFeatures = rules.automaticClassFeatureText('Fighter', 'Champion', 5);
+assert.match(fighterFeatures, /Fighter · Level 5/);
+assert.match(fighterFeatures, /Hit Die: d10/);
+assert.match(fighterFeatures, /Level 1: Fighting Style; Second Wind/);
+assert.match(fighterFeatures, /Level 4: Ability Score Improvement or feat/);
+assert.match(fighterFeatures, /Level 5: Extra Attack \(two attacks\)/);
+assert.match(fighterFeatures, /Subclass: Champion/);
+assert.match(fighterFeatures, /Level 3: Improved Critical/);
+assert.doesNotMatch(fighterFeatures, /Remarkable Athlete/);
+
+const roadFeatures = rules.automaticClassFeatureText('Bard', 'College of the Road (Bard)', 6);
+assert.match(roadFeatures, /Traveler's Tricks \(2 options\)/);
+assert.match(roadFeatures, /Favorite Trick \(1st\)/);
+assert.doesNotMatch(roadFeatures, /Favorite Trick \(2nd\)/);
+
+const thiefFeatures = rules.automaticClassFeatureText('Rogue', 'Thief', 9);
+assert.match(thiefFeatures, /Fast Hands; Second-Story Work/);
+assert.match(thiefFeatures, /Supreme Sneak/);
+assert.doesNotMatch(thiefFeatures, /Use Magic Device/);
+
+const expansionFeatures = rules.automaticClassFeatureText('Fighter', 'Echo Knight', 7);
+assert.match(expansionFeatures, /Subclass: Echo Knight/);
+assert.match(expansionFeatures, /Echo Knight feature \(consult its source/);
+assert.doesNotMatch(rules.automaticClassFeatureText('Fighter', 'Thief', 20), /Subclass: Thief/);
+
+const supportedSubclasses = Object.values(rules.CLASS_SUBCLASSES).flat();
+Object.keys(rules.CORE_SUBCLASS_FEATURES).forEach(subclass => {
+  assert(supportedSubclasses.includes(subclass), `${subclass} must remain a selectable subclass`);
+});
+Object.entries(rules.CLASS_SUBCLASSES).forEach(([className, subclasses]) => {
+  subclasses.forEach(subclass => {
+    assert.match(rules.automaticClassFeatureText(className, subclass, 20), new RegExp(subclass.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  });
+});
+
+const customClassNotes = 'Custom choice: Defense fighting style.';
+const mergedClassFeatures = rules.mergeAutomaticClassFeatures(customClassNotes, fighterFeatures);
+assert.match(mergedClassFeatures, /^Custom choice:/);
+assert.equal((mergedClassFeatures.match(/\[Automatic class and subclass features\]/g) || []).length, 1);
+const changedClassFeatures = rules.mergeAutomaticClassFeatures(mergedClassFeatures, thiefFeatures);
+assert.match(changedClassFeatures, /Subclass: Thief/);
+assert.doesNotMatch(changedClassFeatures, /Subclass: Champion/);
+assert.match(changedClassFeatures, /^Custom choice:/);
+assert.equal(rules.mergeAutomaticClassFeatures(changedClassFeatures, ''), customClassNotes);
+assert.equal(rules.mergeAutomaticClassFeatures(fighterFeatures, fighterFeatures), fighterFeatures, 'automatic class-feature merging is idempotent');
+
 assert.deepEqual(rules.spellcastingValues(18, 5), { attackBonus: 7, saveDc: 15 });
 assert.deepEqual(rules.spellcastingValues(12, 5), { attackBonus: 4, saveDc: 12 });
 assert.deepEqual(rules.spellcastingValues(8, 17), { attackBonus: 5, saveDc: 13 });

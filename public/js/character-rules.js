@@ -151,6 +151,155 @@
     }
   };
 
+  // Feature names for the legacy Player's Handbook subclasses. Humblewood
+  // subclasses live in the setting-specific table above. Other supported 5e
+  // expansion subclasses still receive their correct feature-level milestones
+  // without inventing rules text that is not in the current source catalog.
+  const CORE_SUBCLASS_FEATURES = {
+    'Path of the Berserker': {
+      3: ['Frenzy'], 6: ['Mindless Rage'], 10: ['Intimidating Presence'], 14: ['Retaliation']
+    },
+    'Path of the Totem Warrior': {
+      3: ['Spirit Seeker', 'Totem Spirit'], 6: ['Aspect of the Beast'], 10: ['Spirit Walker'], 14: ['Totemic Attunement']
+    },
+    'College of Lore': {
+      3: ['Bonus Proficiencies', 'Cutting Words'], 6: ['Additional Magical Secrets'], 14: ['Peerless Skill']
+    },
+    'College of Valor': {
+      3: ['Bonus Proficiencies', 'Combat Inspiration'], 6: ['Extra Attack'], 14: ['Battle Magic']
+    },
+    'Knowledge Domain': {
+      1: ['Blessings of Knowledge'], 2: ['Channel Divinity: Knowledge of the Ages'],
+      6: ['Channel Divinity: Read Thoughts'], 8: ['Potent Spellcasting'], 17: ['Visions of the Past']
+    },
+    'Life Domain': {
+      1: ['Bonus Proficiency', 'Disciple of Life'], 2: ['Channel Divinity: Preserve Life'],
+      6: ['Blessed Healer'], 8: ['Divine Strike'], 17: ['Supreme Healing']
+    },
+    'Light Domain': {
+      1: ['Bonus Cantrip', 'Warding Flare'], 2: ['Channel Divinity: Radiance of the Dawn'],
+      6: ['Improved Flare'], 8: ['Potent Spellcasting'], 17: ['Corona of Light']
+    },
+    'Nature Domain': {
+      1: ['Acolyte of Nature', 'Bonus Proficiency'], 2: ['Channel Divinity: Charm Animals and Plants'],
+      6: ['Dampen Elements'], 8: ['Divine Strike'], 17: ['Master of Nature']
+    },
+    'Tempest Domain': {
+      1: ['Bonus Proficiencies', 'Wrath of the Storm'], 2: ['Channel Divinity: Destructive Wrath'],
+      6: ['Thunderbolt Strike'], 8: ['Divine Strike'], 17: ['Stormborn']
+    },
+    'Trickery Domain': {
+      1: ['Blessing of the Trickster'], 2: ['Channel Divinity: Invoke Duplicity'],
+      6: ['Channel Divinity: Cloak of Shadows'], 8: ['Divine Strike'], 17: ['Improved Duplicity']
+    },
+    'War Domain': {
+      1: ['Bonus Proficiencies', 'War Priest'], 2: ['Channel Divinity: Guided Strike'],
+      6: ['Channel Divinity: War God\'s Blessing'], 8: ['Divine Strike'], 17: ['Avatar of Battle']
+    },
+    'Circle of the Land': {
+      2: ['Bonus Cantrip', 'Natural Recovery', 'Circle Spells'], 6: ['Land\'s Stride'],
+      10: ['Nature\'s Ward'], 14: ['Nature\'s Sanctuary']
+    },
+    'Circle of the Moon': {
+      2: ['Combat Wild Shape', 'Circle Forms'], 6: ['Primal Strike', 'Circle Forms improvement'],
+      10: ['Elemental Wild Shape'], 14: ['Thousand Forms']
+    },
+    'Battle Master': {
+      3: ['Combat Superiority', 'Student of War'], 7: ['Know Your Enemy'],
+      10: ['Improved Combat Superiority (d10)'], 15: ['Relentless'], 18: ['Improved Combat Superiority (d12)']
+    },
+    Champion: {
+      3: ['Improved Critical'], 7: ['Remarkable Athlete'], 10: ['Additional Fighting Style'],
+      15: ['Superior Critical'], 18: ['Survivor']
+    },
+    'Eldritch Knight': {
+      3: ['Spellcasting', 'Weapon Bond'], 7: ['War Magic'], 10: ['Eldritch Strike'],
+      15: ['Arcane Charge'], 18: ['Improved War Magic']
+    },
+    'Way of the Four Elements': {
+      3: ['Disciple of the Elements', 'Elemental Disciplines'], 6: ['Elemental Discipline'],
+      11: ['Elemental Discipline'], 17: ['Elemental Discipline']
+    },
+    'Way of the Open Hand': {
+      3: ['Open Hand Technique'], 6: ['Wholeness of Body'], 11: ['Tranquility'], 17: ['Quivering Palm']
+    },
+    'Way of Shadow': {
+      3: ['Shadow Arts'], 6: ['Shadow Step'], 11: ['Cloak of Shadows'], 17: ['Opportunist']
+    },
+    'Oath of the Ancients': {
+      3: ['Oath Spells', 'Channel Divinity: Nature\'s Wrath', 'Channel Divinity: Turn the Faithless'],
+      7: ['Aura of Warding'], 15: ['Undying Sentinel'], 20: ['Elder Champion']
+    },
+    'Oath of Devotion': {
+      3: ['Oath Spells', 'Channel Divinity: Sacred Weapon', 'Channel Divinity: Turn the Unholy'],
+      7: ['Aura of Devotion'], 15: ['Purity of Spirit'], 20: ['Holy Nimbus']
+    },
+    'Oath of Vengeance': {
+      3: ['Oath Spells', 'Channel Divinity: Abjure Enemy', 'Channel Divinity: Vow of Enmity'],
+      7: ['Relentless Avenger'], 15: ['Soul of Vengeance'], 20: ['Avenging Angel']
+    },
+    'Beast Master': {
+      3: ['Ranger\'s Companion'], 7: ['Exceptional Training'], 11: ['Bestial Fury'], 15: ['Share Spells']
+    },
+    Hunter: {
+      3: ['Hunter\'s Prey'], 7: ['Defensive Tactics'], 11: ['Multiattack'], 15: ['Superior Hunter\'s Defense']
+    },
+    'Arcane Trickster': {
+      3: ['Spellcasting', 'Mage Hand Legerdemain'], 9: ['Magical Ambush'],
+      13: ['Versatile Trickster'], 17: ['Spell Thief']
+    },
+    Assassin: {
+      3: ['Bonus Proficiencies', 'Assassinate'], 9: ['Infiltration Expertise'], 13: ['Impostor'], 17: ['Death Strike']
+    },
+    Thief: {
+      3: ['Fast Hands', 'Second-Story Work'], 9: ['Supreme Sneak'], 13: ['Use Magic Device'], 17: ['Thief\'s Reflexes']
+    },
+    'Draconic Bloodline': {
+      1: ['Dragon Ancestor', 'Draconic Resilience'], 6: ['Elemental Affinity'],
+      14: ['Dragon Wings'], 18: ['Draconic Presence']
+    },
+    'Wild Magic': {
+      1: ['Wild Magic Surge', 'Tides of Chaos'], 6: ['Bend Luck'], 14: ['Controlled Chaos'], 18: ['Spell Bombardment']
+    },
+    'The Archfey': {
+      1: ['Fey Presence'], 6: ['Misty Escape'], 10: ['Beguiling Defenses'], 14: ['Dark Delirium']
+    },
+    'The Fiend': {
+      1: ['Dark One\'s Blessing'], 6: ['Dark One\'s Own Luck'], 10: ['Fiendish Resilience'], 14: ['Hurl Through Hell']
+    },
+    'The Great Old One': {
+      1: ['Awakened Mind'], 6: ['Entropic Ward'], 10: ['Thought Shield'], 14: ['Create Thrall']
+    },
+    'School of Abjuration': {
+      2: ['Abjuration Savant', 'Arcane Ward'], 6: ['Projected Ward'], 10: ['Improved Abjuration'], 14: ['Spell Resistance']
+    },
+    'School of Conjuration': {
+      2: ['Conjuration Savant', 'Minor Conjuration'], 6: ['Benign Transposition'],
+      10: ['Focused Conjuration'], 14: ['Durable Summons']
+    },
+    'School of Divination': {
+      2: ['Divination Savant', 'Portent'], 6: ['Expert Divination'], 10: ['The Third Eye'], 14: ['Greater Portent']
+    },
+    'School of Enchantment': {
+      2: ['Enchantment Savant', 'Hypnotic Gaze'], 6: ['Instinctive Charm'],
+      10: ['Split Enchantment'], 14: ['Alter Memories']
+    },
+    'School of Evocation': {
+      2: ['Evocation Savant', 'Sculpt Spells'], 6: ['Potent Cantrip'], 10: ['Empowered Evocation'], 14: ['Overchannel']
+    },
+    'School of Illusion': {
+      2: ['Illusion Savant', 'Improved Minor Illusion'], 6: ['Malleable Illusions'],
+      10: ['Illusory Self'], 14: ['Illusory Reality']
+    },
+    'School of Necromancy': {
+      2: ['Necromancy Savant', 'Grim Harvest'], 6: ['Undead Thralls'], 10: ['Inured to Undeath'], 14: ['Command Undead']
+    },
+    'School of Transmutation': {
+      2: ['Transmutation Savant', 'Minor Alchemy'], 6: ['Transmuter\'s Stone'],
+      10: ['Shapechanger'], 14: ['Master Transmuter']
+    }
+  };
+
   const HUMBLEWOOD_SPECIES_FEATURES = {
     'Vulpin (humblefolk)': {
       3: ['Bewitching Guile: cast Ambush Prey once per long rest'],
@@ -191,6 +340,8 @@
 
   const AUTO_SPECIES_TRAITS_START = '[Automatic Humblewood species traits]';
   const AUTO_SPECIES_TRAITS_END = '[/Automatic Humblewood species traits]';
+  const AUTO_CLASS_FEATURES_START = '[Automatic class and subclass features]';
+  const AUTO_CLASS_FEATURES_END = '[/Automatic class and subclass features]';
 
   // Concise sheet-ready summaries of the Humblewood folk rules. These mirror
   // the campaign almanac while keeping the generated textarea block useful at
@@ -453,6 +604,63 @@
     return [preserved, generated].filter(Boolean).join('\n\n');
   }
 
+  function automaticClassFeatureText(className, subclass = '', level = 1) {
+    const canonicalClassName = canonicalClass(className);
+    const progression = classProgressionFor(canonicalClassName);
+    if (!progression) return '';
+    const currentLevel = boundedLevel(level);
+    const canonicalSubclass = canonicalFromList(subclass, subclassesFor(canonicalClassName));
+    const spellAbility = spellcastingAbilityFor(canonicalClassName, canonicalSubclass);
+    const lines = [
+      AUTO_CLASS_FEATURES_START,
+      `${canonicalClassName} · Level ${currentLevel}`,
+      `Hit Die: d${progression.hitDie}`,
+      `Saving throw proficiencies: ${(progression.saves || []).map(ability => ability.toUpperCase()).join(', ') || 'none'}`
+    ];
+    if (spellAbility) lines.push(`Spellcasting ability: ${spellAbility.toUpperCase()}`);
+    lines.push('', 'Class features');
+    for (let featureLevel = 1; featureLevel <= currentLevel; featureLevel += 1) {
+      const features = [...(progression.features?.[featureLevel] || [])];
+      if ((progression.asiLevels || STANDARD_ASI_LEVELS).includes(featureLevel)) features.push('Ability Score Improvement or feat');
+      if (features.length) lines.push(`- Level ${featureLevel}: ${features.join('; ')}`);
+    }
+
+    if (canonicalSubclass) {
+      lines.push('', `Subclass: ${canonicalSubclass}`);
+      const catalogFeatures = HUMBLEWOOD_SUBCLASS_FEATURES[canonicalSubclass] || CORE_SUBCLASS_FEATURES[canonicalSubclass];
+      const featureLevels = catalogFeatures
+        ? Object.keys(catalogFeatures).map(Number).filter(Number.isFinite)
+        : [...(progression.subclassLevels || [])];
+      const unlockedLevels = [...new Set(featureLevels)].sort((a, b) => a - b).filter(value => value <= currentLevel);
+      if (!unlockedLevels.length) {
+        const firstLevel = Math.min(...featureLevels.filter(Number.isFinite));
+        lines.push(Number.isFinite(firstLevel)
+          ? `- First subclass features unlock at level ${firstLevel}.`
+          : '- No subclass feature levels are available in the current rules catalog.');
+      } else {
+        unlockedLevels.forEach(featureLevel => {
+          const features = catalogFeatures?.[featureLevel] || [`${canonicalSubclass} feature (consult its source for the feature name and rules)`];
+          lines.push(`- Level ${featureLevel}: ${features.join('; ')}`);
+        });
+      }
+    }
+    lines.push('', 'Feature names are a quick reference; use the relevant source for full rules and choices.');
+    lines.push(AUTO_CLASS_FEATURES_END);
+    return lines.join('\n');
+  }
+
+  function mergeAutomaticClassFeatures(existingText, automaticText) {
+    const escapedStart = AUTO_CLASS_FEATURES_START.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const escapedEnd = AUTO_CLASS_FEATURES_END.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const generatedBlock = new RegExp(`${escapedStart}[\\s\\S]*?${escapedEnd}`, 'g');
+    const preserved = String(existingText || '')
+      .replace(generatedBlock, '')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+    const generated = String(automaticText || '').trim();
+    return [preserved, generated].filter(Boolean).join('\n\n');
+  }
+
   function subclassesFor(className) {
     return [...(CLASS_SUBCLASSES[canonicalClass(className)] || [])];
   }
@@ -687,16 +895,20 @@
 
   return {
     ABILITY_KEYS,
+    AUTO_CLASS_FEATURES_END,
+    AUTO_CLASS_FEATURES_START,
     AUTO_SPECIES_TRAITS_END,
     AUTO_SPECIES_TRAITS_START,
     CLASS_PROGRESSIONS,
     CLASS_SUBCLASSES,
+    CORE_SUBCLASS_FEATURES,
     GLIDE_FEATS,
     HUMBLEWOOD_SPECIES_FEATURES,
     HUMBLEWOOD_SUBCLASS_FEATURES,
     SPECIES_SUBRACES,
     SPECIES_TRAITS,
     abilityModifier,
+    automaticClassFeatureText,
     automaticSpeciesTraitText,
     armorClass,
     asiLevelsBetween,
@@ -711,6 +923,7 @@
     hitPointGain,
     levelUpHitPointIncrease,
     levelUpGains,
+    mergeAutomaticClassFeatures,
     mergeAutomaticSpeciesTraits,
     preparedSpellCount,
     proficiencyBonus,
