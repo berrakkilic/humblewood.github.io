@@ -27,6 +27,17 @@
           },
           wide: true,
           openByDefault: true
+        },
+        {
+          title: 'The Great Calamity',
+          kicker: 'Near Extinction of the Wood',
+          tags: ['calamity', 'humblewood', 'great', 'fire', 'death', 'displacement', 'druid', 'magic', 'scorched grove', 'tenders', 'drought'],
+          summary: 'Not long after the founding of Alderheart, a massive forest fire known as “The Great Calamity” burned a portion of the Wood. The origins of the fire are unknown, but it left the area permanently damaged. When the Wood seemed destined to perish, a great druid rose to its defense.',
+          facts: [
+            ['Tenders', 'An organization of druids and mystics who dedicate themselves to protecting the Wood and healing the Grove.'],
+            ['Scorched Grove', 'The Scorched Grove is an arid field of ash that has since become home to many strange flame-infused creatures.'],
+          ],
+            wide: true
         }
       ]
     },
