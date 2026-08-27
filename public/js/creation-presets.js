@@ -1,8 +1,11 @@
 (function attachCreationPresets(root, factory) {
-  const api = factory();
+  const phbSpellPresets = typeof module === 'object' && module.exports
+    ? require('./phb-spell-presets')
+    : root?.HumblewoodPhbSpellPresets;
+  const api = factory(phbSpellPresets);
   if (typeof module === 'object' && module.exports) module.exports = api;
   if (root) root.HumblewoodCreationPresets = api;
-})(typeof globalThis !== 'undefined' ? globalThis : this, function createCreationPresets() {
+})(typeof globalThis !== 'undefined' ? globalThis : this, function createCreationPresets(phbSpellPresets = []) {
   const ABILITIES = ['str', 'dex', 'con', 'int', 'wis', 'cha'];
   const ABILITY_NAMES = {
     strength: 'str', dexterity: 'dex', constitution: 'con', intelligence: 'int', wisdom: 'wis', charisma: 'cha',
@@ -69,7 +72,7 @@
   });
 
   // Concise table-ready summaries, intentionally focused on the fields needed during play.
-  const STANDARD_SPELL_PRESETS = [
+  const CURATED_SPELL_PRESETS = [
     spell('Acid Splash', 0, 'Conjuration', '60 feet', '1 action', 'Instantaneous', 'V, S', 'DEX save', '1d6 acid', 'One creature, or two adjacent creatures, must save or take acid damage. Damage scales with character level.'),
     spell('Chill Touch', 0, 'Necromancy', '120 feet', '1 action', '1 round', 'V, S', 'Ranged spell attack', '1d8 necrotic', 'On a hit, the target cannot regain hit points until your next turn; undead also have disadvantage against you for that time.'),
     spell('Eldritch Blast', 0, 'Evocation', '120 feet', '1 action', 'Instantaneous', 'V, S', 'Ranged spell attack', '1d10 force', 'Fire one beam, with additional beams at higher character levels. Each beam has its own attack roll.'),
@@ -141,6 +144,10 @@
     spell('True Resurrection', 9, 'Necromancy', 'Touch', '1 hour', 'Instantaneous', 'V, S, M (holy water and diamonds worth 25,000 gp)', 'None', '', 'Return a creature dead no longer than 200 years to life with a new body if necessary.'),
     spell('Wish', 9, 'Conjuration', 'Self', '1 action', 'Instantaneous', 'V', 'None', '', 'Duplicate a spell of 8th level or lower without requirements, or attempt a greater effect at the risk described by the spell.')
   ];
+
+  const STANDARD_SPELL_PRESETS = Array.isArray(phbSpellPresets) && phbSpellPresets.length
+    ? phbSpellPresets
+    : CURATED_SPELL_PRESETS;
 
   const NPC_PRESETS = [
     {

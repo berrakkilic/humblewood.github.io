@@ -100,6 +100,7 @@ async function run() {
     assert.match(html, /id="new-npc-sheet-btn"/);
     assert.match(html, /id="npc-statblock-import-btn"/);
     assert.match(html, /id="attack-preset-select"/);
+    assert.match(html, /js\/phb-spell-presets\.js/);
     assert.match(html, /js\/creation-presets\.js/);
     assert.match(html, /id="combat-spells"/);
     assert.match(html, /id="level-up-overlay"/);
@@ -132,6 +133,11 @@ async function run() {
   const creationPresetsResponse = await fetch(`http://127.0.0.1:${port}/js/creation-presets.js`);
   assert.equal(creationPresetsResponse.status, 200);
   assert.match(await creationPresetsResponse.text(), /parseStatBlock/);
+  const phbSpellPresetsResponse = await fetch(`http://127.0.0.1:${port}/js/phb-spell-presets.js`);
+  assert.equal(phbSpellPresetsResponse.status, 200);
+  const phbSpellPresetsSource = await phbSpellPresetsResponse.text();
+  assert.match(phbSpellPresetsSource, /Goodberry/);
+  assert.match(phbSpellPresetsSource, /Player's Handbook \(2014\)/);
   const humblewoodMapResponse = await fetch(`http://127.0.0.1:${port}/images/humblewood-expanded-nohex-v0.3.png`);
   assert.equal(humblewoodMapResponse.status, 200);
   assert.match(humblewoodMapResponse.headers.get('content-type') || '', /image\/png/);

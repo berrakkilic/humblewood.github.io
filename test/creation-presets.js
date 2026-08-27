@@ -1,8 +1,42 @@
 const assert = require('assert');
+const fs = require('fs');
+const path = require('path');
 const presets = require('../public/js/creation-presets');
 
 assert(presets.ATTACK_PRESETS.length >= 35, 'common weapon and natural attack presets should be available');
-assert(presets.STANDARD_SPELL_PRESETS.length >= 60, 'core spell presets should cover every spell level');
+assert.equal(presets.STANDARD_SPELL_PRESETS.length, 361, 'the complete 2014 Player\'s Handbook spell catalog should be available');
+assert.equal(new Set(presets.STANDARD_SPELL_PRESETS.map(spell => spell.name)).size, 361, 'Player\'s Handbook spell names should be unique');
+for (let level = 0; level <= 9; level += 1) {
+  assert(presets.STANDARD_SPELL_PRESETS.some(spell => spell.level === level), `spell level ${level} should be represented`);
+}
+presets.STANDARD_SPELL_PRESETS.forEach(spell => {
+  ['name', 'school', 'range', 'castingTime', 'duration', 'components', 'attack', 'effect', 'source'].forEach(field => {
+    assert(String(spell[field] || '').trim(), `${spell.name} should include ${field}`);
+  });
+  assert.equal(spell.source, "Player's Handbook (2014)");
+});
+
+const goodberry = presets.STANDARD_SPELL_PRESETS.find(spell => spell.name === 'Goodberry');
+assert(goodberry, 'Goodberry should be available as a spell preset');
+assert.equal(goodberry.level, 1);
+assert.equal(goodberry.school, 'Transmutation');
+assert.equal(goodberry.range, 'Touch');
+assert.match(goodberry.effect, /ten magical berries/i);
+const parsedGoodberry = presets.parseSpells('1st level (2 slots): goodberry');
+assert.equal(parsedGoodberry.slots[1], 2);
+assert.equal(parsedGoodberry.spells[0].name, 'Goodberry');
+assert.equal(parsedGoodberry.spells[0].school, 'Transmutation');
+assert.match(parsedGoodberry.spells[0].effect, /ten magical berries/i);
+
+['Beacon of Hope', 'Beast Sense', 'Command', 'Witch Bolt', 'Wrathful Smite', 'Zone of Truth'].forEach(name => {
+  assert(presets.STANDARD_SPELL_PRESETS.some(spell => spell.name === name), `missing Player's Handbook spell: ${name}`);
+});
+
+const appSource = fs.readFileSync(path.resolve(__dirname, '../public/app.js'), 'utf8');
+[
+  'Ambush Prey', 'Elevated Sight', 'Feathered Reach', 'Globe of Twilight', 'Gust Barrier',
+  'Invoke the Amaranthine', 'Shape Plants', 'Spiny Shield', 'Stellar Bodies', 'Veil of Dusk'
+].forEach(name => assert(appSource.includes(`name: '${name}'`), `missing Humblewood spell preset: ${name}`));
 assert(presets.NPC_PRESETS.some(preset => preset.id === 'hw-birdfolk-dockmaster'));
 assert(presets.NPC_PRESETS.some(preset => preset.id === '5e-priest'));
 

@@ -2513,7 +2513,7 @@ function openSpellForm(spell) {
 }
 
 const spellPresetSelect = document.getElementById('spell-preset-select');
-['Humblewood', 'Core 5e'].forEach(source => {
+['Humblewood', "Player's Handbook (2014)"].forEach(source => {
   const group = document.createElement('optgroup');
   group.label = source;
   allSpellPresets()
