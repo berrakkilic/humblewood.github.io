@@ -539,10 +539,30 @@
     },
     {
       id: 'spells',
-      title: 'Humblewood Spells',
+      title: 'Magic in the Humblewood',
       icon: '✨',
-      description: 'Ten spells shaped by the creatures, skies and deep roots of Humblewood.',
+      description: 'The Avium and ten spells shaped by the creatures, skies and deep roots of Humblewood.',
       entries: [
+        {
+  title: 'The Avium',
+  kicker: 'Humblewood’s college of magical arts',
+  tags: ['magic', 'avium', 'arcane', 'college', 'wizard', 'scholar', 'hedge witch', 'forest magic'],
+  summary: 'The Avium is Humblewood’s most prestigious magical college and stands proud with towers that float around a vast petrified tree.',
+  facts: [
+    ['Known for', 'Elemental theory, teleportation and practical transmutation'],
+    ['Restricted study', 'Dangerous magic and practical necromancy']
+  ],
+  sections: [
+    {
+      heading: 'Magic beyond its halls',
+      text: 'Not every aspiring mage is accepted by the Avium, and not every student remains there. Some pursue magic independently, becoming self-taught scholars or hedge witches who combine arcane experimentation with the natural magic of the forest.'
+    },
+    {
+      heading: 'Hedge witches',
+      text: 'Hedge witches may learn from forgotten lore, personal experimentation or powerful fey and elemental beings. Their unconventional paths can reveal secrets unavailable to traditional students, though often without the safeguards of formal training.'
+    }
+  ]
+},
         {
           title: 'Ambush Prey',
           kicker: '2nd-level illusion',
