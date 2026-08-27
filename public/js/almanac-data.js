@@ -274,7 +274,32 @@
           sections: [
             { heading: 'Core traits', items: ['60-foot darkvision', 'A 1d6 bite using Strength or Dexterity', 'Adds Intelligence modifier to Dexterity saving throws', 'Bewitching Guile grants charm person, then Ambush Prey and fear at later levels'] }
           ]
-        }
+        },
+        {
+  title: 'Languages of the Wood',
+  kicker: 'Speech and writing across Humblewood',
+  tags: ['language', 'birdfolk', 'cervan', 'hedge', 'jerbeen', 'mapach', 'vulpin', 'auran', 'sylvan'],
+  summary: 'Birdfolk serves as Humblewood’s shared language of trade and everyday life, while each humblefolk people preserves a language of its own.',
+  facts: [
+    ['Birdfolk', 'Shared by birdfolk and humblefolk; uses the Birdfolk script'],
+    ['Cervan', 'An oral language traditionally left unwritten'],
+    ['Hedge', 'A gentle, deferential language written in Sylvan script'],
+    ['Jerbeen', 'Quick and direct; written using Birdfolk characters'],
+    ['Mapach', 'A technical language with its own glyphs'],
+    ['Vulpin', 'Growls, snarls and yips written in a flowing script']
+  ],
+  sections: [
+    {
+      heading: 'Uncommon tongues',
+      text: 'Sylvan and the Primordial dialects are less commonly spoken. Birdfolk naturally understand Auran but cannot speak it without learning; their understanding of Aquan, Ignan and Terran is limited to simple ideas.'
+    },
+    {
+      heading: 'Beyond Humblewood',
+      text: 'Birdfolk replaces Common within the Wood. Travelers visiting other lands may wish to learn Common, while outsiders arriving in Humblewood benefit from knowing Birdfolk.'
+    }
+  ],
+            wide: true
+}
       ]
     },
     {
