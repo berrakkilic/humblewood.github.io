@@ -672,6 +672,50 @@
           sections: [{ heading: 'Effect', text: 'The target gains +1 AC and has advantage on Stealth checks for the duration.' }]
         }
       ]
+    },
+    {
+      id: 'faq',
+      title: 'Frequently Asked Questions',
+      icon: '❓',
+      description: 'Answers to questions that often come up while exploring Humblewood and its wider world.',
+      entries: [
+        {
+          title: 'How are folk related to ordinary animals?',
+          kicker: 'Answer from the creators of Humblewood',
+          tags: ['faq', 'animals', 'folk', 'humanoids', 'companions', 'familiars', 'mounts', 'kren', 'ardea', 'tyton'],
+          summary: 'The folk of Humblewood may resemble animals, but all of the core races are humanoids. Ordinary animals also live throughout the forest as distinct, wild creatures.',
+          sections: [
+            {
+              heading: 'Distant kin',
+              text: 'Folk see the animals of the forest as distant kin, while acknowledging that they are wild and free to live their own lives. There is enough resemblance to recognize a connection, but folk and ordinary animals are no longer the same species.'
+            },
+            {
+              heading: 'Companions rather than pets',
+              text: 'Animal companions, familiars and mounts are generally treated as friends who share a common bond despite coming from different walks of life. Even traders using tamed wolves or elk as beasts of burden tend to regard them as friends, allies and co-workers rather than tools.'
+            },
+            {
+              heading: 'Stories of their origins',
+              text: 'Religious tales also reflect this relationship. One story says Kren ascended from an ordinary fox to become the first vulpin, while the story of Ardea and Tyton describes early birdfolk as difficult to distinguish from the birds of the forest.'
+            }
+          ]
+        },
+        {
+          title: 'Is there a world beyond Humblewood?',
+          kicker: 'Campaign FAQ · Absolutely!',
+          tags: ['faq', 'world', 'humblewood', 'travel', 'map', 'distant lands', 'animalfolk', 'brackenmill'],
+          summary: 'Yes! The world of this campaign is vast. Our story begins in Humblewood, but that does not necessarily mean it will remain there forever.',
+          sections: [
+            {
+              heading: 'Beyond the Wood',
+              text: 'For now, the campaign and almanac will focus on Humblewood and the places immediately around it. I may create a wider world map later as more of the world becomes relevant to the adventure.'
+            },
+            {
+              heading: 'More kinds of folk',
+              text: 'Many other animalfolk live beyond Humblewood, including species unknown within the Wood. One trader visiting Brackenmill’s First Bloom Festival, for example, comes from distant lands and belongs to a distinct leopard-like people :)'
+            }
+          ]
+        }
+      ]
     }
   ];
 });
