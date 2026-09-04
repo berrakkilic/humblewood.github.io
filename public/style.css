@@ -785,8 +785,16 @@ body[data-role="dm"] .token-tray.dm-detailed .token-list-details { display: flex
 .playlist-item.playing { background: var(--moss-light); }
 .playlist-item .del { color: var(--rose-deep); cursor: pointer; font-weight: 700; }
 
-.add-row { display: flex; gap: 8px; margin-top: 14px; }
-.add-row input { flex: 1; }
+.add-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; gap: 8px; margin-top: 14px; text-align: left; }
+.add-row select { grid-column: 1 / -1; }
+.add-row input { min-width: 0; }
+.add-row input[type="file"] { width: 100%; padding: 8px 6px; font-size: 12px; }
+.jukebox-help { color: var(--ink-soft); font-size: 12px; margin: 8px 0 0; }
+
+@media (max-width: 620px) {
+  .add-row { grid-template-columns: 1fr; }
+  .add-row select { grid-column: auto; }
+}
 
 .dm-only { }
 body[data-role="player"] .dm-only { display: none !important; }

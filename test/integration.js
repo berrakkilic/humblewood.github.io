@@ -101,6 +101,8 @@ async function run() {
     assert.match(html, /id="npc-statblock-import-btn"/);
     assert.match(html, /id="sf-pronouns"/);
     assert.match(html, /id="token-pronouns"/);
+    assert.match(html, /id="track-preset-select"/);
+    assert.match(html, /id="track-file"/);
     assert.match(html, /id="attack-preset-select"/);
     assert.match(html, /js\/phb-spell-presets\.js/);
     assert.match(html, /js\/creation-presets\.js/);
@@ -118,6 +120,30 @@ async function run() {
   const appSource = await (await fetch(`http://127.0.0.1:${port}/app.js`)).text();
   assert.match(appSource, /function tokenHoverText\(token\)/);
   assert.match(appSource, /Pronouns: \$\{pronouns\}/);
+  assert.match(appSource, /function uploadAudioFile\(file\)/);
+  assert.match(appSource, /fetch\('\/api\/music'\)/);
+  const musicResponse = await fetch(`http://127.0.0.1:${port}/api/music`);
+  assert.equal(musicResponse.status, 200);
+  const musicCatalog = await musicResponse.json();
+  assert(musicCatalog.tracks.some(track => track.url === '/music/farm.mp3' && track.source === 'Built-in'));
+  const badUpload = new FormData();
+  badUpload.append('file', new Blob(['not an mp3'], { type: 'text/plain' }), 'notes.txt');
+  const badUploadResponse = await fetch(`http://127.0.0.1:${port}/api/upload/audio`, {
+    method: 'POST', body: badUpload
+  });
+  assert.equal(badUploadResponse.status, 400);
+  const audioUpload = new FormData();
+  audioUpload.append('file', new Blob(['fake mp3 bytes'], { type: 'audio/mpeg' }), 'uploaded-forest.mp3');
+  const audioUploadResponse = await fetch(`http://127.0.0.1:${port}/api/upload/audio`, {
+    method: 'POST', body: audioUpload
+  });
+  assert.equal(audioUploadResponse.status, 200);
+  const uploadedAudio = await audioUploadResponse.json();
+  assert.match(uploadedAudio.url, /^\/uploads\/\d+-uploaded-forest\.mp3$/);
+  const uploadedTrackResponse = await fetch(`http://127.0.0.1:${port}${uploadedAudio.url}`);
+  assert.equal(uploadedTrackResponse.status, 200);
+  const updatedMusicCatalog = await (await fetch(`http://127.0.0.1:${port}/api/music`)).json();
+  assert(updatedMusicCatalog.tracks.some(track => track.url === uploadedAudio.url && track.source === 'Uploaded'));
   const routerResponse = await fetch(`http://127.0.0.1:${port}/js/router.js`);
   assert.equal(routerResponse.status, 200);
   assert.match(await routerResponse.text(), /createRouter/);

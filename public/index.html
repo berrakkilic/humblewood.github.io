@@ -959,10 +959,15 @@
         <div class="playlist" id="playlist"></div>
 
         <div class="add-row dm-only">
-          <input type="text" id="track-title" placeholder="Track name">
-          <input type="url" id="track-url" placeholder="Audio URL (mp3, ogg...)">
-          <button class="btn-rose" id="add-track-btn">Add</button>
+          <select id="track-preset-select" aria-label="Choose an existing MP3 track">
+            <option value="">Choose an existing track…</option>
+          </select>
+          <input type="text" id="track-title" placeholder="Track name (optional for uploads)">
+          <input type="url" id="track-url" placeholder="Audio URL (optional)">
+          <input type="file" id="track-file" accept=".mp3,audio/mpeg">
+          <button class="btn-rose" id="add-track-btn">Add track</button>
         </div>
+        <p class="jukebox-help dm-only">Choose a built-in track, upload an MP3, or paste an external audio URL.</p>
       </div>
     </section>
 

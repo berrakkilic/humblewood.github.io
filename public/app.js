@@ -3133,16 +3133,86 @@ document.getElementById('level-up-apply-btn').addEventListener('click', applyLev
 
 // ================= JUKEBOX =================
 const audioEl = document.getElementById('audio-el');
+const trackPresetSelect = document.getElementById('track-preset-select');
+const trackTitleInput = document.getElementById('track-title');
+const trackUrlInput = document.getElementById('track-url');
+const trackFileInput = document.getElementById('track-file');
+const addTrackButton = document.getElementById('add-track-btn');
+let availableMusicTracks = [];
 
-document.getElementById('add-track-btn').onclick = () => {
-  const title = document.getElementById('track-title').value.trim();
-  const url = document.getElementById('track-url').value.trim();
-  if (!title || !url) return alert('Add both a track name and an audio URL.');
-  const playlist = [...state.jukebox.playlist, { id: 'm' + Date.now(), title, url }];
-  socket.emit('jukebox:setPlaylist', playlist);
-  document.getElementById('track-title').value = '';
-  document.getElementById('track-url').value = '';
+function renderMusicTrackOptions() {
+  trackPresetSelect.innerHTML = '<option value="">Choose an existing track…</option>';
+  availableMusicTracks.forEach((track, index) => {
+    const option = document.createElement('option');
+    option.value = String(index);
+    option.textContent = `${track.title} · ${track.source}`;
+    trackPresetSelect.appendChild(option);
+  });
+}
+
+async function loadMusicTracks() {
+  try {
+    const response = await fetch('/api/music');
+    if (!response.ok) throw new Error('Music list unavailable');
+    const payload = await response.json();
+    availableMusicTracks = Array.isArray(payload.tracks) ? payload.tracks : [];
+    renderMusicTrackOptions();
+  } catch (error) {
+    availableMusicTracks = [];
+    renderMusicTrackOptions();
+  }
+}
+
+trackPresetSelect.onchange = () => {
+  if (!trackPresetSelect.value) return;
+  const track = availableMusicTracks[Number(trackPresetSelect.value)];
+  if (!track) return;
+  trackTitleInput.value = track.title;
+  trackUrlInput.value = track.url;
+  trackFileInput.value = '';
 };
+
+trackFileInput.onchange = () => {
+  const file = trackFileInput.files[0];
+  if (!file) return;
+  const selectedPreset = trackPresetSelect.value
+    ? availableMusicTracks[Number(trackPresetSelect.value)]
+    : null;
+  trackPresetSelect.value = '';
+  trackUrlInput.value = '';
+  if (!trackTitleInput.value.trim() || selectedPreset?.title === trackTitleInput.value.trim()) {
+    trackTitleInput.value = file.name.replace(/\.mp3$/i, '').replace(/[_-]+/g, ' ');
+  }
+};
+
+addTrackButton.onclick = async () => {
+  const file = trackFileInput.files[0];
+  let title = trackTitleInput.value.trim();
+  let url = trackUrlInput.value.trim();
+  if (!file && !url) return alert('Choose an existing track, upload an MP3, or add an audio URL.');
+  addTrackButton.disabled = true;
+  try {
+    if (file) {
+      const uploaded = await uploadAudioFile(file);
+      url = uploaded.url;
+      if (!title) title = uploaded.name.replace(/\.mp3$/i, '').replace(/[_-]+/g, ' ');
+    }
+    if (!title) return alert('Give the track a name.');
+    const playlist = [...state.jukebox.playlist, { id: 'm' + Date.now(), title, url }];
+    socket.emit('jukebox:setPlaylist', playlist);
+    trackTitleInput.value = '';
+    trackUrlInput.value = '';
+    trackFileInput.value = '';
+    trackPresetSelect.value = '';
+    if (file) await loadMusicTracks();
+  } catch (error) {
+    alert(error.message || 'The MP3 could not be uploaded.');
+  } finally {
+    addTrackButton.disabled = false;
+  }
+};
+
+loadMusicTracks();
 
 document.getElementById('jb-playpause').onclick = () => {
   if (state.jukebox.isPlaying) {
@@ -4135,4 +4205,13 @@ async function uploadFile(file) {
   if (!res.ok) throw new Error('Upload failed');
   const data = await res.json();
   return data.url;
+}
+
+async function uploadAudioFile(file) {
+  const form = new FormData();
+  form.append('file', file);
+  const res = await fetch('/api/upload/audio', { method: 'POST', body: form });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || 'The MP3 could not be uploaded.');
+  return data;
 }
