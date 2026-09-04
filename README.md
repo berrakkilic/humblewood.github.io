@@ -19,7 +19,7 @@ Then open `http://localhost:3000` in your browser.
 - **`Dockerfile`** — builds the app into a container.
 - **`docker-compose.yml`** — runs it with two persistent volumes: one for the database, one for uploaded map/token images.
 
-The app uses SQLite in a file and the `docker-compose.yml` mounts a volume (`humblewood-data`) so that the file persists across restarts and redeploys automatically (hopefuckingfully).
+The app uses SQLite in a file and the `docker-compose.yml` mounts a volume (`humblewood-data`) so that the file persists across restarts and redeploys automatically. Redeploys are currently set to every 30 mins or so.
 
 To update the live version after this, I can just push as normal, then on the terminal:
 
@@ -38,14 +38,14 @@ Now hosted on `https://humblewood.sfseeger.de/` !!
 ## What's built so far 
 
 - **Map & tokens**: DM uploads the battle map image. Tokens for NPCs, items and PCs live in a tray and can be moved, snapped to the grid, hidden from players and given one-by-one HP adjustments. Pan and zoom controls work for everyone. Doodles and NPC/item names can be enabled by DM. Distance can be measured with the Ruler. Battle Fog can be drawn with rectangles. Conditions show up on tokens with its starting letters. 
-- **Initiative tracker**: turn order and rounds of NPCs and player characters are all visible directly beside the map (initiative table can be toggled on and off). DM can manually edit and reorder initiatives and their order. NPCs can enter the initiative tracker and have very basic battle functions. May extend this later.
-- **Jukebox**: add tracks as files and play them for all users. Adding track name for each track could get tiring? maybe create a "add file" button?
+- **Initiative tracker**: turn order and rounds of NPCs and player characters are all visible directly beside the map (initiative table can be toggled on and off). DM can manually edit and reorder initiatives and their order. NPCs can enter the initiative tracker and have basic battle functions.
+- **Jukebox**: add tracks as files and play them for all users. (DM-Limited)
 - **Character sheets**: a basic 5e-style sheet (abilities, HP/AC, inventory, notes) per character, added Humblewood characteristics. A tiny reminder of your character can be found on the sidebar of the map page.
-- **Character-specific dice**: Select a character to roll ability checks, saving throws, skills, initiative, attacks, spell attacks etc. with the stored modifiers. d20 rolls support advantage and disadvantage and sync to the shared roll log. Spell and combat rolls are accessible on the combat page. To unlock damage rolls on spells, simply write its roll (for example 1d10) in the spell description.
+- **Character-specific dice**: Select a character to roll ability checks, saving throws, skills, initiative, attacks, spell attacks etc. with the stored modifiers. d20 rolls support advantage and disadvantage and sync to the shared roll log. Spell and combat rolls are accessible on the combat page.
 - **Cottagecore Humblewood aesthetic**: parchment and forest tones, vine dividers, soft rounded shapes.
-- **Access restrictions**: DM access is PIN-gated. Character ownership is tied to the "Player" field in character sheet. Players must log in with username and password. Password can be changed by DM upon request, however, username shall stay known. Token movement/character rolls are checked server-side.
-- **Function automation and Shortcuts**: Long-rest automation. NPC Duplication. Fit map to grid. Middle button of mouse to move around. Automated level up calculations and information screens. NPC Creation automation through stat blocks. Char creation automation through presets and race/class trait displays.
-- **Not tested yet - Scene saving as DM**
-- **Almanac**: provides necessary information on the Humblewood in an easily organizable and digestible collection.
+- **Access restrictions**: DM access is PIN-gated. Character ownership is tied to the "Player" field in character sheet. Players must log in with username and password. Password can be changed by DM upon request, however, username shall stay known, therefore it is best if players choose their own names as their usernames. Token movement/character rolls are checked server-side.
+- **Function automation and Shortcuts**: Long-rest automation. NPC Duplication. Fit map to grid. Middle button of mouse to move around. Automated level up calculations and information screens. NPC Creation automation through stat blocks. Char creation automation through presets and race/class trait displays. Spell presets make creating spellcasters much easier.
+- **Scene Saving**: Scenes can be saved by DM to be brought up later. 
+- **Almanac**: provides necessary information on the Humblewood in an easily organizable and digestible collection. Includes a FAQ Section at the end.
 
 ## Known limitations to work out next
