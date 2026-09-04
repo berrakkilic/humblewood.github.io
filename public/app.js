@@ -1495,7 +1495,7 @@ function orderedLibraryFolders(folders) {
 }
 
 function libraryFileIcon(file) {
-  return file.kind === 'image' ? '🖼️' : file.kind === 'pdf' ? '📕' : file.kind === 'text' ? '📝' : '📎';
+  return file.kind === 'image' ? '🖼️' : file.kind === 'pdf' ? '📕' : file.kind === 'html' ? '✨' : file.kind === 'text' ? '📝' : '📎';
 }
 
 function libraryFileSize(size) {
@@ -1659,6 +1659,14 @@ function renderSharedHandoutContent(broadcast) {
     content.appendChild(frame);
     return;
   }
+  if (broadcast.kind === 'html') {
+    const frame = document.createElement('iframe');
+    frame.src = broadcast.url;
+    frame.title = broadcast.name;
+    frame.setAttribute('sandbox', '');
+    content.appendChild(frame);
+    return;
+  }
   if (broadcast.kind === 'text') {
     const pre = document.createElement('pre');
     pre.textContent = 'Loading handout…';
@@ -1733,6 +1741,20 @@ document.getElementById('library-new-folder-btn').onclick = () => {
     const parentId = libraryCurrentFolderId !== 'all' && libraryCurrentFolderId !== 'unfiled' ? libraryCurrentFolderId : null;
     socket.emit('library:folder:create', { name: name.trim(), parentId });
   }
+};
+document.getElementById('library-add-session0-btn').onclick = () => {
+  const library = libraryData();
+  if (library.files.some(file => file.url === '/handouts/session-0.html')) {
+    return showToast('The Session 0 handout is already in your library.');
+  }
+  const folderId = libraryCurrentFolderId !== 'all' && libraryCurrentFolderId !== 'unfiled' ? libraryCurrentFolderId : null;
+  socket.emit('library:file:add', {
+    name: 'Session 0 · Welcome & table safety',
+    url: '/handouts/session-0.html',
+    mimeType: 'text/html',
+    size: 0,
+    folderId
+  });
 };
 document.getElementById('library-upload-btn').onclick = () => document.getElementById('library-file-input').click();
 document.getElementById('library-file-input').onchange = async event => {

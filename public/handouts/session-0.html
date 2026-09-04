@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Session 0 · Humblewood Table</title>
+  <style>
+    :root {
+      --forest: #294532;
+      --forest-soft: #52735a;
+      --rose: #b9687c;
+      --rose-pale: #f7e8eb;
+      --ink: #3a2e25;
+      --muted: #75695d;
+      --paper: #fffdf8;
+      --paper-deep: #f5ecd9;
+      --line: rgba(58, 46, 37, .12);
+      --shadow: 0 18px 50px rgba(58, 46, 37, .14);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 8% 4%, rgba(217, 138, 158, .16), transparent 30%),
+        radial-gradient(circle at 94% 10%, rgba(124, 148, 115, .18), transparent 28%),
+        linear-gradient(135deg, #f9f2e3, #efe4cc);
+      font: 15px/1.6 ui-rounded, "Trebuchet MS", system-ui, sans-serif;
+    }
+    .handout { max-width: 960px; margin: 0 auto; padding: 34px 22px 42px; }
+    .hero {
+      position: relative;
+      overflow: hidden;
+      padding: 36px 38px 34px;
+      border: 1px solid rgba(41, 69, 50, .12);
+      border-radius: 24px;
+      background: linear-gradient(135deg, rgba(255, 253, 248, .96), rgba(246, 239, 220, .92));
+      box-shadow: var(--shadow);
+    }
+    .hero::after {
+      position: absolute;
+      right: 28px;
+      bottom: -44px;
+      color: rgba(82, 115, 90, .12);
+      content: "✦";
+      font: 150px/1 Georgia, serif;
+      transform: rotate(16deg);
+    }
+    .hero-mark { color: var(--rose); font-size: 24px; line-height: 1; }
+    .eyebrow { margin-top: 11px; color: var(--rose); font-size: 11px; font-weight: 800; letter-spacing: .13em; text-transform: uppercase; }
+    h1, h2, h3 { color: var(--forest); font-family: Georgia, "Times New Roman", serif; }
+    h1 { max-width: 620px; margin: 4px 0 6px; font-size: clamp(38px, 8vw, 68px); line-height: .98; letter-spacing: -.035em; }
+    h2 { margin: 0 0 9px; font-size: 25px; line-height: 1.1; }
+    h3 { margin: 0 0 7px; font-size: 18px; }
+    p { margin: 0 0 12px; }
+    .subtitle { max-width: 620px; margin: 0; color: var(--forest-soft); font-size: 18px; line-height: 1.45; }
+    .hero-note { max-width: 620px; margin: 21px 0 0; padding-top: 15px; border-top: 1px solid var(--line); color: var(--muted); font-size: 13px; }
+    .section { margin-top: 18px; }
+    .card { padding: 24px 25px; border: 1px solid var(--line); border-radius: 17px; background: rgba(255, 253, 248, .9); box-shadow: 0 8px 26px rgba(58, 46, 37, .07); }
+    .two-col { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; margin-top: 18px; }
+    .card-lead { color: var(--muted); font-size: 13px; }
+    .tone-card { border-top: 4px solid var(--rose); }
+    .safety-card { border-top: 4px solid var(--forest-soft); }
+    .tone-list, .boundary-list { display: grid; gap: 8px; margin: 14px 0 0; padding: 0; list-style: none; }
+    .tone-list li, .boundary-list li { display: flex; align-items: flex-start; gap: 9px; }
+    .tone-list li::before, .boundary-list li::before { flex: 0 0 auto; color: var(--rose); content: "✦"; font-size: 13px; }
+    .boundary-card { margin-top: 18px; background: linear-gradient(135deg, rgba(247, 232, 235, .82), rgba(255, 253, 248, .92)); }
+    .boundary-list { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 24px; color: var(--ink); font-size: 13px; }
+    .small { margin: 15px 0 0; color: var(--muted); font-size: 12px; }
+    .safety-actions { margin-top: 18px; }
+    .action-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+    .action { padding: 14px; border-radius: 12px; background: var(--paper-deep); }
+    .action strong { display: block; margin-bottom: 4px; color: var(--forest); }
+    .action p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
+    .character-card { margin-top: 18px; border-left: 4px solid var(--rose); }
+    .quote { margin-top: 13px; padding: 14px 16px; border-radius: 11px; background: var(--paper-deep); color: var(--forest); font-family: Georgia, "Times New Roman", serif; font-size: 17px; line-height: 1.45; }
+    .mechanics-card { margin-top: 18px; }
+    .mechanics-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 9px; margin-top: 15px; }
+    .mechanic { min-height: 70px; padding: 12px 13px; border: 1px solid var(--line); border-radius: 11px; background: rgba(246, 239, 220, .62); }
+    .mechanic strong { display: block; margin-bottom: 2px; color: var(--forest); font-size: 12px; }
+    .mechanic span { color: var(--muted); font-size: 12px; line-height: 1.4; }
+    .absence-card { margin-top: 18px; }
+    .absence-card p { color: var(--muted); }
+    .closing { margin: 24px 4px 0; color: var(--forest); font-size: 13px; font-weight: 700; text-align: center; }
+    @media (max-width: 700px) {
+      .handout { padding: 14px 10px 24px; }
+      .hero { padding: 27px 23px 25px; border-radius: 19px; }
+      .card { padding: 20px 18px; }
+      .two-col, .boundary-list, .action-grid, .mechanics-grid { grid-template-columns: 1fr; }
+      .hero::after { right: 3px; bottom: -57px; font-size: 120px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="handout">
+    <header class="hero">
+      <div class="hero-mark" aria-hidden="true">✦</div>
+      <div class="eyebrow">Welcome to the Humblewood Table</div>
+      <h1>Session 0</h1>
+      <p class="subtitle">A quick guide to our tone, boundaries, characters, and table rules.</p>
+      <p class="hero-note">This is a collaborative story. Please tell the DM privately about anything you would like handled more gently; you never need to justify a boundary.</p>
+    </header>
+
+    <div class="two-col">
+      <section class="card tone-card">
+        <h2>The tone of the campaign</h2>
+        <p class="card-lead">The Wood can be warm and whimsical, but it is not always comfortable.</p>
+        <ul class="tone-list">
+          <li>Missing people</li>
+          <li>Hallucinations or altered perception</li>
+          <li>Decay, death, and grief</li>
+          <li>Unsettling imagery</li>
+          <li>Characters behaving strangely or creepily (no sexual violence)</li>
+        </ul>
+      </section>
+
+      <section class="card safety-card">
+        <h2>Our safety tools</h2>
+        <p class="card-lead">You are always allowed to pause, step away, or ask for a change.</p>
+        <ul class="tone-list">
+          <li>Message the DM if you need a moment or feel overwhelmed.</li>
+          <li>Use the anonymous safety button on the website to notify the DM privately.</li>
+          <li>When the button is used, we will take a 15-minute break.</li>
+          <li>Other safety requests and ideas are very welcome.</li>
+        </ul>
+      </section>
+    </div>
+
+    <section class="card boundary-card">
+      <h2>Boundaries check-in</h2>
+      <p class="card-lead">Let the DM know privately if you have boundaries around any of these topics:</p>
+      <ul class="boundary-list">
+        <li>Violence toward children or children in danger</li>
+        <li>Body horror</li>
+        <li>Animal harm</li>
+        <li>Insects</li>
+        <li>Starvation or dehydration</li>
+        <li>Grief and dead family members</li>
+        <li>Mind control, hallucinations, or memory alteration</li>
+        <li>Romance and sexual content</li>
+        <li>PvP and intra-party conflict</li>
+      </ul>
+      <p class="small">A boundary can be a hard no, a request for a fade-to-black, or simply a heads-up before a scene. All of those are useful.</p>
+    </section>
+
+    <section class="card character-card">
+      <h2>Make a character who gets involved</h2>
+      <p>Your character should have a reason to be curious about the Wood. When something genuinely wrong happens, they should also have some reason to get involved.</p>
+      <div class="quote">Curiosity is a great beginning. Give your character one thread that pulls them toward the mystery.</div>
+    </section>
+
+    <section class="card mechanics-card">
+      <h2>Campaign mechanics</h2>
+      <div class="mechanics-grid">
+        <div class="mechanic"><strong>Starting level</strong><span>Level 1</span></div>
+        <div class="mechanic"><strong>Hit points</strong><span>Choose to roll or take the average.</span></div>
+        <div class="mechanic"><strong>Advancement</strong><span>Milestone leveling</span></div>
+        <div class="mechanic"><strong>Encumbrance</strong><span>None, but keep it reasonable.</span></div>
+        <div class="mechanic"><strong>Rations</strong><span>Necessary in the Wood.</span></div>
+        <div class="mechanic"><strong>Inspiration</strong><span>Earned through roleplay; allows you to reroll one roll.</span></div>
+        <div class="mechanic"><strong>Critical hits</strong><span>Extended to include critical initiative rolls.</span></div>
+        <div class="mechanic"><strong>Potions</strong><span>Drinking a potion is a bonus action.</span></div>
+        <div class="mechanic"><strong>Between-session shopping</strong><span>For simple things, let the DM know where your character shops and choose something from the wares provided to you by DM.</span></div>
+      </div>
+    </section>
+
+    <section class="card absence-card">
+      <h2>If you miss a session</h2>
+      <p>If only one person is absent, we will generally continue unless it is a major session. Please let the DM know if that is a problem for you.</p>
+      <p>Your character can be on a “side quest” or have an “ill day.” Depending on what you choose, they may even receive a small buff for the next session—for example, spending the day working out and sparring with the weapons master could grant advantage on one Strength or hit roll.</p>
+    </section>
+
+    <p class="closing">Questions, boundaries, or requests? Message the DM anytime. 💚</p>
+  </main>
+</body>
+</html>

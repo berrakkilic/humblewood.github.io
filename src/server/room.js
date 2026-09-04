@@ -40,6 +40,7 @@ function createRoom({ dataDir, dmPin, io, uploadDir }) {
     const extension = path.extname(String(file?.name || file?.url || '')).toLowerCase();
     if (mimeType.startsWith('image/') || ['.png', '.jpg', '.jpeg', '.gif', '.webp'].includes(extension)) return 'image';
     if (mimeType === 'application/pdf' || extension === '.pdf') return 'pdf';
+    if (mimeType === 'text/html' || extension === '.html') return 'html';
     if (mimeType.startsWith('text/') || LIBRARY_TEXT_EXTENSIONS.has(extension)) return 'text';
     return 'file';
   }
@@ -62,7 +63,7 @@ function createRoom({ dataDir, dmPin, io, uploadDir }) {
     const id = String(file.id || fallbackId || '').trim().slice(0, 140);
     const name = String(file.name || '').trim().replace(/\s+/g, ' ').slice(0, 160);
     const url = String(file.url || '').trim().slice(0, 1000);
-    if (!id || !name || !/^\/uploads\/[A-Za-z0-9._~%()+-]+$/.test(url)) return null;
+    if (!id || !name || !/^\/(?:uploads|handouts)\/[A-Za-z0-9._~%()+-]+$/.test(url)) return null;
     const cleaned = {
       id,
       name,

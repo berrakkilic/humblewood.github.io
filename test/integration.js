@@ -103,6 +103,7 @@ async function run() {
     assert.match(html, /id="npc-directory-race-filters"/);
     assert.match(html, /id="npc-directory-class-filter"/);
     assert.match(html, /id="npc-roster-search"/);
+    assert.match(html, /id="library-add-session0-btn"/);
     assert.match(html, /id="sf-pronouns"/);
     assert.match(html, /id="token-pronouns"/);
     assert.match(html, /id="track-preset-select"/);
@@ -134,6 +135,12 @@ async function run() {
   assert.match(appSource, /function uploadLibraryFile\(file\)/);
   assert.match(appSource, /function npcDirectoryMatches\(npc\)/);
   assert.match(appSource, /npcRaceFilter/);
+  assert.match(appSource, /broadcast\.kind === 'html'/);
+  const session0Response = await fetch(`http://127.0.0.1:${port}/handouts/session-0.html`);
+  assert.equal(session0Response.status, 200);
+  const session0Source = await session0Response.text();
+  assert.match(session0Source, /Session 0/);
+  assert.match(session0Source, /Boundaries check-in/);
   const musicResponse = await fetch(`http://127.0.0.1:${port}/api/music`);
   assert.equal(musicResponse.status, 200);
   const musicCatalog = await musicResponse.json();
@@ -226,6 +233,20 @@ async function run() {
   const libraryWithFolder = await pending;
   const puzzlesFolder = libraryWithFolder.folders.find(folder => folder.name === 'Puzzles');
   assert(puzzlesFolder);
+  pending = once(dm.socket, 'library:update', library => library.files.some(file => file.url === '/handouts/session-0.html'));
+  dm.socket.emit('library:file:add', {
+    name: 'Session 0 · Welcome & table safety', url: '/handouts/session-0.html', mimeType: 'text/html', size: 0,
+    folderId: puzzlesFolder.id
+  });
+  const libraryWithSession0 = await pending;
+  const session0File = libraryWithSession0.files.find(file => file.url === '/handouts/session-0.html');
+  assert.equal(session0File.kind, 'html');
+  const session0PlayerBroadcast = once(playerOne.socket, 'library:broadcast', broadcast => broadcast?.fileId === session0File.id);
+  dm.socket.emit('library:broadcast', { fileId: session0File.id, duration: 60 });
+  assert.equal((await session0PlayerBroadcast).kind, 'html');
+  pending = once(playerTwo.socket, 'library:broadcast', broadcast => broadcast === null);
+  dm.socket.emit('library:broadcast:clear');
+  await pending;
   pending = once(dm.socket, 'library:update', library => library.files.some(file => file.name === 'secret-clue.txt'));
   const playerLibraryUpdate = expectNoEvent(playerOne.socket, 'library:update');
   dm.socket.emit('library:file:add', {
