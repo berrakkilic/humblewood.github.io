@@ -262,6 +262,7 @@
     <a class="tab-btn" data-view="characters" data-route="characters" href="/characters">Characters</a>
     <a class="tab-btn" data-view="almanac" data-route="almanac" href="/almanac">Humble Almanac</a>
     <a class="tab-btn" data-view="jukebox" data-route="jukebox" href="/jukebox">Jukebox</a>
+    <a class="tab-btn dm-only" data-view="library" data-route="library" href="/library">DM Library</a>
     <a class="tab-btn" data-view="dice" data-route="dice" href="/dice">Dice</a>
   </nav>
 
@@ -971,6 +972,54 @@
       </div>
     </section>
 
+    <!-- DM LIBRARY VIEW -->
+    <section id="view-library" class="view dm-only">
+      <div class="library-shell">
+        <header class="library-header panel">
+          <div>
+            <span class="library-eyebrow">Private DM workspace</span>
+            <h2>📜 DM Library</h2>
+            <p>Keep clues, handouts, maps and puzzle files in one place. Sharing a file opens it over the current scene for everyone.</p>
+          </div>
+          <div class="library-header-actions">
+            <input type="file" id="library-file-input" class="hidden" accept="image/*,.pdf,.txt,.md,.markdown,.json,.csv,.js,.ts,.css,.html,.xml,.yaml,.yml">
+            <button class="btn-primary" id="library-upload-btn" type="button">Upload file</button>
+            <button class="btn-ghost" id="library-new-folder-btn" type="button">New folder</button>
+          </div>
+        </header>
+
+        <div class="library-layout">
+          <aside class="library-folders panel">
+            <div class="library-section-heading">
+              <h3>Folders</h3>
+              <span id="library-folder-count"></span>
+            </div>
+            <div id="library-folder-list"></div>
+          </aside>
+
+          <section class="library-files panel">
+            <div class="library-section-heading library-files-heading">
+              <div>
+                <h3 id="library-current-folder">All files</h3>
+                <p id="library-file-summary" class="sidebar-help"></p>
+              </div>
+              <label class="library-duration-control">Show for
+                <select id="library-broadcast-duration">
+                  <option value="10">10 seconds</option>
+                  <option value="30">30 seconds</option>
+                  <option value="60" selected>1 minute</option>
+                  <option value="300">5 minutes</option>
+                  <option value="600">10 minutes</option>
+                  <option value="0">Until I stop it</option>
+                </select>
+              </label>
+            </div>
+            <div id="library-file-list"></div>
+          </section>
+        </div>
+      </div>
+    </section>
+
     <!-- DICE VIEW -->
     <section id="view-dice" class="view">
       <div class="dice-panel panel">
@@ -1038,6 +1087,22 @@
 </div>
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<div class="shared-handout-overlay hidden" id="shared-handout-overlay" aria-hidden="true">
+  <section class="shared-handout-modal panel" role="dialog" aria-modal="true" aria-labelledby="shared-handout-title">
+    <header class="shared-handout-header">
+      <div>
+        <span class="library-eyebrow">A handout from the Dungeon Master</span>
+        <h2 id="shared-handout-title">Shared handout</h2>
+      </div>
+      <div class="shared-handout-header-actions">
+        <span class="shared-handout-timer" id="shared-handout-timer" role="timer"></span>
+        <button class="btn-ghost dm-only" id="shared-handout-stop-btn" type="button">Stop sharing</button>
+      </div>
+    </header>
+    <div class="shared-handout-content" id="shared-handout-content"></div>
+  </section>
+</div>
 
 <div class="combat-overlay level-up-overlay hidden" id="level-up-overlay" aria-hidden="true">
   <section class="combat-modal panel level-up-modal" role="dialog" aria-modal="true" aria-labelledby="level-up-title">

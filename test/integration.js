@@ -82,7 +82,7 @@ async function identify(io, payload) {
 async function run() {
   await serverReady();
 
-  for (const route of ['/map', '/characters', '/almanac', '/jukebox', '/dice']) {
+  for (const route of ['/map', '/characters', '/almanac', '/jukebox', '/library', '/dice']) {
     const response = await fetch(`http://127.0.0.1:${port}${route}`);
     assert.equal(response.status, 200, `${route} should load the frontend shell`);
     const html = await response.text();
@@ -103,6 +103,9 @@ async function run() {
     assert.match(html, /id="token-pronouns"/);
     assert.match(html, /id="track-preset-select"/);
     assert.match(html, /id="track-file"/);
+    assert.match(html, /id="library-file-input"/);
+    assert.match(html, /id="library-folder-list"/);
+    assert.match(html, /id="shared-handout-overlay"/);
     assert.match(html, /id="attack-preset-select"/);
     assert.match(html, /js\/phb-spell-presets\.js/);
     assert.match(html, /js\/creation-presets\.js/);
@@ -122,6 +125,9 @@ async function run() {
   assert.match(appSource, /Pronouns: \$\{pronouns\}/);
   assert.match(appSource, /function uploadAudioFile\(file\)/);
   assert.match(appSource, /fetch\('\/api\/music'\)/);
+  assert.match(appSource, /function renderLibrary\(\)/);
+  assert.match(appSource, /library:broadcast/);
+  assert.match(appSource, /function uploadLibraryFile\(file\)/);
   const musicResponse = await fetch(`http://127.0.0.1:${port}/api/music`);
   assert.equal(musicResponse.status, 200);
   const musicCatalog = await musicResponse.json();
@@ -144,6 +150,21 @@ async function run() {
   assert.equal(uploadedTrackResponse.status, 200);
   const updatedMusicCatalog = await (await fetch(`http://127.0.0.1:${port}/api/music`)).json();
   assert(updatedMusicCatalog.tracks.some(track => track.url === uploadedAudio.url && track.source === 'Uploaded'));
+  const unsupportedLibraryUpload = new FormData();
+  unsupportedLibraryUpload.append('file', new Blob(['binary'], { type: 'application/octet-stream' }), 'archive.zip');
+  const unsupportedLibraryResponse = await fetch(`http://127.0.0.1:${port}/api/upload/library`, {
+    method: 'POST', body: unsupportedLibraryUpload
+  });
+  assert.equal(unsupportedLibraryResponse.status, 400);
+  const libraryUpload = new FormData();
+  libraryUpload.append('file', new Blob(['A secret clue'], { type: 'text/plain' }), 'secret-clue.txt');
+  const libraryUploadResponse = await fetch(`http://127.0.0.1:${port}/api/upload/library`, {
+    method: 'POST', body: libraryUpload
+  });
+  assert.equal(libraryUploadResponse.status, 200);
+  const uploadedLibrary = await libraryUploadResponse.json();
+  assert.match(uploadedLibrary.url, /^\/uploads\/\d+-secret-clue\.txt$/);
+  assert.equal((await (await fetch(`http://127.0.0.1:${port}${uploadedLibrary.url}`)).text()), 'A secret clue');
   const routerResponse = await fetch(`http://127.0.0.1:${port}/js/router.js`);
   assert.equal(routerResponse.status, 200);
   assert.match(await routerResponse.text(), /createRouter/);
@@ -189,8 +210,39 @@ async function run() {
   const playerTwo = await identify(io, {
     role: 'player', authMode: 'register', username: 'moss', password: 'password-2', name: 'Moss'
   });
+  let pending;
+  assert.equal(dm.state.library.broadcast, null);
+  assert.equal(playerOne.state.library.broadcast, null);
+  assert.equal(playerOne.state.library.files, undefined, 'Players must not receive the private library catalogue');
 
-  let pending = once(playerOne.socket, 'action:denied', denial => /only the dungeon master can make private rolls/i.test(denial.message));
+  pending = once(dm.socket, 'library:update', library => library.folders.some(folder => folder.name === 'Puzzles'));
+  dm.socket.emit('library:folder:create', { name: 'Puzzles' });
+  const libraryWithFolder = await pending;
+  const puzzlesFolder = libraryWithFolder.folders.find(folder => folder.name === 'Puzzles');
+  assert(puzzlesFolder);
+  pending = once(dm.socket, 'library:update', library => library.files.some(file => file.name === 'secret-clue.txt'));
+  const playerLibraryUpdate = expectNoEvent(playerOne.socket, 'library:update');
+  dm.socket.emit('library:file:add', {
+    name: uploadedLibrary.name, url: uploadedLibrary.url, mimeType: uploadedLibrary.mimeType,
+    size: uploadedLibrary.size, folderId: puzzlesFolder.id
+  });
+  const libraryWithFile = await pending;
+  await playerLibraryUpdate;
+  const clueFile = libraryWithFile.files.find(file => file.name === 'secret-clue.txt');
+  assert.equal(clueFile.folderId, puzzlesFolder.id);
+  const playerBroadcastPromise = once(playerOne.socket, 'library:broadcast', broadcast => broadcast?.fileId === clueFile.id);
+  const dmBroadcastPromise = once(dm.socket, 'library:broadcast', broadcast => broadcast?.fileId === clueFile.id);
+  dm.socket.emit('library:broadcast', { fileId: clueFile.id, duration: 60 });
+  const [playerBroadcast, dmBroadcast] = await Promise.all([playerBroadcastPromise, dmBroadcastPromise]);
+  assert.equal(playerBroadcast.name, 'secret-clue.txt');
+  assert.equal(playerBroadcast.kind, 'text');
+  assert(dmBroadcast.expiresAt > dmBroadcast.startedAt);
+  assert.equal(dm.state.scene.mapName, 'No map loaded', 'Broadcasting must not replace the active scene');
+  pending = once(playerTwo.socket, 'library:broadcast', broadcast => broadcast === null);
+  dm.socket.emit('library:broadcast:clear');
+  await pending;
+
+  pending = once(playerOne.socket, 'action:denied', denial => /only the dungeon master can make private rolls/i.test(denial.message));
   playerOne.socket.emit('roll:make', { count: 1, sides: 20, private: true, label: 'Forbidden private roll' });
   await pending;
 

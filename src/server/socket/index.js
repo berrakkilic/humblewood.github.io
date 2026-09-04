@@ -2,6 +2,7 @@ const { registerAuthHandlers } = require('./auth');
 const { registerCharacterHandlers } = require('./characters');
 const { registerInitiativeHandlers } = require('./initiative');
 const { registerJukeboxHandlers } = require('./jukebox');
+const { registerLibraryHandlers } = require('./library');
 const { registerPresenceHandlers } = require('./presence');
 const { registerRollHandlers } = require('./rolls');
 const { registerSceneHandlers } = require('./scenes');
@@ -13,6 +14,7 @@ function registerSocketHandlers(io, room) {
     registerSceneHandlers(socket, room);
     registerTokenHandlers(socket, room);
     registerJukeboxHandlers(socket, room);
+    registerLibraryHandlers(socket, room);
     registerCharacterHandlers(socket, room);
     registerRollHandlers(socket, room);
     registerInitiativeHandlers(socket, room);

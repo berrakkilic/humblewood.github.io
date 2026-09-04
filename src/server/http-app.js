@@ -4,7 +4,11 @@ const path = require('path');
 const multer = require('multer');
 
 const FRONTEND_FILES = ['index.html', 'app.js', 'style.css'];
-const APP_ROUTES = ['/', '/map', '/characters', '/almanac', '/jukebox', '/dice'];
+const APP_ROUTES = ['/', '/map', '/characters', '/almanac', '/jukebox', '/library', '/dice'];
+const LIBRARY_EXTENSIONS = new Set([
+  '.png', '.jpg', '.jpeg', '.gif', '.webp', '.pdf',
+  '.txt', '.md', '.markdown', '.json', '.csv', '.js', '.ts', '.css', '.html', '.xml', '.yaml', '.yml'
+]);
 
 function frontendFile(config, filename) {
   const publicFile = path.join(config.publicDir, filename);
@@ -57,6 +61,13 @@ function createHttpApp(config) {
       callback(null, extension === '.mp3');
     }
   });
+  const libraryUpload = multer({
+    storage,
+    limits: { fileSize: 100 * 1024 * 1024 },
+    fileFilter: (req, file, callback) => {
+      callback(null, LIBRARY_EXTENSIONS.has(path.extname(file.originalname).toLowerCase()));
+    }
+  });
   const app = express();
 
   app.set('trust proxy', config.proxyTrust);
@@ -87,6 +98,22 @@ function createHttpApp(config) {
       }
       if (!req.file) return res.status(400).json({ error: 'Choose an MP3 file.' });
       return res.json({ url: `/uploads/${req.file.filename}`, name: req.file.originalname });
+    });
+  });
+
+  app.post('/api/upload/library', (req, res) => {
+    libraryUpload.single('file')(req, res, error => {
+      if (error) {
+        const status = error.code === 'LIMIT_FILE_SIZE' ? 413 : 400;
+        return res.status(status).json({ error: error.message || 'The file could not be uploaded.' });
+      }
+      if (!req.file) return res.status(400).json({ error: 'Choose a supported image, PDF, text or code file.' });
+      return res.json({
+        url: `/uploads/${req.file.filename}`,
+        name: req.file.originalname,
+        mimeType: req.file.mimetype,
+        size: req.file.size
+      });
     });
   });
 

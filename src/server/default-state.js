@@ -28,6 +28,11 @@ function createDefaultState() {
       startedAt: 0,
       seek: 0
     },
+    library: {
+      folders: [],
+      files: [],
+      broadcast: null
+    },
     characters: {},
     rollLog: [],
     initiative: { entries: [], round: 1, currentIndex: -1 }

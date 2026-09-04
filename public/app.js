@@ -58,6 +58,10 @@ let rulerAnchorPoint = null;
 let mapAreaDrag = null;
 let lastPointerSentAt = 0;
 let draggedInitiativeId = null;
+let libraryCurrentFolderId = 'all';
+let sharedHandoutRenderKey = '';
+let sharedHandoutTimer = null;
+let sharedHandoutContentRequest = 0;
 const pendingConcentrationChecks = new Map();
 const pointerFadeTimers = new Map();
 
@@ -174,6 +178,7 @@ socket.on('identify:result', result => {
   if (myRole !== 'dm') {
     dmPrivateRollsEnabled = false;
     privateRollLog = [];
+    if (router.current === 'library') router.navigate('map');
   }
   renderDmPrivateRollMode();
   if (myRole === 'dm') socket.emit('accounts:list');
@@ -190,6 +195,7 @@ const router = window.HumblewoodRouter.createRouter({
     characters: { path: '/characters', title: 'Characters' },
     almanac: { path: '/almanac', title: 'Humble Almanac' },
     jukebox: { path: '/jukebox', title: 'Jukebox' },
+    library: { path: '/library', title: 'DM Library' },
     dice: { path: '/dice', title: 'Dice' }
   },
   onRoute: renderRoute
@@ -200,6 +206,10 @@ window.HumblewoodAlmanac.mount(window.HumblewoodAlmanacData);
 document.getElementById('topbar-roll-btn').onclick = () => switchView('dice');
 
 function renderRoute(viewName, route) {
+  if (viewName === 'library' && myRole !== 'dm') {
+    router.navigate('map');
+    return;
+  }
   document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.view === viewName));
   document.querySelectorAll('.tab-btn').forEach(btn => {
     if (btn.dataset.view === viewName) btn.setAttribute('aria-current', 'page');
@@ -227,6 +237,8 @@ socket.on('state:full', (s) => {
   renderDmSidebarSummary();
   renderCharacters();
   renderJukebox();
+  renderLibrary();
+  renderSharedHandout();
   renderRollLog();
   renderInitiative();
   refreshCharacterRoller();
@@ -295,6 +307,19 @@ socket.on('npcs:update', npcs => {
   renderCharacters();
   refreshCharacterRoller();
   if (activeCombatTarget?.type === 'npc') renderCombatManager();
+});
+socket.on('library:update', library => {
+  if (!state) return;
+  state.library = library || { folders: [], files: [], broadcast: null };
+  renderLibrary();
+  renderSharedHandout();
+});
+socket.on('library:broadcast', broadcast => {
+  if (!state) return;
+  state.library = state.library || { folders: [], files: [], broadcast: null };
+  state.library.broadcast = broadcast || null;
+  renderSharedHandout();
+  if (broadcast) showToast(`Shared “${broadcast.name}” with the table.`);
 });
 socket.on('scenes:update', scenes => { state.savedScenes = scenes || []; renderSavedScenes(); });
 socket.on('scene:active', ({ name }) => { state.activeSceneName = name || null; renderSavedScenes(); renderDmSidebarSummary(); });
@@ -1434,6 +1459,302 @@ document.getElementById('delete-scene-btn').onclick = () => {
   if (!name) return showToast('Choose a saved scene first.');
   if (confirm(`Delete the saved scene “${name}”?`)) socket.emit('scene:delete', { name });
 };
+
+// ---- DM library and shared handouts ----
+function libraryData() {
+  const library = state?.library || {};
+  return {
+    folders: Array.isArray(library.folders) ? library.folders : [],
+    files: Array.isArray(library.files) ? library.files : [],
+    broadcast: library.broadcast || null
+  };
+}
+
+function libraryFolderName(folderId, folders) {
+  return folders.find(folder => folder.id === folderId)?.name || 'Unfiled';
+}
+
+function orderedLibraryFolders(folders) {
+  const ordered = [];
+  const visit = (parentId, depth, visited) => {
+    folders
+      .filter(folder => (folder.parentId || null) === parentId)
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .forEach(folder => {
+        if (visited.has(folder.id)) return;
+        const nextVisited = new Set(visited).add(folder.id);
+        ordered.push({ folder, depth });
+        visit(folder.id, depth + 1, nextVisited);
+      });
+  };
+  visit(null, 0, new Set());
+  return ordered;
+}
+
+function libraryFileIcon(file) {
+  return file.kind === 'image' ? '🖼️' : file.kind === 'pdf' ? '📕' : file.kind === 'text' ? '📝' : '📎';
+}
+
+function libraryFileSize(size) {
+  const bytes = Number(size) || 0;
+  if (!bytes) return 'Size unknown';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(bytes >= 10 * 1024 * 1024 ? 0 : 1)} MB`;
+}
+
+function renderLibrary() {
+  if (myRole !== 'dm') return;
+  const library = libraryData();
+  const currentFolder = libraryCurrentFolderId !== 'all' && libraryCurrentFolderId !== 'unfiled'
+    ? library.folders.find(folder => folder.id === libraryCurrentFolderId)
+    : null;
+  if (libraryCurrentFolderId !== 'all' && libraryCurrentFolderId !== 'unfiled' && !currentFolder) {
+    libraryCurrentFolderId = 'all';
+  }
+
+  const folderList = document.getElementById('library-folder-list');
+  const folderCount = document.getElementById('library-folder-count');
+  folderList.innerHTML = '';
+  folderCount.textContent = `${library.folders.length} folder${library.folders.length === 1 ? '' : 's'}`;
+
+  const appendFolderButton = (label, id, depth = 0, icon = '') => {
+    const row = document.createElement('div');
+    row.className = 'library-folder-row';
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'library-folder-btn' + (libraryCurrentFolderId === id ? ' active' : '');
+    button.style.paddingLeft = `${10 + depth * 16}px`;
+    button.textContent = `${icon}${icon ? ' ' : ''}${label}`;
+    button.onclick = () => {
+      libraryCurrentFolderId = id;
+      renderLibrary();
+    };
+    row.appendChild(button);
+    if (id !== 'all' && id !== 'unfiled') {
+      const folder = library.folders.find(entry => entry.id === id);
+      const actions = document.createElement('span');
+      actions.className = 'library-folder-actions';
+      const rename = document.createElement('button');
+      rename.type = 'button';
+      rename.className = 'library-inline-action';
+      rename.title = 'Rename folder';
+      rename.textContent = '✎';
+      rename.onclick = event => {
+        event.stopPropagation();
+        const name = prompt('Folder name', folder?.name || '');
+        if (name?.trim()) socket.emit('library:folder:rename', { id, name: name.trim() });
+      };
+      const remove = document.createElement('button');
+      remove.type = 'button';
+      remove.className = 'library-inline-action danger';
+      remove.title = 'Delete folder';
+      remove.textContent = '×';
+      remove.onclick = event => {
+        event.stopPropagation();
+        if (confirm(`Delete “${folder?.name || 'this folder'}”? Its files will be moved to the parent folder.`)) {
+          socket.emit('library:folder:delete', { id });
+        }
+      };
+      actions.append(rename, remove);
+      row.appendChild(actions);
+    }
+    folderList.appendChild(row);
+  };
+
+  appendFolderButton('All files', 'all', 0, '📚');
+  appendFolderButton('Unfiled', 'unfiled', 0, '🗂️');
+  orderedLibraryFolders(library.folders).forEach(({ folder, depth }) => appendFolderButton(folder.name, folder.id, depth + 1, '📁'));
+
+  const files = libraryCurrentFolderId === 'all'
+    ? library.files
+    : library.files.filter(file => libraryCurrentFolderId === 'unfiled'
+      ? !file.folderId
+      : file.folderId === libraryCurrentFolderId);
+  const currentFolderLabel = libraryCurrentFolderId === 'all'
+    ? 'All files'
+    : libraryCurrentFolderId === 'unfiled' ? 'Unfiled' : currentFolder?.name || 'All files';
+  document.getElementById('library-current-folder').textContent = currentFolderLabel;
+  document.getElementById('library-file-summary').textContent = `${files.length} file${files.length === 1 ? '' : 's'} here`;
+
+  const fileList = document.getElementById('library-file-list');
+  fileList.innerHTML = '';
+  if (!files.length) {
+    fileList.innerHTML = '<div class="library-empty"><span>🍂</span><strong>No files here yet</strong><p>Upload a handout, clue, map or puzzle file to begin.</p></div>';
+    return;
+  }
+
+  const folderOptions = orderedLibraryFolders(library.folders);
+  files
+    .slice()
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .forEach(file => {
+      const card = document.createElement('article');
+      card.className = 'library-file-card';
+      card.innerHTML = `
+        <div class="library-file-info">
+          <span class="library-file-icon" aria-hidden="true">${libraryFileIcon(file)}</span>
+          <div><strong class="library-file-name"></strong><span class="library-file-meta"></span></div>
+        </div>
+        <div class="library-file-actions">
+          <label class="library-move-control">Folder
+            <select class="library-file-folder" aria-label="Folder for file"></select>
+          </label>
+          <button class="btn-primary library-share-btn" type="button">Show to players</button>
+          <button class="btn-ghost library-rename-btn" type="button">Rename</button>
+          <button class="btn-danger-soft library-delete-btn" type="button">Delete</button>
+        </div>`;
+      card.querySelector('.library-file-name').textContent = file.name;
+      card.querySelector('.library-file-meta').textContent = `${String(file.kind || 'file').toUpperCase()} · ${libraryFileSize(file.size)} · ${libraryFolderName(file.folderId, library.folders)}`;
+      const folderSelect = card.querySelector('.library-file-folder');
+      folderSelect.innerHTML = '<option value="">Unfiled</option>';
+      folderOptions.forEach(({ folder, depth }) => {
+        const option = document.createElement('option');
+        option.value = folder.id;
+        option.textContent = `${'— '.repeat(depth)}${folder.name}`;
+        folderSelect.appendChild(option);
+      });
+      folderSelect.value = file.folderId || '';
+      folderSelect.onchange = () => socket.emit('library:file:move', { id: file.id, folderId: folderSelect.value });
+      card.querySelector('.library-share-btn').onclick = () => {
+        const duration = Number(document.getElementById('library-broadcast-duration').value) || 0;
+        socket.emit('library:broadcast', { fileId: file.id, duration });
+      };
+      card.querySelector('.library-rename-btn').onclick = () => {
+        const name = prompt('File name', file.name);
+        if (name?.trim()) socket.emit('library:file:rename', { id: file.id, name: name.trim() });
+      };
+      card.querySelector('.library-delete-btn').onclick = () => {
+        if (confirm(`Delete “${file.name}” from the library?`)) socket.emit('library:file:delete', { id: file.id });
+      };
+      fileList.appendChild(card);
+    });
+}
+
+function formatSharedHandoutTimer(expiresAt) {
+  const seconds = Math.max(0, Math.ceil((Number(expiresAt) - Date.now()) / 1000));
+  if (seconds < 60) return `${seconds}s remaining`;
+  const minutes = Math.floor(seconds / 60);
+  const remainder = seconds % 60;
+  return `${minutes}m${remainder ? ` ${remainder}s` : ''} remaining`;
+}
+
+function renderSharedHandoutContent(broadcast) {
+  const content = document.getElementById('shared-handout-content');
+  content.innerHTML = '';
+  if (broadcast.kind === 'image') {
+    const image = document.createElement('img');
+    image.src = broadcast.url;
+    image.alt = broadcast.name;
+    content.appendChild(image);
+    return;
+  }
+  if (broadcast.kind === 'pdf') {
+    const frame = document.createElement('iframe');
+    frame.src = broadcast.url;
+    frame.title = broadcast.name;
+    content.appendChild(frame);
+    return;
+  }
+  if (broadcast.kind === 'text') {
+    const pre = document.createElement('pre');
+    pre.textContent = 'Loading handout…';
+    content.appendChild(pre);
+    const requestId = ++sharedHandoutContentRequest;
+    fetch(broadcast.url)
+      .then(response => {
+        if (!response.ok) throw new Error('Could not load the handout.');
+        return response.text();
+      })
+      .then(text => {
+        if (requestId === sharedHandoutContentRequest) pre.textContent = text;
+      })
+      .catch(() => {
+        if (requestId === sharedHandoutContentRequest) pre.textContent = 'This handout could not be loaded.';
+      });
+    return;
+  }
+  const message = document.createElement('p');
+  message.textContent = 'This file type cannot be previewed in the handout overlay.';
+  const link = document.createElement('a');
+  link.href = broadcast.url;
+  link.target = '_blank';
+  link.rel = 'noopener';
+  link.textContent = 'Open or download the file';
+  message.append(' ', link);
+  content.appendChild(message);
+}
+
+function updateSharedHandoutTimer() {
+  const broadcast = state?.library?.broadcast;
+  const overlay = document.getElementById('shared-handout-overlay');
+  if (!broadcast) return;
+  if (broadcast.expiresAt && Number(broadcast.expiresAt) <= Date.now()) {
+    overlay.classList.add('hidden');
+    overlay.setAttribute('aria-hidden', 'true');
+    clearInterval(sharedHandoutTimer);
+    sharedHandoutTimer = null;
+    return;
+  }
+  document.getElementById('shared-handout-timer').textContent = broadcast.expiresAt
+    ? formatSharedHandoutTimer(broadcast.expiresAt)
+    : 'Shown until stopped';
+}
+
+function renderSharedHandout() {
+  const overlay = document.getElementById('shared-handout-overlay');
+  const broadcast = state?.library?.broadcast;
+  clearInterval(sharedHandoutTimer);
+  sharedHandoutTimer = null;
+  if (!broadcast || (broadcast.expiresAt && Number(broadcast.expiresAt) <= Date.now())) {
+    overlay.classList.add('hidden');
+    overlay.setAttribute('aria-hidden', 'true');
+    sharedHandoutRenderKey = '';
+    return;
+  }
+  overlay.classList.remove('hidden');
+  overlay.setAttribute('aria-hidden', 'false');
+  document.getElementById('shared-handout-title').textContent = broadcast.name || 'Shared handout';
+  updateSharedHandoutTimer();
+  const renderKey = `${broadcast.fileId}:${broadcast.url}:${broadcast.kind}`;
+  if (sharedHandoutRenderKey !== renderKey) {
+    sharedHandoutRenderKey = renderKey;
+    renderSharedHandoutContent(broadcast);
+  }
+  if (broadcast.expiresAt) sharedHandoutTimer = setInterval(updateSharedHandoutTimer, 250);
+}
+
+document.getElementById('library-new-folder-btn').onclick = () => {
+  const name = prompt('Folder name');
+  if (name?.trim()) {
+    const parentId = libraryCurrentFolderId !== 'all' && libraryCurrentFolderId !== 'unfiled' ? libraryCurrentFolderId : null;
+    socket.emit('library:folder:create', { name: name.trim(), parentId });
+  }
+};
+document.getElementById('library-upload-btn').onclick = () => document.getElementById('library-file-input').click();
+document.getElementById('library-file-input').onchange = async event => {
+  const file = event.target.files[0];
+  event.target.value = '';
+  if (!file) return;
+  const folderId = libraryCurrentFolderId !== 'all' && libraryCurrentFolderId !== 'unfiled' ? libraryCurrentFolderId : null;
+  const button = document.getElementById('library-upload-btn');
+  button.disabled = true;
+  try {
+    const uploaded = await uploadLibraryFile(file);
+    socket.emit('library:file:add', {
+      name: uploaded.name || file.name,
+      url: uploaded.url,
+      mimeType: uploaded.mimeType || file.type,
+      size: uploaded.size || file.size,
+      folderId
+    });
+  } catch (error) {
+    showToast(error.message || 'The file could not be uploaded.');
+  } finally {
+    button.disabled = false;
+  }
+};
+document.getElementById('shared-handout-stop-btn').onclick = () => socket.emit('library:broadcast:clear');
 
 // ---- Token and NPC creation ----
 document.getElementById('token-kind').onchange = updateTokenCreateForm;
@@ -4213,5 +4534,14 @@ async function uploadAudioFile(file) {
   const res = await fetch('/api/upload/audio', { method: 'POST', body: form });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || 'The MP3 could not be uploaded.');
+  return data;
+}
+
+async function uploadLibraryFile(file) {
+  const form = new FormData();
+  form.append('file', file);
+  const res = await fetch('/api/upload/library', { method: 'POST', body: form });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || 'The file could not be uploaded.');
   return data;
 }

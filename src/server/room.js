@@ -12,14 +12,16 @@ const CONDITIONS = new Set([
   'Stunned', 'Unconscious'
 ]);
 
-function createRoom({ dataDir, dmPin, io }) {
+function createRoom({ dataDir, dmPin, io, uploadDir }) {
   const defaultState = createDefaultState();
   let state = createDefaultState();
   let saveTimer = null;
   let pendingSave = false;
+  let libraryBroadcastTimer = null;
 
   fs.mkdirSync(dataDir, { recursive: true });
   const db = createClient({ url: `file:${path.join(dataDir, 'local.db')}` });
+  const libraryUploadDir = uploadDir ? path.resolve(uploadDir) : null;
 
   function cloneJson(value) {
     return JSON.parse(JSON.stringify(value));
@@ -27,6 +29,88 @@ function createRoom({ dataDir, dmPin, io }) {
 
   function cleanPronouns(value) {
     return String(value || '').trim().replace(/\s+/g, ' ').slice(0, 60);
+  }
+
+  const LIBRARY_TEXT_EXTENSIONS = new Set([
+    '.txt', '.md', '.markdown', '.json', '.csv', '.js', '.ts', '.css', '.html', '.xml', '.yaml', '.yml'
+  ]);
+
+  function libraryFileKind(file) {
+    const mimeType = String(file?.mimeType || '').toLowerCase();
+    const extension = path.extname(String(file?.name || file?.url || '')).toLowerCase();
+    if (mimeType.startsWith('image/') || ['.png', '.jpg', '.jpeg', '.gif', '.webp'].includes(extension)) return 'image';
+    if (mimeType === 'application/pdf' || extension === '.pdf') return 'pdf';
+    if (mimeType.startsWith('text/') || LIBRARY_TEXT_EXTENSIONS.has(extension)) return 'text';
+    return 'file';
+  }
+
+  function cleanLibraryFolder(folder, fallbackId) {
+    if (!folder || typeof folder !== 'object') return null;
+    const id = String(folder.id || fallbackId || '').trim().slice(0, 120);
+    const name = String(folder.name || '').trim().replace(/\s+/g, ' ').slice(0, 80);
+    if (!id || !name) return null;
+    return {
+      id,
+      name,
+      parentId: String(folder.parentId || '').trim().slice(0, 120) || null,
+      createdAt: Number(folder.createdAt) || Date.now()
+    };
+  }
+
+  function cleanLibraryFile(file, fallbackId) {
+    if (!file || typeof file !== 'object') return null;
+    const id = String(file.id || fallbackId || '').trim().slice(0, 140);
+    const name = String(file.name || '').trim().replace(/\s+/g, ' ').slice(0, 160);
+    const url = String(file.url || '').trim().slice(0, 1000);
+    if (!id || !name || !/^\/uploads\/[A-Za-z0-9._~%()+-]+$/.test(url)) return null;
+    const cleaned = {
+      id,
+      name,
+      url,
+      mimeType: String(file.mimeType || 'application/octet-stream').trim().slice(0, 120),
+      size: Math.max(0, Math.min(100 * 1024 * 1024, Number(file.size) || 0)),
+      folderId: String(file.folderId || '').trim().slice(0, 120) || null,
+      createdAt: Number(file.createdAt) || Date.now()
+    };
+    cleaned.kind = libraryFileKind(cleaned);
+    return cleaned;
+  }
+
+  function normalizeLibrary(library) {
+    const folders = [];
+    const folderIds = new Set();
+    (Array.isArray(library?.folders) ? library.folders : []).forEach((folder, index) => {
+      const cleaned = cleanLibraryFolder(folder, `folder_${index}`);
+      if (!cleaned || folderIds.has(cleaned.id)) return;
+      folderIds.add(cleaned.id);
+      folders.push(cleaned);
+    });
+    folders.forEach(folder => {
+      if (!folder.parentId || folder.parentId === folder.id || !folderIds.has(folder.parentId)) folder.parentId = null;
+    });
+
+    const files = [];
+    const fileIds = new Set();
+    (Array.isArray(library?.files) ? library.files : []).forEach((file, index) => {
+      const cleaned = cleanLibraryFile(file, `file_${index}`);
+      if (!cleaned || fileIds.has(cleaned.id)) return;
+      if (!cleaned.folderId || !folderIds.has(cleaned.folderId)) cleaned.folderId = null;
+      fileIds.add(cleaned.id);
+      files.push(cleaned);
+    });
+
+    const rawBroadcast = library?.broadcast;
+    const broadcastFile = rawBroadcast && files.find(file => file.id === rawBroadcast.fileId);
+    const expiresAt = Math.max(0, Number(rawBroadcast?.expiresAt) || 0);
+    const broadcast = broadcastFile && (!expiresAt || expiresAt > Date.now())
+      ? {
+        fileId: broadcastFile.id,
+        startedAt: Number(rawBroadcast.startedAt) || Date.now(),
+        expiresAt
+      }
+      : null;
+    state.library = { folders, files, broadcast };
+    return state.library;
   }
 
   function cleanAttacks(attacks) {
@@ -336,6 +420,7 @@ function createRoom({ dataDir, dmPin, io }) {
         ...saved,
         scene: { ...defaultState.scene, ...(saved.scene || {}) },
         jukebox: { ...defaultState.jukebox, ...(saved.jukebox || {}) },
+        library: saved.library && typeof saved.library === 'object' ? saved.library : defaultState.library,
         characters: saved.characters || {},
         npcs: saved.npcs && typeof saved.npcs === 'object' ? saved.npcs : {},
         savedScenes: saved.savedScenes && typeof saved.savedScenes === 'object' ? saved.savedScenes : {},
@@ -354,6 +439,7 @@ function createRoom({ dataDir, dmPin, io }) {
       if (!Array.isArray(state.scene.doodlePaths)) state.scene.doodlePaths = [];
       if (!Array.isArray(state.scene.fogShapes)) state.scene.fogShapes = [];
       if (!Array.isArray(state.initiative.entries)) state.initiative.entries = [];
+      normalizeLibrary(state.library);
       Object.values(state.characters).forEach(normalizeCharacter);
       Object.values(state.npcs).forEach(normalizeNpc);
       state.tokens.forEach(token => {
@@ -370,6 +456,7 @@ function createRoom({ dataDir, dmPin, io }) {
       });
       normalizeSavedScenes();
       syncNpcRosterFromTokens(state.tokens, true);
+      scheduleLibraryBroadcastExpiry();
     } catch (error) {
       console.warn('Could not parse saved state, starting fresh.', error.message);
     }
@@ -520,6 +607,89 @@ function createRoom({ dataDir, dmPin, io }) {
     return cloneJson(normalizeNpc(npc));
   }
 
+  function publicLibraryBroadcast() {
+    const active = state.library?.broadcast;
+    if (!active) return null;
+    const file = state.library.files.find(entry => entry.id === active.fileId);
+    if (!file) return null;
+    return {
+      fileId: file.id,
+      name: file.name,
+      url: file.url,
+      mimeType: file.mimeType,
+      size: file.size,
+      kind: file.kind,
+      startedAt: active.startedAt,
+      expiresAt: active.expiresAt
+    };
+  }
+
+  function publicLibrary() {
+    return {
+      folders: cloneJson(state.library?.folders || []),
+      files: cloneJson(state.library?.files || []),
+      broadcast: publicLibraryBroadcast()
+    };
+  }
+
+  function emitLibraryUpdate() {
+    for (const client of io.sockets.sockets.values()) {
+      if (isDm(client)) client.emit('library:update', publicLibrary());
+    }
+  }
+
+  function emitLibraryBroadcast() {
+    io.emit('library:broadcast', publicLibraryBroadcast());
+  }
+
+  function scheduleLibraryBroadcastExpiry() {
+    clearTimeout(libraryBroadcastTimer);
+    libraryBroadcastTimer = null;
+    const expiresAt = Number(state.library?.broadcast?.expiresAt) || 0;
+    if (!expiresAt) return;
+    const delay = expiresAt - Date.now();
+    if (delay <= 0) {
+      state.library.broadcast = null;
+      return;
+    }
+    libraryBroadcastTimer = setTimeout(() => {
+      if (Number(state.library?.broadcast?.expiresAt) !== expiresAt) return;
+      state.library.broadcast = null;
+      persistState();
+      emitLibraryBroadcast();
+      libraryBroadcastTimer = null;
+    }, delay);
+  }
+
+  function clearLibraryBroadcast() {
+    if (!state.library?.broadcast) return false;
+    state.library.broadcast = null;
+    clearTimeout(libraryBroadcastTimer);
+    libraryBroadcastTimer = null;
+    persistState();
+    emitLibraryBroadcast();
+    return true;
+  }
+
+  function removeLibraryFileAsset(file) {
+    if (!libraryUploadDir || !file?.url) return;
+    const encodedName = String(file.url).replace(/^\/uploads\//, '');
+    let filename;
+    try {
+      filename = decodeURIComponent(encodedName);
+    } catch {
+      return;
+    }
+    if (!filename || filename !== path.basename(filename)) return;
+    const target = path.join(libraryUploadDir, filename);
+    if (path.dirname(target) !== libraryUploadDir) return;
+    try {
+      fs.unlinkSync(target);
+    } catch (error) {
+      if (error.code !== 'ENOENT') console.warn('Could not remove library file:', error.message);
+    }
+  }
+
   function publicStateFor(socket) {
     const visibleCharacters = Object.entries(state.characters)
       .filter(([, character]) => isDm(socket) || ownsCharacter(socket, character));
@@ -533,7 +703,8 @@ function createRoom({ dataDir, dmPin, io }) {
       npcs: isDm(socket)
         ? Object.fromEntries(Object.entries(state.npcs).map(([id, npc]) => [id, publicNpc(npc)]))
         : {},
-      savedScenes: isDm(socket) ? savedSceneMetadata() : []
+      savedScenes: isDm(socket) ? savedSceneMetadata() : [],
+      library: isDm(socket) ? publicLibrary() : { broadcast: publicLibraryBroadcast() }
     };
   }
 
@@ -713,11 +884,16 @@ function createRoom({ dataDir, dmPin, io }) {
     broadcastState,
     cleanDoodlePath,
     cleanFogShape,
+    cleanLibraryFile,
+    cleanLibraryFolder,
+    clearLibraryBroadcast,
     cloneJson,
     controlsToken,
     deny,
     doodleAuthorKey,
     emitCharacterUpdate,
+    emitLibraryBroadcast,
+    emitLibraryUpdate,
     emitNpcRoster,
     emitSavedScenes,
     emitSceneUpdate,
@@ -725,6 +901,7 @@ function createRoom({ dataDir, dmPin, io }) {
     isDm,
     makePasswordRecord,
     markSceneDirty,
+    normalizeLibrary,
     normalizeCharacter,
     normalizeNpc,
     normalizeToken,
@@ -736,7 +913,9 @@ function createRoom({ dataDir, dmPin, io }) {
     publicDoodlePath,
     publicStateFor,
     publicToken,
+    removeLibraryFileAsset,
     removeInitiativeForTokenIds,
+    scheduleLibraryBroadcastExpiry,
     setSceneDirty,
     snapCoordinateToCell,
     syncCharacterTokens,

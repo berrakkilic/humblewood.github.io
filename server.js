@@ -9,7 +9,7 @@ const config = loadConfig(__dirname);
 const app = createHttpApp(config);
 const server = http.createServer(app);
 const io = new Server(server);
-const room = createRoom({ dataDir: config.dataDir, dmPin: config.dmPin, io });
+const room = createRoom({ dataDir: config.dataDir, uploadDir: config.uploadDir, dmPin: config.dmPin, io });
 
 registerSocketHandlers(io, room);
 
