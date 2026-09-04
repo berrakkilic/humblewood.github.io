@@ -333,6 +333,7 @@
                 <option value="item">Item</option>
                 <option value="pc">Player character</option>
               </select>
+              <input type="text" id="token-pronouns" maxlength="60" placeholder="Pronouns, e.g. she/her">
               <div class="npc-create-fields" id="npc-create-fields">
                 <div class="npc-stat-inputs">
                   <label>HP <input type="number" id="npc-hp" min="1" value="10"></label>
@@ -527,7 +528,8 @@
                   <input type="file" id="sf-portrait" accept="image/*">
                 </div>
               </div>
-              <div class="field span-2"><label>Name</label><input type="text" id="sf-name" placeholder="Bonk..."></div>
+              <div class="field"><label>Name</label><input type="text" id="sf-name" placeholder="Bonk..."></div>
+              <div class="field"><label>Pronouns</label><input type="text" id="sf-pronouns" maxlength="60" placeholder="she/her, he/him, they/them..."></div>
 
               <div class="field">
                 <label>Species of the Wood</label>

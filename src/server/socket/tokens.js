@@ -22,6 +22,7 @@ function registerTokenHandlers(socket, room) {
         ownerUsername: character.ownerUsername || socket.data.username,
         ownerId: null,
         label: character.name,
+        pronouns: character.pronouns,
         kind: 'pc',
         imageUrl: character.portraitUrl || null,
         x: snapCoordinateToCell(state.scene.gridSize / 2, state.scene.gridSize, state.scene.gridOffsetX),
@@ -43,6 +44,7 @@ function registerTokenHandlers(socket, room) {
       token = {
         id: `t${Date.now()}${Math.random().toString(36).slice(2, 6)}`,
         label: String(requested.label || linkedCharacter?.name || 'Token').trim().slice(0, 100),
+        pronouns: linkedCharacter?.pronouns || requested.pronouns || '',
         kind,
         imageUrl: String(requested.imageUrl || linkedCharacter?.portraitUrl || '').slice(0, 1000) || null,
         x: Number.isFinite(Number(requested.x))
@@ -66,6 +68,7 @@ function registerTokenHandlers(socket, room) {
         const npc = normalizeNpc({
           id: requested.npcId,
           name: token.label,
+          pronouns: requested.pronouns,
           imageUrl: token.imageUrl,
           hp: token.hp,
           maxHp: token.maxHp,
@@ -232,6 +235,7 @@ function registerTokenHandlers(socket, room) {
     Object.values(state.savedScenes).forEach(saved => {
       saved.tokens.filter(token => token.npcId === updated.id).forEach(token => {
         token.label = updated.name;
+        token.pronouns = updated.pronouns;
         token.imageUrl = updated.imageUrl;
         token.maxHp = updated.maxHp;
         token.hp = Math.min(Number(token.hp) || 0, updated.maxHp);

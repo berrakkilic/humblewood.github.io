@@ -99,6 +99,8 @@ async function run() {
     assert.match(html, /id="dm-private-roll-banner"/);
     assert.match(html, /id="new-npc-sheet-btn"/);
     assert.match(html, /id="npc-statblock-import-btn"/);
+    assert.match(html, /id="sf-pronouns"/);
+    assert.match(html, /id="token-pronouns"/);
     assert.match(html, /id="attack-preset-select"/);
     assert.match(html, /js\/phb-spell-presets\.js/);
     assert.match(html, /js\/creation-presets\.js/);
@@ -113,6 +115,9 @@ async function run() {
     assert.match(html, /The Humble Almanac/);
     assert.doesNotMatch(html, /Mossbound Almanac/i);
   }
+  const appSource = await (await fetch(`http://127.0.0.1:${port}/app.js`)).text();
+  assert.match(appSource, /function tokenHoverText\(token\)/);
+  assert.match(appSource, /Pronouns: \$\{pronouns\}/);
   const routerResponse = await fetch(`http://127.0.0.1:${port}/js/router.js`);
   assert.equal(routerResponse.status, 200);
   assert.match(await routerResponse.text(), /createRouter/);
@@ -189,6 +194,29 @@ async function run() {
   });
   await pending;
 
+  const characterSavedPromise = once(playerOne.socket, 'character:update', character => character.name === 'Hazel Finch');
+  playerOne.socket.emit('character:save', {
+    name: 'Hazel Finch',
+    pronouns: 'they/them',
+    fields: {
+      name: 'Hazel Finch', pronouns: 'they/them', species: 'Corvum (birdfolk)', subrace: 'Dusk Corvum',
+      class: 'Rogue', subclass: 'Thief', level: '1', hp: '10', maxhp: '10', ac: '13',
+      str: '10', dex: '16', con: '10', int: '10', wis: '10', cha: '10'
+    }
+  });
+  const hazelFinch = await characterSavedPromise;
+  assert.equal(hazelFinch.pronouns, 'they/them');
+  assert.equal(hazelFinch.fields.pronouns, 'they/them');
+
+  const pcTokenForDmPromise = once(dm.socket, 'token:add', token => token.characterName === 'Hazel Finch');
+  const pcTokenForPlayerTwoPromise = once(playerTwo.socket, 'token:add', token => token.characterName === 'Hazel Finch');
+  playerOne.socket.emit('token:add', { characterName: 'Hazel Finch' });
+  const [hazelToken, playerHazelToken] = await Promise.all([pcTokenForDmPromise, pcTokenForPlayerTwoPromise]);
+  assert.equal(playerHazelToken.pronouns, 'they/them');
+  pending = once(playerTwo.socket, 'token:remove', removed => removed.id === hazelToken.id);
+  playerOne.socket.emit('token:remove', { id: hazelToken.id });
+  await pending;
+
   pending = once(playerOne.socket, 'scene:update', scene => scene.playerDoodlingEnabled === true);
   dm.socket.emit('scene:setPlayerDoodling', { enabled: true });
   await pending;
@@ -225,10 +253,13 @@ async function run() {
   await pending;
 
   pending = once(dm.socket, 'token:add', token => token.label === 'Wolf');
+  const playerWolfPromise = once(playerOne.socket, 'token:add', token => token.label === 'Wolf');
   dm.socket.emit('token:add', {
-    label: 'Wolf', kind: 'npc', x: 25, y: 25, hp: 12, maxHp: 12, ac: 13, initiativeModifier: 2
+    label: 'Wolf', pronouns: 'it/its', kind: 'npc', x: 25, y: 25, hp: 12, maxHp: 12, ac: 13, initiativeModifier: 2
   });
   const wolf = await pending;
+  const playerWolf = await playerWolfPromise;
+  assert.equal(playerWolf.pronouns, 'it/its');
   pending = once(playerOne.socket, 'action:denied', denial => /only the dungeon master can duplicate/i.test(denial.message));
   playerOne.socket.emit('token:duplicate', { id: wolf.id });
   await pending;
@@ -236,19 +267,20 @@ async function run() {
   dm.socket.emit('token:duplicate', { id: wolf.id });
   const duplicate = await pending;
   assert.equal(duplicate.label, 'Wolf 2');
+  assert.equal(duplicate.pronouns, 'it/its');
   assert.notEqual(duplicate.npcId, wolf.npcId);
   assert.equal(duplicate.x, wolf.x + 50);
 
   const npcRosterPromise = once(dm.socket, 'npcs:update', npcs => Object.values(npcs).some(npc => npc.name === 'Ash Mage'));
   const npcSavedPromise = once(dm.socket, 'npc:saved', result => result.name === 'Ash Mage');
   dm.socket.emit('npc:create', {
-    name: 'Ash Mage', hp: 33, maxHp: 33, ac: 14, initiativeModifier: 2,
+    name: 'Ash Mage', pronouns: 'she/her', hp: 33, maxHp: 33, ac: 14, initiativeModifier: 2,
     attacks: [{ name: 'Quarterstaff', bonus: '+4', damage: '1d6+2 bludgeoning', details: 'Reach 5 ft.' }],
     spells: [{ name: 'Fire Bolt', level: 0, attack: 'Ranged spell attack', damage: '1d10 fire', source: 'Core 5e' }],
     spellcasting: { className: 'NPC spellcaster', ability: 'INT', saveDc: 13, attackBonus: 5 },
     combat: { spellSlots: { 1: { total: 4, used: 0 }, 2: { total: 2, used: 0 } } },
     sheet: {
-      name: 'Ash Mage', challenge: '2', attacks: [{ name: 'Quarterstaff', bonus: '+4', damage: '1d6+2 bludgeoning' }],
+      name: 'Ash Mage', pronouns: 'she/her', challenge: '2', attacks: [{ name: 'Quarterstaff', bonus: '+4', damage: '1d6+2 bludgeoning' }],
       spells: [{ name: 'Fire Bolt', level: 0, attack: 'Ranged spell attack', damage: '1d10 fire' }],
       fields: { name: 'Ash Mage', hp: '33', maxhp: '33', ac: '14', int: '16', 'spell-slots-1': '4', 'spell-slots-2': '2' }
     }
@@ -256,6 +288,7 @@ async function run() {
   const [npcRoster, savedNpc] = await Promise.all([npcRosterPromise, npcSavedPromise]);
   const ashMage = Object.values(npcRoster).find(npc => npc.name === 'Ash Mage');
   assert.equal(savedNpc.id, ashMage.id);
+  assert.equal(ashMage.pronouns, 'she/her');
   assert.equal(ashMage.sheet.challenge, '2');
   assert.equal(ashMage.spells[0].name, 'Fire Bolt');
   assert.equal(ashMage.combat.spellSlots[1].total, 4);
@@ -288,6 +321,7 @@ async function run() {
   assert.equal(ashMageToken.combat.spellSlots[2].total, 2);
   assert.equal(playerAshMageToken.spells, undefined, 'NPC spell lists must remain DM-only');
   assert.equal(playerAshMageToken.attacks, undefined, 'NPC attacks must remain DM-only');
+  assert.equal(playerAshMageToken.pronouns, 'she/her', 'NPC pronouns must remain visible to players');
   pending = once(dm.socket, 'token:update', token => token.id === ashMageToken.id && token.combat.spellSlots[1].used === 1);
   dm.socket.emit('token:combat:update', { id: ashMageToken.id, action: 'spellSlot', level: 1, delta: 1 });
   await pending;

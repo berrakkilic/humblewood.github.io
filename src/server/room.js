@@ -25,6 +25,10 @@ function createRoom({ dataDir, dmPin, io }) {
     return JSON.parse(JSON.stringify(value));
   }
 
+  function cleanPronouns(value) {
+    return String(value || '').trim().replace(/\s+/g, ' ').slice(0, 60);
+  }
+
   function cleanAttacks(attacks) {
     if (!Array.isArray(attacks)) return [];
     return attacks.slice(0, 60).map(attack => ({
@@ -65,6 +69,7 @@ function createRoom({ dataDir, dmPin, io }) {
     });
     return {
       name: String(sheet.name || fields.name || '').trim().slice(0, 100),
+      pronouns: cleanPronouns(sheet.pronouns ?? fields.pronouns),
       portraitUrl: String(sheet.portraitUrl || '').slice(0, 1000) || null,
       challenge: String(sheet.challenge || '').trim().slice(0, 20),
       species: String(sheet.species || '').slice(0, 100),
@@ -106,6 +111,7 @@ function createRoom({ dataDir, dmPin, io }) {
     if (!npc || typeof npc !== 'object') return null;
     npc.id = String(npc.id || (`npc_${Date.now()}${Math.random().toString(36).slice(2, 7)}`)).slice(0, 120);
     npc.name = String(npc.name || npc.label || 'Unnamed NPC').trim().slice(0, 100) || 'Unnamed NPC';
+    npc.pronouns = cleanPronouns(npc.pronouns ?? npc.sheet?.pronouns ?? npc.sheet?.fields?.pronouns);
     npc.imageUrl = String(npc.imageUrl || '').slice(0, 1000) || null;
     npc.maxHp = Math.max(1, Math.min(9999, Number(npc.maxHp ?? npc.hp) || 10));
     npc.hp = Math.max(0, Math.min(npc.maxHp, Number(npc.hp) || 0));
@@ -128,6 +134,10 @@ function createRoom({ dataDir, dmPin, io }) {
         : Math.max(-99, Math.min(99, Number(spellAttackRaw) || 0))
     };
     npc.sheet = cleanNpcSheet(npc.sheet);
+    if (npc.sheet) {
+      npc.sheet.pronouns = npc.pronouns;
+      npc.sheet.fields.pronouns = npc.pronouns;
+    }
     npc.notes = String(npc.notes || '').slice(0, 4000);
     const combat = npc.combat && typeof npc.combat === 'object' ? npc.combat : {};
     const spellSlots = {};
@@ -152,6 +162,7 @@ function createRoom({ dataDir, dmPin, io }) {
     return normalizeNpc({
       id: token.npcId || (`npc_${token.id}`),
       name: token.label,
+      pronouns: token.pronouns,
       imageUrl: token.imageUrl,
       hp: token.hp,
       maxHp: token.maxHp,
@@ -172,6 +183,7 @@ function createRoom({ dataDir, dmPin, io }) {
     token.id = String(token.id || (`t${Date.now()}${Math.random().toString(36).slice(2, 7)}`)).slice(0, 140);
     token.kind = ['pc', 'npc', 'item'].includes(token.kind) ? token.kind : 'npc';
     token.label = String(token.label || 'Token').trim().slice(0, 100) || 'Token';
+    token.pronouns = token.kind === 'item' ? '' : cleanPronouns(token.pronouns);
     token.imageUrl = String(token.imageUrl || '').slice(0, 1000) || null;
     token.size = Math.max(18, Math.min(180, Number(token.size) || 44));
     token.sizeScale = Math.max(0.35, Math.min(3, Number(token.sizeScale) || 1));
@@ -196,6 +208,7 @@ function createRoom({ dataDir, dmPin, io }) {
     if (token.kind === 'npc') {
       token.npcId = String(token.npcId || (`npc_${token.id}`)).slice(0, 120);
       const npc = normalizeNpc({ ...token, id: token.npcId, name: token.label });
+      token.pronouns = npc.pronouns;
       token.ac = npc.ac;
       token.initiativeModifier = npc.initiativeModifier;
       token.attacks = npc.attacks;
@@ -227,6 +240,7 @@ function createRoom({ dataDir, dmPin, io }) {
     normalizeNpc(npc);
     token.npcId = npc.id;
     token.label = npc.name;
+    token.pronouns = npc.pronouns;
     token.kind = 'npc';
     token.imageUrl = npc.imageUrl;
     token.sizeScale = Math.max(0.35, Math.min(3, Number(token.sizeScale ?? npc.tokenScale) || 1));
@@ -245,6 +259,8 @@ function createRoom({ dataDir, dmPin, io }) {
 
   function normalizeCharacter(character) {
     if (!character.fields || typeof character.fields !== 'object') character.fields = {};
+    character.pronouns = cleanPronouns(character.pronouns ?? character.fields.pronouns);
+    character.fields.pronouns = character.pronouns;
     character.hp = Math.max(0, Number(character.hp ?? character.fields.hp) || 0);
     character.maxHp = Math.max(0, Number(character.maxHp ?? character.fields.maxhp) || 0);
     character.tempHp = Math.max(0, Number(character.tempHp ?? character.fields.temphp) || 0);
@@ -470,6 +486,9 @@ function createRoom({ dataDir, dmPin, io }) {
 
   function publicToken(socket, token) {
     const { ownerId, ownerUsername, ...safe } = token;
+    if (token.characterName) {
+      safe.pronouns = cleanPronouns(state.characters[token.characterName]?.pronouns || safe.pronouns);
+    }
     if (!isDm(socket) && token.kind === 'npc') {
       delete safe.attacks;
       delete safe.spells;
@@ -577,6 +596,7 @@ function createRoom({ dataDir, dmPin, io }) {
     const linkedTokens = state.tokens.filter(token => token.characterName === character.name);
     linkedTokens.forEach(token => {
       token.label = character.name;
+      token.pronouns = character.pronouns;
       token.imageUrl = character.portraitUrl || token.imageUrl || null;
       token.hp = character.hp;
       token.maxHp = character.maxHp;

@@ -474,7 +474,9 @@ function renderMapTokens() {
     el.dataset.id = t.id;
     el.tabIndex = 0;
     const displayLabel = visibleTokenLabel(t);
-    el.setAttribute('aria-label', `${displayLabel || t.kind + ' token'}${t.canControl ? ', your token' : ', locked token'}`);
+    const hoverLabel = tokenHoverText(t);
+    el.title = hoverLabel;
+    el.setAttribute('aria-label', `${hoverLabel}${t.canControl ? ', your token' : ', locked token'}`);
     el.style.left = t.x + 'px';
     el.style.top = t.y + 'px';
     const renderSize = tokenRenderSize(t);
@@ -546,6 +548,27 @@ function renderMapTokens() {
 function visibleTokenLabel(token) {
   if (myRole === 'dm' || state.scene.showTokenLabelsToPlayers !== false || token.kind === 'pc') return token.label;
   return '';
+}
+
+function tokenPronouns(token) {
+  const direct = String(token?.pronouns || '').trim();
+  if (direct) return direct;
+  if (token?.characterName) {
+    const character = state.characters?.[token.characterName];
+    return String(character?.pronouns || character?.fields?.pronouns || '').trim();
+  }
+  if (token?.npcId) {
+    const npc = state.npcs?.[token.npcId];
+    return String(npc?.pronouns || npc?.sheet?.pronouns || npc?.sheet?.fields?.pronouns || '').trim();
+  }
+  return '';
+}
+
+function tokenHoverText(token) {
+  const visibleName = visibleTokenLabel(token);
+  const fallback = token.kind === 'pc' ? 'Player character' : token.kind === 'npc' ? 'NPC' : 'Item';
+  const pronouns = tokenPronouns(token);
+  return [visibleName || fallback, pronouns ? `Pronouns: ${pronouns}` : ''].filter(Boolean).join(' · ');
 }
 
 function renderTokenConditionBadges(token, linkedCharacter) {
@@ -1419,6 +1442,7 @@ document.getElementById('cancel-npc-edit-btn').onclick = resetNpcEditor;
 function updateTokenCreateForm() {
   const kind = document.getElementById('token-kind').value;
   document.getElementById('npc-create-fields').classList.toggle('hidden', kind !== 'npc');
+  document.getElementById('token-pronouns').classList.toggle('hidden', kind === 'item');
   if (!editingNpcId) document.getElementById('add-token-btn').textContent = kind === 'npc' ? 'Create NPC & place' : 'Add to map';
 }
 
@@ -1450,6 +1474,7 @@ document.getElementById('add-token-btn').onclick = async () => {
       maxHp: Number(document.getElementById('npc-hp').value) || 1,
       ac: Number(document.getElementById('npc-ac').value) || 0,
       initiativeModifier: Number(document.getElementById('npc-initiative').value) || 0,
+      pronouns: document.getElementById('token-pronouns').value.trim(),
       attacks: parseNpcAttacks(document.getElementById('npc-attacks').value),
       notes: document.getElementById('npc-notes').value.trim()
     });
@@ -1464,6 +1489,7 @@ document.getElementById('add-token-btn').onclick = async () => {
     maxHp: kind === 'npc' ? Number(document.getElementById('npc-hp').value) || 1 : undefined,
     ac: Number(document.getElementById('npc-ac').value) || 0,
     initiativeModifier: Number(document.getElementById('npc-initiative').value) || 0,
+    pronouns: kind === 'item' ? '' : document.getElementById('token-pronouns').value.trim(),
     attacks: parseNpcAttacks(document.getElementById('npc-attacks').value),
     notes: document.getElementById('npc-notes').value.trim()
   });
@@ -1480,6 +1506,7 @@ function editNpc(npcId) {
   document.getElementById('npc-hp').value = Number(npc.maxHp) || 1;
   document.getElementById('npc-ac').value = Number(npc.ac) || 0;
   document.getElementById('npc-initiative').value = Number(npc.initiativeModifier) || 0;
+  document.getElementById('token-pronouns').value = npc.pronouns || npc.sheet?.pronouns || npc.sheet?.fields?.pronouns || '';
   document.getElementById('npc-attacks').value = npcAttacksText(npc.attacks);
   document.getElementById('npc-notes').value = npc.notes || '';
   document.getElementById('add-token-btn').textContent = 'Save NPC changes';
@@ -1496,6 +1523,7 @@ function resetNpcEditor() {
   document.getElementById('npc-hp').value = 10;
   document.getElementById('npc-ac').value = 10;
   document.getElementById('npc-initiative').value = 0;
+  document.getElementById('token-pronouns').value = '';
   document.getElementById('npc-attacks').value = '';
   document.getElementById('npc-notes').value = '';
   document.getElementById('cancel-npc-edit-btn').classList.add('hidden');
@@ -1513,7 +1541,12 @@ function renderTokenTray() {
     chip.className = 'token-chip kind-' + t.kind;
     if (!t.canControl) chip.classList.add('locked-token');
     const displayLabel = visibleTokenLabel(t) || `${t.kind} token`;
-    chip.title = t.canControl ? `${displayLabel} (click to nudge on the map)` : `${displayLabel} (controlled by another player)`;
+    const hoverLabel = tokenHoverText(t);
+    const controlHint = t.canControl
+      ? 'click to nudge on the map'
+      : (t.kind === 'pc' ? 'controlled by another player' : '');
+    chip.title = [hoverLabel, controlHint].filter(Boolean).join(' · ');
+    chip.setAttribute('aria-label', hoverLabel);
     if (t.visibleToPlayers === false) chip.classList.add('hidden-token');
     chip.innerHTML = (t.imageUrl ? `<img src="${escapeAttr(t.imageUrl)}" alt="${escapeAttr(displayLabel)}">` : emojiFor(t.kind)) +
       (t.canControl ? '<span class="del" title="Remove from map">×</span>' : '');
@@ -1530,7 +1563,7 @@ function renderTokenTray() {
     details.className = 'token-list-details dm-only';
     const scalePercent = Math.round((Number(t.sizeScale) || 1) * 100);
     details.innerHTML = `
-      <div class="token-list-heading"><strong>${escapeHtml(t.label)}</strong><span>${escapeHtml(t.kind)}</span></div>
+      <div class="token-list-heading"><strong>${escapeHtml(t.label)}</strong><span>${escapeHtml([t.kind, tokenPronouns(t)].filter(Boolean).join(' · '))}</span></div>
       <label class="token-size-control">Size <input type="range" min="35" max="300" step="5" value="${scalePercent}"><output>${scalePercent}%</output></label>
       <div class="token-list-actions">
         <button class="btn-ghost token-reset-size" type="button">Reset size</button>
@@ -1604,7 +1637,7 @@ function renderNpcRoster() {
     card.className = 'npc-roster-card';
     card.innerHTML = `
       <div class="npc-roster-top">
-        <span class="npc-roster-name">${escapeHtml(npc.name)}</span>
+        <span class="npc-roster-name">${escapeHtml(npc.name)}${npc.pronouns ? ` · ${escapeHtml(npc.pronouns)}` : ''}</span>
         <span class="npc-map-status ${token ? 'on-map' : ''}">${token ? 'On map' : 'Off map'}</span>
       </div>
       <div class="npc-roster-stats">HP ${Number(token?.hp ?? npc.hp) || 0}/${Number(npc.maxHp) || 0} · AC ${Number(npc.ac) || 0} · Init ${signed(npc.initiativeModifier)}</div>
@@ -1649,7 +1682,7 @@ function renderPlayerSidebar() {
     card.innerHTML = `
       <div class="player-sidebar-head">
         <div class="player-sidebar-portrait">${character.portraitUrl ? `<img src="${escapeAttr(character.portraitUrl)}" alt="">` : '🍃'}</div>
-        <div><strong>${escapeHtml(character.name)}</strong><div class="player-sidebar-meta">${escapeHtml([species, charClass].filter(Boolean).join(' · '))} · Level ${Number(character.level) || 1}</div></div>
+        <div><strong>${escapeHtml(character.name)}</strong><div class="player-sidebar-meta">${escapeHtml([character.pronouns, species, charClass, `Level ${Number(character.level) || 1}`].filter(Boolean).join(' · '))}</div></div>
       </div>
       <div class="player-sidebar-vitals">
         <span>HP ${Number(character.hp) || 0}/${Number(character.maxHp) || 0}</span>
@@ -1887,7 +1920,7 @@ function renderCharacters() {
     card.innerHTML = `
       <div class="card-top">
         <div class="card-portrait">${c.portraitUrl ? `<img src="${escapeAttr(c.portraitUrl)}" alt="">` : '🍃'}</div>
-        <div><h3>${escapeHtml(c.name)}</h3><div class="meta">${escapeHtml([species, charClass].filter(Boolean).join(' · '))} · Level ${Number(c.level) || 1}</div></div>
+        <div><h3>${escapeHtml(c.name)}</h3><div class="meta">${escapeHtml([c.pronouns, species, charClass, `Level ${Number(c.level) || 1}`].filter(Boolean).join(' · '))}</div></div>
         ${canEdit ? '' : '<span class="locked-badge">View only</span>'}
       </div>
       <div class="stat-row">
@@ -1940,7 +1973,7 @@ function renderCharacters() {
     card.innerHTML = `
       <div class="card-top">
         <div class="card-portrait">${npc.imageUrl ? `<img src="${escapeAttr(npc.imageUrl)}" alt="">` : '🦊'}</div>
-        <div><h3>${escapeHtml(npc.name)}</h3><div class="meta">${escapeHtml(descriptor)}${escapeHtml(challenge)}</div></div>
+        <div><h3>${escapeHtml(npc.name)}</h3><div class="meta">${escapeHtml([npc.pronouns, descriptor].filter(Boolean).join(' · '))}${escapeHtml(challenge)}</div></div>
         <span class="npc-sheet-badge">NPC</span>
       </div>
       <div class="stat-row">
@@ -1993,9 +2026,14 @@ function openSheetEditor(c, options = {}) {
   editingCanEdit = isNpc ? myRole === 'dm' : canEditCharacter(c);
   pendingPortraitFile = null;
   editingPortraitUrl = (isNpc ? c?.imageUrl : c?.portraitUrl) || null;
-  const fields = isNpc
-    ? (c?.sheet?.fields || legacyNpcFields(c))
-    : (c?.fields || legacyCharacterFields(c));
+  const fields = {
+    ...(isNpc ? (c?.sheet?.fields || legacyNpcFields(c)) : (c?.fields || legacyCharacterFields(c)))
+  };
+  if (!Object.prototype.hasOwnProperty.call(fields, 'pronouns')) {
+    fields.pronouns = isNpc
+      ? (c?.pronouns || c?.sheet?.pronouns || '')
+      : (c?.pronouns || '');
+  }
   editingBaseLevel = Math.max(1, Math.min(20, Number(fields.level ?? c?.level) || 1));
   acMethodManuallySelected = !!c || !!fields['ac-method'];
   initiativeManuallyEdited = !!c && fields.initiative !== '' && fields.initiative !== undefined;
@@ -2036,7 +2074,7 @@ function openSheetEditor(c, options = {}) {
 function legacyCharacterFields(c) {
   if (!c) return {};
   const fields = {
-    name: c.name || '', species: c.species || c.race || '', class: c.charClass || '', level: c.level ?? 1,
+    name: c.name || '', pronouns: c.pronouns || '', species: c.species || c.race || '', class: c.charClass || '', level: c.level ?? 1,
     hp: c.hp ?? 10, maxhp: c.maxHp ?? 10, ac: c.ac ?? 10, speed: c.speed || '30 ft', notes: c.notes || ''
   };
   ABILITIES.forEach(ability => { fields[ability] = c.abilities?.[ability] ?? 10; });
@@ -2046,7 +2084,7 @@ function legacyCharacterFields(c) {
 function legacyNpcFields(npc) {
   if (!npc) return {};
   const fields = {
-    name: npc.name || '', level: '1', hp: npc.hp ?? npc.maxHp ?? 10, maxhp: npc.maxHp ?? 10,
+    name: npc.name || '', pronouns: npc.pronouns || '', level: '1', hp: npc.hp ?? npc.maxHp ?? 10, maxhp: npc.maxHp ?? 10,
     temphp: npc.tempHp ?? 0, ac: npc.ac ?? 10, initiative: npc.initiativeModifier ?? 0,
     speed: '30 ft.', 'ac-method': 'manual', 'ac-base': npc.ac ?? 10,
     'attacks-notes': npc.notes || '', notes: npc.notes || ''
@@ -2655,6 +2693,7 @@ document.getElementById('save-sheet-btn').onclick = async () => {
   const num = (key, fallback = 0) => Number(fields[key]) || fallback;
   const sheet = {
     name,
+    pronouns: String(fields.pronouns || '').trim(),
     _originalName: editingOriginalName,
     portraitUrl: editingPortraitUrl,
     species: fields.species || '',
@@ -2694,6 +2733,7 @@ document.getElementById('save-sheet-btn').onclick = async () => {
     const npcPayload = {
       ...(existing ? { id: existing.id } : {}),
       name,
+      pronouns: sheet.pronouns,
       imageUrl: editingPortraitUrl,
       hp: num('hp', 10), maxHp: Math.max(1, num('maxhp', 10)), tempHp: Math.max(0, num('temphp')),
       ac: num('ac', 10), initiativeModifier: num('initiative'),
