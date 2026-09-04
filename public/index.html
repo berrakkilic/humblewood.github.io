@@ -366,6 +366,21 @@
             <summary><h3>NPC roster</h3></summary>
             <div class="sidebar-accordion-body">
               <p class="sidebar-help">Remove keeps an NPC here. Delete removes it permanently.</p>
+              <div class="npc-filter-tools npc-filter-tools-compact" id="npc-roster-filter-tools">
+                <label class="npc-search-field">
+                  <span class="sr-only">Search NPCs</span>
+                  <input type="search" id="npc-roster-search" placeholder="Search NPCs…" autocomplete="off">
+                </label>
+                <div class="npc-filter-line">
+                  <span class="npc-filter-label">Race</span>
+                  <div class="npc-filter-chips" id="npc-roster-race-filters"></div>
+                </div>
+                <div class="npc-filter-line npc-class-filter-line">
+                  <label class="npc-filter-label" for="npc-roster-class-filter">Class</label>
+                  <select id="npc-roster-class-filter"></select>
+                </div>
+                <button class="npc-clear-filters" id="npc-roster-clear-filters" type="button">Clear filters</button>
+              </div>
               <div class="npc-roster" id="npc-roster"></div>
             </div>
           </details>
@@ -464,6 +479,24 @@
         <div class="character-list-heading-row">
           <h3 class="character-list-heading">NPC stat blocks</h3>
           <p>These stay DM-owned even though they use the complete sheet editor.</p>
+        </div>
+        <div class="npc-filter-tools" id="npc-directory-filter-tools">
+          <label class="npc-search-field">
+            <span class="sr-only">Search NPCs</span>
+            <input type="search" id="npc-directory-search" placeholder="Search by name, race, class, background…" autocomplete="off">
+          </label>
+          <div class="npc-filter-line">
+            <span class="npc-filter-label">Race</span>
+            <div class="npc-filter-chips" id="npc-directory-race-filters"></div>
+          </div>
+          <div class="npc-filter-line npc-class-filter-line">
+            <label class="npc-filter-label" for="npc-directory-class-filter">Class</label>
+            <select id="npc-directory-class-filter"></select>
+          </div>
+          <div class="npc-filter-footer">
+            <span class="npc-filter-summary" id="npc-directory-filter-summary"></span>
+            <button class="npc-clear-filters" id="npc-directory-clear-filters" type="button">Clear filters</button>
+          </div>
         </div>
         <div class="char-grid" id="npc-sheet-grid"></div>
       </div>

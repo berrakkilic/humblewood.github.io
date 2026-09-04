@@ -99,6 +99,10 @@ async function run() {
     assert.match(html, /id="dm-private-roll-banner"/);
     assert.match(html, /id="new-npc-sheet-btn"/);
     assert.match(html, /id="npc-statblock-import-btn"/);
+    assert.match(html, /id="npc-directory-search"/);
+    assert.match(html, /id="npc-directory-race-filters"/);
+    assert.match(html, /id="npc-directory-class-filter"/);
+    assert.match(html, /id="npc-roster-search"/);
     assert.match(html, /id="sf-pronouns"/);
     assert.match(html, /id="token-pronouns"/);
     assert.match(html, /id="track-preset-select"/);
@@ -128,6 +132,8 @@ async function run() {
   assert.match(appSource, /function renderLibrary\(\)/);
   assert.match(appSource, /library:broadcast/);
   assert.match(appSource, /function uploadLibraryFile\(file\)/);
+  assert.match(appSource, /function npcDirectoryMatches\(npc\)/);
+  assert.match(appSource, /npcRaceFilter/);
   const musicResponse = await fetch(`http://127.0.0.1:${port}/api/music`);
   assert.equal(musicResponse.status, 200);
   const musicCatalog = await musicResponse.json();

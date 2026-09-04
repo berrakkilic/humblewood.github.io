@@ -62,6 +62,9 @@ let libraryCurrentFolderId = 'all';
 let sharedHandoutRenderKey = '';
 let sharedHandoutTimer = null;
 let sharedHandoutContentRequest = 0;
+let npcSearchQuery = '';
+let npcRaceFilter = 'all';
+let npcClassFilter = 'all';
 const pendingConcentrationChecks = new Map();
 const pointerFadeTimers = new Map();
 
@@ -1943,17 +1946,161 @@ function renderDmSidebarSummary() {
   summary.textContent = parts.join(' · ');
 }
 
+function npcDirectoryDetails(npc) {
+  const fields = npc?.sheet?.fields || {};
+  const sheet = npc?.sheet || {};
+  const race = String(
+    npc?.race || npc?.species || sheet.race || sheet.species || fields.race || fields.species || ''
+  ).trim();
+  const subrace = String(npc?.subrace || sheet.subrace || fields.subrace || '').trim();
+  const className = String(
+    npc?.charClass || npc?.className || sheet.charClass || fields.class || fields.charClass || npc?.spellcasting?.className || ''
+  ).trim();
+  const background = String(fields.background || sheet.background || '').trim();
+  const raceLabel = race || 'Unspecified';
+  const classLabel = className || 'Unspecified';
+  const searchText = [npc?.name, npc?.pronouns, race, subrace, className, background, sheet.challenge, npc?.notes]
+    .filter(Boolean).join(' ').toLowerCase();
+  return {
+    race: raceLabel,
+    raceKey: raceLabel.toLowerCase(),
+    subrace,
+    className: classLabel,
+    classKey: classLabel.toLowerCase(),
+    background,
+    searchText
+  };
+}
+
+function npcDirectoryMatches(npc) {
+  const details = npcDirectoryDetails(npc);
+  const query = npcSearchQuery.trim().toLowerCase();
+  if (query && !details.searchText.includes(query)) return false;
+  if (npcRaceFilter !== 'all' && details.raceKey !== npcRaceFilter) return false;
+  if (npcClassFilter !== 'all' && details.classKey !== npcClassFilter) return false;
+  return true;
+}
+
+function filteredNpcDirectory(npcs = Object.values(state?.npcs || {})) {
+  return npcs.filter(npcDirectoryMatches);
+}
+
+function npcFilterValues(npcs, property, keyProperty) {
+  const values = new Map();
+  npcs.forEach(npc => {
+    const details = npcDirectoryDetails(npc);
+    const key = details[keyProperty];
+    if (!values.has(key)) values.set(key, details[property]);
+  });
+  return [...values.entries()]
+    .map(([key, label]) => ({ key, label }))
+    .sort((a, b) => a.label.localeCompare(b.label));
+}
+
+function refreshNpcViewsAfterFilter(event) {
+  const focusedId = event?.target?.id || '';
+  const selectionStart = typeof event?.target?.selectionStart === 'number' ? event.target.selectionStart : null;
+  renderNpcRoster();
+  renderCharacters();
+  if (!focusedId) return;
+  const focused = document.getElementById(focusedId);
+  if (!focused) return;
+  focused.focus();
+  if (selectionStart !== null && typeof focused.setSelectionRange === 'function') {
+    const position = Math.min(selectionStart, focused.value.length);
+    focused.setSelectionRange(position, position);
+  }
+}
+
+function renderNpcFilterControls() {
+  if (!state) return;
+  const allNpcs = Object.values(state.npcs || {});
+  const races = npcFilterValues(allNpcs, 'race', 'raceKey');
+  const classes = npcFilterValues(allNpcs, 'className', 'classKey');
+  if (npcRaceFilter !== 'all' && !races.some(value => value.key === npcRaceFilter)) npcRaceFilter = 'all';
+  if (npcClassFilter !== 'all' && !classes.some(value => value.key === npcClassFilter)) npcClassFilter = 'all';
+
+  [
+    { prefix: 'npc-roster', summaryId: null },
+    { prefix: 'npc-directory', summaryId: 'npc-directory-filter-summary' }
+  ].forEach(({ prefix, summaryId }) => {
+    const tools = document.getElementById(`${prefix}-filter-tools`);
+    if (!tools) return;
+    const search = document.getElementById(`${prefix}-search`);
+    const raceFilters = document.getElementById(`${prefix}-race-filters`);
+    const classFilter = document.getElementById(`${prefix}-class-filter`);
+    const clear = document.getElementById(`${prefix}-clear-filters`);
+    if (!search || !raceFilters || !classFilter || !clear) return;
+
+    search.value = npcSearchQuery;
+    search.oninput = event => {
+      npcSearchQuery = event.target.value;
+      refreshNpcViewsAfterFilter(event);
+    };
+
+    raceFilters.innerHTML = '';
+    const raceOptions = [{ key: 'all', label: 'All races' }, ...races];
+    raceOptions.forEach(optionValue => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'npc-filter-chip' + (npcRaceFilter === optionValue.key ? ' active' : '');
+      button.dataset.value = optionValue.key;
+      button.textContent = optionValue.label;
+      button.setAttribute('aria-pressed', String(npcRaceFilter === optionValue.key));
+      button.onclick = event => {
+        npcRaceFilter = optionValue.key;
+        refreshNpcViewsAfterFilter(event);
+      };
+      raceFilters.appendChild(button);
+    });
+
+    classFilter.innerHTML = '';
+    const allClassesOption = document.createElement('option');
+    allClassesOption.value = 'all';
+    allClassesOption.textContent = 'All classes';
+    classFilter.appendChild(allClassesOption);
+    classes.forEach(optionValue => {
+      const option = document.createElement('option');
+      option.value = optionValue.key;
+      option.textContent = optionValue.label;
+      classFilter.appendChild(option);
+    });
+    classFilter.value = npcClassFilter;
+    classFilter.onchange = event => {
+      npcClassFilter = event.target.value;
+      refreshNpcViewsAfterFilter(event);
+    };
+
+    const hasFilters = !!npcSearchQuery.trim() || npcRaceFilter !== 'all' || npcClassFilter !== 'all';
+    clear.disabled = !hasFilters;
+    clear.onclick = event => {
+      npcSearchQuery = '';
+      npcRaceFilter = 'all';
+      npcClassFilter = 'all';
+      refreshNpcViewsAfterFilter(event);
+    };
+    if (summaryId) {
+      const summary = document.getElementById(summaryId);
+      const visibleCount = filteredNpcDirectory(allNpcs).length;
+      if (summary) summary.textContent = hasFilters ? `Showing ${visibleCount} of ${allNpcs.length} NPCs` : `${allNpcs.length} NPC${allNpcs.length === 1 ? '' : 's'}`;
+    }
+  });
+}
+
 function renderNpcRoster() {
   const roster = document.getElementById('npc-roster');
   if (!roster || !state) return;
+  renderNpcFilterControls();
   roster.innerHTML = '';
-  const npcs = Object.values(state.npcs || {}).sort((a, b) => a.name.localeCompare(b.name));
+  const allNpcs = Object.values(state.npcs || {});
+  const npcs = filteredNpcDirectory(allNpcs).sort((a, b) => a.name.localeCompare(b.name));
   if (!npcs.length) {
-    roster.innerHTML = '<p class="player-sidebar-empty">No NPCs created yet.</p>';
+    roster.innerHTML = `<p class="player-sidebar-empty">${allNpcs.length ? 'No NPCs match these filters.' : 'No NPCs created yet.'}</p>`;
     return;
   }
   npcs.forEach(npc => {
     const token = state.tokens.find(entry => entry.npcId === npc.id);
+    const details = npcDirectoryDetails(npc);
     const card = document.createElement('article');
     card.className = 'npc-roster-card';
     card.innerHTML = `
@@ -1961,6 +2108,7 @@ function renderNpcRoster() {
         <span class="npc-roster-name">${escapeHtml(npc.name)}${npc.pronouns ? ` · ${escapeHtml(npc.pronouns)}` : ''}</span>
         <span class="npc-map-status ${token ? 'on-map' : ''}">${token ? 'On map' : 'Off map'}</span>
       </div>
+      <div class="npc-roster-meta">${escapeHtml([details.race, details.className].filter(value => value !== 'Unspecified').join(' · ') || 'No race or class listed')}</div>
       <div class="npc-roster-stats">HP ${Number(token?.hp ?? npc.hp) || 0}/${Number(npc.maxHp) || 0} · AC ${Number(npc.ac) || 0} · Init ${signed(npc.initiativeModifier)}</div>
       <div class="npc-roster-actions">
         <button class="btn-ghost npc-map-btn" type="button">${token ? 'Remove' : 'Place'}</button>
@@ -2223,6 +2371,7 @@ function addFeatPresetToSheet() {
 function renderCharacters() {
   const grid = document.getElementById('char-grid');
   grid.innerHTML = '';
+  renderNpcFilterControls();
   const characters = Object.values(state.characters || {}).sort((a, b) => a.name.localeCompare(b.name));
   if (!characters.length) grid.innerHTML = '<p class="empty-character-grid">No player characters yet.</p>';
   characters.forEach(c => {
@@ -2279,9 +2428,10 @@ function renderCharacters() {
   const npcGrid = document.getElementById('npc-sheet-grid');
   if (!npcGrid) return;
   npcGrid.innerHTML = '';
-  const npcs = Object.values(state.npcs || {}).sort((a, b) => a.name.localeCompare(b.name));
+  const allNpcs = Object.values(state.npcs || {});
+  const npcs = filteredNpcDirectory(allNpcs).sort((a, b) => a.name.localeCompare(b.name));
   if (!npcs.length) {
-    npcGrid.innerHTML = '<p class="empty-character-grid">No NPCs yet. Create one from a preset or paste a stat block.</p>';
+    npcGrid.innerHTML = `<p class="empty-character-grid">${allNpcs.length ? 'No NPCs match these filters.' : 'No NPCs yet. Create one from a preset or paste a stat block.'}</p>`;
     return;
   }
   npcs.forEach(npc => {
@@ -2289,12 +2439,13 @@ function renderCharacters() {
     const fields = npc.sheet?.fields || {};
     const descriptor = fields.background || (npc.sheet ? 'Full NPC sheet' : 'Quick NPC');
     const challenge = npc.sheet?.challenge ? ` · CR ${npc.sheet.challenge}` : '';
+    const details = npcDirectoryDetails(npc);
     const card = document.createElement('div');
     card.className = 'char-card npc-sheet-card';
     card.innerHTML = `
       <div class="card-top">
         <div class="card-portrait">${npc.imageUrl ? `<img src="${escapeAttr(npc.imageUrl)}" alt="">` : '🦊'}</div>
-        <div><h3>${escapeHtml(npc.name)}</h3><div class="meta">${escapeHtml([npc.pronouns, descriptor].filter(Boolean).join(' · '))}${escapeHtml(challenge)}</div></div>
+        <div><h3>${escapeHtml(npc.name)}</h3><div class="meta">${escapeHtml([npc.pronouns, details.race !== 'Unspecified' ? details.race : '', details.className !== 'Unspecified' ? details.className : '', descriptor].filter(Boolean).join(' · '))}${escapeHtml(challenge)}</div></div>
         <span class="npc-sheet-badge">NPC</span>
       </div>
       <div class="stat-row">

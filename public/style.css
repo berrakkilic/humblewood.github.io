@@ -662,6 +662,23 @@ body[data-role="dm"] .token-tray.dm-detailed .token-list-details { display: flex
 .npc-sheet-card { border-color: rgba(217,138,158,.38); }
 .npc-sheet-card .card-portrait { border-color: var(--rose); }
 .npc-sheet-card .npc-sheet-badge { margin-left: auto; padding: 3px 8px; border-radius: 999px; background: rgba(217,138,158,.18); color: var(--rose-deep); font-size: 10px; font-weight: 800; }
+.npc-filter-tools { display: grid; gap: 9px; margin: 0 0 14px; padding: 12px; border: 1px solid rgba(124,148,115,.28); border-radius: 11px; background: rgba(246,239,220,.45); }
+.npc-filter-tools-compact { margin: 10px 0 12px; padding: 10px; background: rgba(246,239,220,.3); }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+.npc-search-field { display: block; }
+.npc-search-field input { width: 100%; box-sizing: border-box; }
+.npc-filter-line { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; }
+.npc-filter-label { flex: 0 0 auto; color: var(--ink-soft); font-size: 11px; font-weight: 800; letter-spacing: .03em; text-transform: uppercase; }
+.npc-filter-chips { display: flex; flex: 1 1 auto; flex-wrap: wrap; gap: 5px; min-width: 0; }
+.npc-filter-chip { border: 1px solid rgba(124,148,115,.4); border-radius: 999px; background: #fffdf8; color: var(--forest-deep); cursor: pointer; font: inherit; font-size: 11px; font-weight: 700; padding: 5px 9px; }
+.npc-filter-chip:hover { border-color: var(--forest); background: var(--moss-light); }
+.npc-filter-chip.active { border-color: var(--forest); background: var(--forest); color: #fffdf8; }
+.npc-class-filter-line select { flex: 1 1 180px; min-width: 130px; padding: 7px 9px; font-size: 12px; }
+.npc-filter-footer { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.npc-filter-summary { color: var(--ink-soft); font-size: 11px; }
+.npc-clear-filters { border: 0; background: transparent; color: var(--rose-deep); cursor: pointer; font: inherit; font-size: 11px; font-weight: 800; padding: 3px 0; }
+.npc-clear-filters:hover { text-decoration: underline; }
+.npc-roster-meta { margin-top: 3px; color: var(--ink-soft); font-size: 11px; }
 .empty-character-grid { grid-column: 1 / -1; margin: 0; padding: 18px; border: 1px dashed rgba(58,46,37,.16); border-radius: 12px; color: var(--ink-soft); font-size: 12px; text-align: center; }
 .feat-preset-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; }
 .feat-preset-row select { min-width: 0; }
