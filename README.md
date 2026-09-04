@@ -49,5 +49,3 @@ Now hosted on `https://humblewood.sfseeger.de/` !!
 - **Almanac**: provides necessary information on the Humblewood in an easily organizable and digestible collection.
 
 ## Known limitations to work out next
-- More humblewood specific vibes? 
-- look up summons waa
