@@ -33,6 +33,7 @@ function createDefaultState() {
       files: [],
       broadcast: null
     },
+    notifications: [],
     characters: {},
     rollLog: [],
     initiative: { entries: [], round: 1, currentIndex: -1 }

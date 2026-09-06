@@ -253,6 +253,13 @@
     <div class="topbar-right">
       <span id="presence-list"></span>
       <button class="topbar-roll-btn" id="topbar-roll-btn" type="button">🎲 Roll</button>
+      <div class="topbar-player-actions player-only">
+        <button class="topbar-safety-btn" id="player-safety-btn" type="button" title="Anonymous request for a 15-minute break">⏸ Need a break</button>
+        <button class="topbar-question-btn" id="player-question-btn" type="button">Ask the DM</button>
+      </div>
+      <button class="topbar-notifications-btn dm-only" id="dm-notifications-btn" type="button" aria-expanded="false" aria-controls="dm-notifications-panel">
+        🔔 Notifications <span class="notification-count hidden" id="dm-notification-count">0</span>
+      </button>
       <span class="role-pill" id="my-role-pill"></span>
     </div>
   </header>
@@ -265,6 +272,23 @@
     <a class="tab-btn dm-only" data-view="library" data-route="library" href="/library">DM Library</a>
     <a class="tab-btn" data-view="dice" data-route="dice" href="/dice">Dice</a>
   </nav>
+
+  <section class="dm-notifications-panel panel hidden dm-only" id="dm-notifications-panel" aria-labelledby="dm-notifications-title">
+    <div class="dm-notifications-heading">
+      <div>
+        <span class="notification-eyebrow">Private DM inbox</span>
+        <h2 id="dm-notifications-title">Notifications</h2>
+      </div>
+      <div class="dm-notifications-heading-actions">
+        <button class="btn-ghost" id="dm-notifications-mark-all" type="button">Mark all read</button>
+        <button class="btn-ghost" id="dm-notifications-close" type="button" aria-label="Close notifications">×</button>
+      </div>
+    </div>
+    <div id="dm-notifications-list"></div>
+    <div class="dm-notifications-footer">
+      <button class="btn-danger-soft" id="dm-notifications-clear-all" type="button">Clear all</button>
+    </div>
+  </section>
 
   <main>
     <!-- MAP VIEW -->
@@ -1121,6 +1145,28 @@
 </div>
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<div class="player-question-overlay hidden" id="player-question-overlay" aria-hidden="true">
+  <section class="player-question-modal panel" role="dialog" aria-modal="true" aria-labelledby="player-question-title">
+    <div class="player-question-heading">
+      <div>
+        <span class="notification-eyebrow">Private table message</span>
+        <h2 id="player-question-title">Ask the DM</h2>
+        <p>Send a question without interrupting the scene. The DM will see it in Notifications.</p>
+      </div>
+      <button class="btn-ghost" id="player-question-close" type="button" aria-label="Close question form">×</button>
+    </div>
+    <form id="player-question-form">
+      <label class="question-input-label" for="player-question-input">Your question</label>
+      <textarea id="player-question-input" maxlength="1200" rows="5" placeholder="Type your question here…" required></textarea>
+      <label class="question-anonymous-toggle"><input type="checkbox" id="player-question-anonymous"> Send anonymously</label>
+      <div class="player-question-actions">
+        <button class="btn-ghost" id="player-question-cancel" type="button">Cancel</button>
+        <button class="btn-primary" id="player-question-submit" type="submit">Send question</button>
+      </div>
+    </form>
+  </section>
+</div>
 
 <div class="shared-handout-overlay hidden" id="shared-handout-overlay" aria-hidden="true">
   <section class="shared-handout-modal panel" role="dialog" aria-modal="true" aria-labelledby="shared-handout-title">

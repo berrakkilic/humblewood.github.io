@@ -65,6 +65,9 @@ let sharedHandoutContentRequest = 0;
 let npcSearchQuery = '';
 let npcRaceFilter = 'all';
 let npcClassFilter = 'all';
+let dmNotificationsOpen = false;
+let safetyButtonTimer = null;
+let questionSubmitting = false;
 const pendingConcentrationChecks = new Map();
 const pointerFadeTimers = new Map();
 
@@ -241,6 +244,7 @@ socket.on('state:full', (s) => {
   renderCharacters();
   renderJukebox();
   renderLibrary();
+  renderDmNotifications();
   renderSharedHandout();
   renderRollLog();
   renderInitiative();
@@ -323,6 +327,39 @@ socket.on('library:broadcast', broadcast => {
   state.library.broadcast = broadcast || null;
   renderSharedHandout();
   if (broadcast) showToast(`Shared “${broadcast.name}” with the table.`);
+});
+socket.on('notifications:update', notifications => {
+  if (!state || myRole !== 'dm') return;
+  const previousIds = new Set((state.notifications || []).map(notification => notification.id));
+  state.notifications = Array.isArray(notifications) ? notifications : [];
+  const hasNew = state.notifications.some(notification => !previousIds.has(notification.id));
+  if (hasNew) dmNotificationsOpen = true;
+  renderDmNotifications();
+  if (hasNew) showToast('New private table notification.');
+});
+socket.on('safety:submitted', ({ cooldown } = {}) => {
+  const button = document.getElementById('player-safety-btn');
+  if (!button) return;
+  button.disabled = true;
+  button.textContent = cooldown ? 'Break request sent' : 'Break requested';
+  clearTimeout(safetyButtonTimer);
+  safetyButtonTimer = setTimeout(() => {
+    button.disabled = false;
+    button.textContent = '⏸ Need a break';
+  }, 30000);
+  showToast('The DM has been notified privately. Please take the space you need.');
+});
+socket.on('question:submitted', () => {
+  questionSubmitting = false;
+  const button = document.getElementById('player-question-submit');
+  if (button) {
+    button.disabled = false;
+    button.textContent = 'Send question';
+  }
+  document.getElementById('player-question-input').value = '';
+  document.getElementById('player-question-anonymous').checked = false;
+  closePlayerQuestion();
+  showToast('Your question was sent privately to the DM.');
 });
 socket.on('scenes:update', scenes => { state.savedScenes = scenes || []; renderSavedScenes(); });
 socket.on('scene:active', ({ name }) => { state.activeSceneName = name || null; renderSavedScenes(); renderDmSidebarSummary(); });
@@ -1634,6 +1671,143 @@ function renderLibrary() {
     });
 }
 
+function notificationTimestamp(createdAt) {
+  const time = Number(createdAt);
+  if (!time) return '';
+  return new Intl.DateTimeFormat(undefined, { dateStyle: 'short', timeStyle: 'short' }).format(new Date(time));
+}
+
+function renderDmNotifications() {
+  const panel = document.getElementById('dm-notifications-panel');
+  const list = document.getElementById('dm-notifications-list');
+  const count = document.getElementById('dm-notification-count');
+  const toggle = document.getElementById('dm-notifications-btn');
+  if (!panel || !list || !count || !toggle) return;
+  const notifications = myRole === 'dm' && Array.isArray(state?.notifications) ? state.notifications : [];
+  const unreadCount = notifications.filter(notification => !notification.read).length;
+  count.textContent = unreadCount > 99 ? '99+' : String(unreadCount);
+  count.classList.toggle('hidden', unreadCount === 0);
+  toggle.setAttribute('aria-expanded', String(dmNotificationsOpen));
+  panel.classList.toggle('hidden', myRole !== 'dm' || !dmNotificationsOpen);
+
+  list.innerHTML = '';
+  if (!notifications.length) {
+    const empty = document.createElement('div');
+    empty.className = 'dm-notifications-empty';
+    empty.innerHTML = '<span aria-hidden="true">🌿</span><strong>Nothing waiting</strong><p>Player questions and private safety requests will appear here.</p>';
+    list.appendChild(empty);
+  } else {
+    notifications.forEach(notification => {
+      const item = document.createElement('article');
+      item.className = `dm-notification-item ${notification.type} ${notification.read ? 'read' : 'unread'}`;
+      const heading = document.createElement('div');
+      heading.className = 'dm-notification-heading';
+      const title = document.createElement('strong');
+      title.textContent = notification.type === 'safety'
+        ? '15-minute break requested'
+        : `Question from ${notification.anonymous ? 'Anonymous player' : (notification.senderName || 'Player')}`;
+      const time = document.createElement('time');
+      time.dateTime = new Date(Number(notification.createdAt) || Date.now()).toISOString();
+      time.textContent = notificationTimestamp(notification.createdAt);
+      heading.append(title, time);
+      const body = document.createElement('p');
+      body.textContent = notification.type === 'safety'
+        ? 'An anonymous player needs a pause. Please stop play for 15 minutes and check in privately.'
+        : notification.question;
+      const actions = document.createElement('div');
+      actions.className = 'dm-notification-actions';
+      if (!notification.read) {
+        const markRead = document.createElement('button');
+        markRead.type = 'button';
+        markRead.className = 'btn-ghost';
+        markRead.textContent = 'Mark read';
+        markRead.onclick = () => socket.emit('notifications:markRead', { id: notification.id });
+        actions.appendChild(markRead);
+      }
+      const dismiss = document.createElement('button');
+      dismiss.type = 'button';
+      dismiss.className = 'btn-danger-soft';
+      dismiss.textContent = 'Dismiss';
+      dismiss.onclick = () => socket.emit('notifications:clear', { id: notification.id });
+      actions.appendChild(dismiss);
+      item.append(heading, body, actions);
+      list.appendChild(item);
+    });
+  }
+  const markAll = document.getElementById('dm-notifications-mark-all');
+  const clearAll = document.getElementById('dm-notifications-clear-all');
+  if (markAll) markAll.disabled = unreadCount === 0;
+  if (clearAll) clearAll.disabled = notifications.length === 0;
+}
+
+function closePlayerQuestion() {
+  const overlay = document.getElementById('player-question-overlay');
+  if (!overlay) return;
+  overlay.classList.add('hidden');
+  overlay.setAttribute('aria-hidden', 'true');
+}
+
+document.getElementById('player-safety-btn').onclick = () => {
+  if (myRole !== 'player') return;
+  socket.emit('safety:request');
+};
+document.getElementById('player-question-btn').onclick = () => {
+  if (myRole !== 'player') return;
+  const overlay = document.getElementById('player-question-overlay');
+  overlay.classList.remove('hidden');
+  overlay.setAttribute('aria-hidden', 'false');
+  document.getElementById('player-question-input').focus();
+};
+document.getElementById('player-question-close').onclick = closePlayerQuestion;
+document.getElementById('player-question-cancel').onclick = closePlayerQuestion;
+document.getElementById('player-question-overlay').onclick = event => {
+  if (event.target.id === 'player-question-overlay') closePlayerQuestion();
+};
+document.getElementById('player-question-form').onsubmit = event => {
+  event.preventDefault();
+  if (questionSubmitting) return;
+  const input = document.getElementById('player-question-input');
+  const question = input.value.trim();
+  if (!question) return showToast('Write a question before sending it.');
+  questionSubmitting = true;
+  const button = document.getElementById('player-question-submit');
+  button.disabled = true;
+  button.textContent = 'Sending…';
+  socket.emit('question:submit', {
+    question,
+    anonymous: document.getElementById('player-question-anonymous').checked
+  });
+  window.setTimeout(() => {
+    if (!questionSubmitting) return;
+    questionSubmitting = false;
+    button.disabled = false;
+    button.textContent = 'Send question';
+  }, 5000);
+};
+
+document.getElementById('dm-notifications-btn').onclick = event => {
+  event.stopPropagation();
+  if (myRole !== 'dm') return;
+  dmNotificationsOpen = !dmNotificationsOpen;
+  renderDmNotifications();
+};
+document.getElementById('dm-notifications-close').onclick = () => {
+  dmNotificationsOpen = false;
+  renderDmNotifications();
+};
+document.getElementById('dm-notifications-mark-all').onclick = () => socket.emit('notifications:markAllRead');
+document.getElementById('dm-notifications-clear-all').onclick = () => {
+  if (state?.notifications?.length && confirm('Clear all DM notifications?')) socket.emit('notifications:clearAll');
+};
+document.addEventListener('click', event => {
+  const panel = document.getElementById('dm-notifications-panel');
+  const toggle = document.getElementById('dm-notifications-btn');
+  if (dmNotificationsOpen && panel && !panel.contains(event.target) && !toggle.contains(event.target)) {
+    dmNotificationsOpen = false;
+    renderDmNotifications();
+  }
+});
+
 function formatSharedHandoutTimer(expiresAt) {
   const seconds = Math.max(0, Math.ceil((Number(expiresAt) - Date.now()) / 1000));
   if (seconds < 60) return `${seconds}s remaining`;
@@ -2885,7 +3059,11 @@ const HUMBLEWOOD_SPELL_PRESETS = [
 ];
 
 function allSpellPresets() {
-  return [...HUMBLEWOOD_SPELL_PRESETS, ...creationPresets.STANDARD_SPELL_PRESETS];
+  return [
+    ...HUMBLEWOOD_SPELL_PRESETS,
+    ...(window.HumblewoodPhbSpellPresets?.PHB_SPELL_PRESETS || []),
+    ...creationPresets.STANDARD_SPELL_PRESETS
+  ];
 }
 
 function normalizeSpell(spell, index = 0) {

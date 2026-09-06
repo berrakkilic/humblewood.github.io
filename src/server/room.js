@@ -114,6 +114,43 @@ function createRoom({ dataDir, dmPin, io, uploadDir }) {
     return state.library;
   }
 
+  function cleanNotification(notification, fallbackId) {
+    if (!notification || typeof notification !== 'object') return null;
+    const type = notification.type === 'question' ? 'question' : notification.type === 'safety' ? 'safety' : null;
+    if (!type) return null;
+    const id = String(notification.id || fallbackId || '').trim().slice(0, 140);
+    if (!id) return null;
+    const question = type === 'question'
+      ? String(notification.question || '').trim().slice(0, 1200)
+      : '';
+    if (type === 'question' && !question) return null;
+    const senderName = type === 'question' && !notification.anonymous
+      ? String(notification.senderName || '').trim().slice(0, 80) || 'Player'
+      : null;
+    return {
+      id,
+      type,
+      createdAt: Number(notification.createdAt) || Date.now(),
+      read: !!notification.read,
+      anonymous: type === 'safety' || !!notification.anonymous,
+      senderName,
+      question
+    };
+  }
+
+  function normalizeNotifications(notifications) {
+    const seen = new Set();
+    state.notifications = (Array.isArray(notifications) ? notifications : [])
+      .slice(0, 100)
+      .map((notification, index) => cleanNotification(notification, `notification_${index}`))
+      .filter(notification => {
+        if (!notification || seen.has(notification.id)) return false;
+        seen.add(notification.id);
+        return true;
+      });
+    return state.notifications;
+  }
+
   function cleanAttacks(attacks) {
     if (!Array.isArray(attacks)) return [];
     return attacks.slice(0, 60).map(attack => ({
@@ -422,6 +459,7 @@ function createRoom({ dataDir, dmPin, io, uploadDir }) {
         scene: { ...defaultState.scene, ...(saved.scene || {}) },
         jukebox: { ...defaultState.jukebox, ...(saved.jukebox || {}) },
         library: saved.library && typeof saved.library === 'object' ? saved.library : defaultState.library,
+        notifications: Array.isArray(saved.notifications) ? saved.notifications : defaultState.notifications,
         characters: saved.characters || {},
         npcs: saved.npcs && typeof saved.npcs === 'object' ? saved.npcs : {},
         savedScenes: saved.savedScenes && typeof saved.savedScenes === 'object' ? saved.savedScenes : {},
@@ -441,6 +479,7 @@ function createRoom({ dataDir, dmPin, io, uploadDir }) {
       if (!Array.isArray(state.scene.fogShapes)) state.scene.fogShapes = [];
       if (!Array.isArray(state.initiative.entries)) state.initiative.entries = [];
       normalizeLibrary(state.library);
+      normalizeNotifications(state.notifications);
       Object.values(state.characters).forEach(normalizeCharacter);
       Object.values(state.npcs).forEach(normalizeNpc);
       state.tokens.forEach(token => {
@@ -643,6 +682,17 @@ function createRoom({ dataDir, dmPin, io, uploadDir }) {
     io.emit('library:broadcast', publicLibraryBroadcast());
   }
 
+  function publicNotifications() {
+    return cloneJson(state.notifications || []);
+  }
+
+  function emitNotifications() {
+    const notifications = publicNotifications();
+    for (const client of io.sockets.sockets.values()) {
+      if (isDm(client)) client.emit('notifications:update', notifications);
+    }
+  }
+
   function scheduleLibraryBroadcastExpiry() {
     clearTimeout(libraryBroadcastTimer);
     libraryBroadcastTimer = null;
@@ -705,7 +755,8 @@ function createRoom({ dataDir, dmPin, io, uploadDir }) {
         ? Object.fromEntries(Object.entries(state.npcs).map(([id, npc]) => [id, publicNpc(npc)]))
         : {},
       savedScenes: isDm(socket) ? savedSceneMetadata() : [],
-      library: isDm(socket) ? publicLibrary() : { broadcast: publicLibraryBroadcast() }
+      library: isDm(socket) ? publicLibrary() : { broadcast: publicLibraryBroadcast() },
+      notifications: isDm(socket) ? publicNotifications() : []
     };
   }
 
@@ -887,6 +938,7 @@ function createRoom({ dataDir, dmPin, io, uploadDir }) {
     cleanFogShape,
     cleanLibraryFile,
     cleanLibraryFolder,
+    cleanNotification,
     clearLibraryBroadcast,
     cloneJson,
     controlsToken,
@@ -895,6 +947,7 @@ function createRoom({ dataDir, dmPin, io, uploadDir }) {
     emitCharacterUpdate,
     emitLibraryBroadcast,
     emitLibraryUpdate,
+    emitNotifications,
     emitNpcRoster,
     emitSavedScenes,
     emitSceneUpdate,
@@ -903,6 +956,7 @@ function createRoom({ dataDir, dmPin, io, uploadDir }) {
     makePasswordRecord,
     markSceneDirty,
     normalizeLibrary,
+    normalizeNotifications,
     normalizeCharacter,
     normalizeNpc,
     normalizeToken,
@@ -912,6 +966,7 @@ function createRoom({ dataDir, dmPin, io, uploadDir }) {
     persistState,
     pointerColor,
     publicDoodlePath,
+    publicNotifications,
     publicStateFor,
     publicToken,
     removeLibraryFileAsset,
