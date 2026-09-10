@@ -6,6 +6,7 @@ const { createClient } = require('@libsql/client');
 const { createDefaultState } = require('./default-state');
 
 const scryptAsync = promisify(crypto.scrypt);
+const AUTH_SESSION_DAYS = 30;
 const CONDITIONS = new Set([
   'Blinded', 'Charmed', 'Deafened', 'Frightened', 'Grappled', 'Incapacitated',
   'Invisible', 'Paralyzed', 'Petrified', 'Poisoned', 'Prone', 'Restrained',
@@ -510,6 +511,15 @@ function createRoom({ dataDir, dmPin, io, uploadDir }) {
       password_hash TEXT NOT NULL,
       salt TEXT NOT NULL,
       created_at INTEGER NOT NULL
+    )`),
+    db.execute(`CREATE TABLE IF NOT EXISTS auth_sessions (
+      token_hash TEXT PRIMARY KEY,
+      role TEXT NOT NULL,
+      username TEXT,
+      display_name TEXT NOT NULL,
+      credential_hash TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      expires_at INTEGER NOT NULL
     )`)
   ]).then(loadStateFromDb);
 
@@ -567,6 +577,142 @@ function createRoom({ dataDir, dmPin, io, uploadDir }) {
     const derived = await scryptAsync(password, salt, 64);
     const expected = Buffer.from(expectedHash, 'hex');
     return expected.length === derived.length && crypto.timingSafeEqual(expected, derived);
+  }
+
+  function hashAuthValue(value) {
+    return crypto.createHash('sha256').update(String(value || '')).digest('hex');
+  }
+
+  async function authenticateIdentity(payload = {}) {
+    const role = payload.role === 'dm' ? 'dm' : 'player';
+    if (role === 'dm') {
+      if (String(payload.dmPin || '') !== dmPin) {
+        return { ok: false, message: 'That Dungeon Master PIN is not correct.' };
+      }
+      return {
+        ok: true,
+        role,
+        name: String(payload.name || '').trim().slice(0, 80) || 'The DM',
+        username: null,
+        credentialHash: hashAuthValue(dmPin)
+      };
+    }
+
+    const username = normalizeUsername(payload.username);
+    const password = String(payload.password || '');
+    if (!validUsername(username)) {
+      return { ok: false, message: 'Use a 3–32 character username containing letters, numbers, dots, dashes or underscores.' };
+    }
+    if (!validPassword(password)) {
+      return { ok: false, message: 'Passwords must be between 8 and 128 characters.' };
+    }
+    const existingResult = await db.execute({
+      sql: 'SELECT * FROM player_accounts WHERE username = ?',
+      args: [username]
+    });
+    const existing = existingResult.rows[0];
+    if (payload.authMode === 'register') {
+      if (existing) {
+        return { ok: false, message: 'That username is already taken. Choose Sign in if it belongs to you.' };
+      }
+      const name = String(payload.name || '').trim().slice(0, 80) || username;
+      const passwordRecord = await makePasswordRecord(password);
+      await db.execute({
+        sql: 'INSERT INTO player_accounts (username, display_name, password_hash, salt, created_at) VALUES (?, ?, ?, ?, ?)',
+        args: [username, name, passwordRecord.passwordHash, passwordRecord.salt, Date.now()]
+      });
+      return {
+        ok: true,
+        role,
+        name,
+        username,
+        credentialHash: passwordRecord.passwordHash
+      };
+    }
+    if (!existing || !(await verifyPassword(password, existing.salt, existing.password_hash))) {
+      return { ok: false, message: 'The username or password is incorrect.' };
+    }
+    return {
+      ok: true,
+      role,
+      name: String(existing.display_name).slice(0, 80),
+      username,
+      credentialHash: String(existing.password_hash)
+    };
+  }
+
+  async function createAuthSession(identity) {
+    const token = crypto.randomBytes(32).toString('base64url');
+    const createdAt = Date.now();
+    const expiresAt = createdAt + AUTH_SESSION_DAYS * 24 * 60 * 60 * 1000;
+    await db.execute({
+      sql: `INSERT INTO auth_sessions
+        (token_hash, role, username, display_name, credential_hash, created_at, expires_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      args: [
+        hashAuthValue(token),
+        identity.role,
+        identity.username || null,
+        identity.name,
+        identity.credentialHash,
+        createdAt,
+        expiresAt
+      ]
+    });
+    await db.execute({ sql: 'DELETE FROM auth_sessions WHERE expires_at <= ?', args: [createdAt] });
+    return { token, expiresAt };
+  }
+
+  async function authSessionIdentity(token) {
+    const rawToken = String(token || '');
+    if (!/^[A-Za-z0-9_-]{40,}$/.test(rawToken)) return null;
+    const tokenHash = hashAuthValue(rawToken);
+    const result = await db.execute({
+      sql: 'SELECT * FROM auth_sessions WHERE token_hash = ?',
+      args: [tokenHash]
+    });
+    const session = result.rows[0];
+    if (!session || Number(session.expires_at) <= Date.now()) {
+      if (session) await db.execute({ sql: 'DELETE FROM auth_sessions WHERE token_hash = ?', args: [tokenHash] });
+      return null;
+    }
+    if (session.role === 'dm') {
+      if (String(session.credential_hash) !== hashAuthValue(dmPin)) {
+        await db.execute({ sql: 'DELETE FROM auth_sessions WHERE token_hash = ?', args: [tokenHash] });
+        return null;
+      }
+      return { role: 'dm', name: String(session.display_name || 'The DM').slice(0, 80), username: null };
+    }
+    const accountResult = await db.execute({
+      sql: 'SELECT * FROM player_accounts WHERE username = ?',
+      args: [String(session.username || '')]
+    });
+    const account = accountResult.rows[0];
+    if (!account || String(account.password_hash) !== String(session.credential_hash)) {
+      await db.execute({ sql: 'DELETE FROM auth_sessions WHERE token_hash = ?', args: [tokenHash] });
+      return null;
+    }
+    return {
+      role: 'player',
+      name: String(account.display_name).slice(0, 80),
+      username: String(account.username)
+    };
+  }
+
+  async function revokeAuthSession(token) {
+    const rawToken = String(token || '');
+    if (!rawToken) return;
+    await db.execute({
+      sql: 'DELETE FROM auth_sessions WHERE token_hash = ?',
+      args: [hashAuthValue(rawToken)]
+    });
+  }
+
+  async function revokeAuthSessionsForUsername(username) {
+    await db.execute({
+      sql: 'DELETE FROM auth_sessions WHERE role = ? AND username = ?',
+      args: ['player', normalizeUsername(username)]
+    });
   }
 
   function isDm(socket) {
@@ -933,6 +1079,8 @@ function createRoom({ dataDir, dmPin, io, uploadDir }) {
     flush,
     get state() { return state; },
     applyNpcToToken,
+    authenticateIdentity,
+    authSessionIdentity,
     broadcastState,
     cleanDoodlePath,
     cleanFogShape,
@@ -942,6 +1090,7 @@ function createRoom({ dataDir, dmPin, io, uploadDir }) {
     clearLibraryBroadcast,
     cloneJson,
     controlsToken,
+    createAuthSession,
     deny,
     doodleAuthorKey,
     emitCharacterUpdate,
@@ -969,6 +1118,8 @@ function createRoom({ dataDir, dmPin, io, uploadDir }) {
     publicNotifications,
     publicStateFor,
     publicToken,
+    revokeAuthSession,
+    revokeAuthSessionsForUsername,
     removeLibraryFileAsset,
     removeInitiativeForTokenIds,
     scheduleLibraryBroadcastExpiry,

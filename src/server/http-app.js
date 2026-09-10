@@ -2,6 +2,7 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const multer = require('multer');
+const { AUTH_COOKIE_NAME, cookieValue } = require('./socket/auth');
 
 const FRONTEND_FILES = ['index.html', 'app.js', 'style.css'];
 const APP_ROUTES = ['/', '/map', '/characters', '/almanac', '/jukebox', '/library', '/dice'];
@@ -9,6 +10,20 @@ const LIBRARY_EXTENSIONS = new Set([
   '.png', '.jpg', '.jpeg', '.gif', '.webp', '.pdf',
   '.txt', '.md', '.markdown', '.json', '.csv', '.js', '.ts', '.css', '.html', '.xml', '.yaml', '.yml'
 ]);
+const AUTH_SESSION_MAX_AGE_SECONDS = 30 * 24 * 60 * 60;
+
+function authCookie(req, token, maxAge = AUTH_SESSION_MAX_AGE_SECONDS) {
+  const secure = req.secure || String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim() === 'https';
+  return [
+    `${AUTH_COOKIE_NAME}=${encodeURIComponent(token || '')}`,
+    'Path=/',
+    'HttpOnly',
+    'SameSite=Lax',
+    secure ? 'Secure' : '',
+    `Max-Age=${Math.max(0, Number(maxAge) || 0)}`,
+    maxAge ? '' : 'Expires=Thu, 01 Jan 1970 00:00:00 GMT'
+  ].filter(Boolean).join('; ');
+}
 
 function frontendFile(config, filename) {
   const publicFile = path.join(config.publicDir, filename);
@@ -42,7 +57,7 @@ function listMp3Tracks(directory, urlPrefix, source) {
     }));
 }
 
-function createHttpApp(config) {
+function createHttpApp(config, getRoom = () => null) {
   fs.mkdirSync(config.uploadDir, { recursive: true });
 
   const storage = multer.diskStorage({
@@ -69,11 +84,91 @@ function createHttpApp(config) {
     }
   });
   const app = express();
+  const authAttempts = new Map();
 
   app.set('trust proxy', config.proxyTrust);
   app.use(express.json());
   app.use(express.static(config.publicDir));
   app.use('/uploads', express.static(config.uploadDir));
+
+  function authAttemptKey(req) {
+    return String(req.ip || req.socket?.remoteAddress || 'unknown');
+  }
+
+  function tooManyAuthAttempts(req) {
+    const key = authAttemptKey(req);
+    const cutoff = Date.now() - 10 * 60 * 1000;
+    const attempts = (authAttempts.get(key) || []).filter(time => time > cutoff);
+    authAttempts.set(key, attempts);
+    return attempts.length >= 12;
+  }
+
+  function recordAuthFailure(req) {
+    const key = authAttemptKey(req);
+    authAttempts.set(key, [...(authAttempts.get(key) || []), Date.now()].slice(-12));
+  }
+
+  app.post('/api/auth/session', async (req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    if (tooManyAuthAttempts(req)) {
+      return res.status(429).json({ ok: false, message: 'Too many sign-in attempts. Please wait a few minutes.' });
+    }
+    const room = getRoom();
+    if (!room) return res.status(503).json({ ok: false, message: 'The table is still waking up. Please try again.' });
+    try {
+      const identity = await room.authenticateIdentity(req.body || {});
+      if (!identity.ok) {
+        recordAuthFailure(req);
+        return res.status(401).json({ ok: false, message: identity.message });
+      }
+      authAttempts.delete(authAttemptKey(req));
+      const previousToken = cookieValue(req.headers.cookie, AUTH_COOKIE_NAME);
+      if (previousToken) await room.revokeAuthSession(previousToken);
+      const session = await room.createAuthSession(identity);
+      res.setHeader('Set-Cookie', authCookie(req, session.token));
+      return res.json({
+        ok: true,
+        role: identity.role,
+        name: identity.name,
+        username: identity.username || null,
+        expiresAt: session.expiresAt
+      });
+    } catch (error) {
+      console.error('HTTP sign-in failed:', error.message);
+      return res.status(500).json({ ok: false, message: 'The account could not be checked right now. Please try again.' });
+    }
+  });
+
+  app.get('/api/auth/session', async (req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    const room = getRoom();
+    const token = cookieValue(req.headers.cookie, AUTH_COOKIE_NAME);
+    if (!room || !token) return res.status(401).json({ ok: false });
+    try {
+      const identity = await room.authSessionIdentity(token);
+      if (!identity) {
+        res.setHeader('Set-Cookie', authCookie(req, '', 0));
+        return res.status(401).json({ ok: false });
+      }
+      return res.json({ ok: true, ...identity });
+    } catch (error) {
+      console.error('HTTP session check failed:', error.message);
+      return res.status(500).json({ ok: false });
+    }
+  });
+
+  app.delete('/api/auth/session', async (req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    const room = getRoom();
+    const token = cookieValue(req.headers.cookie, AUTH_COOKIE_NAME);
+    try {
+      if (room && token) await room.revokeAuthSession(token);
+    } catch (error) {
+      console.error('Session sign-out failed:', error.message);
+    }
+    res.setHeader('Set-Cookie', authCookie(req, '', 0));
+    return res.status(204).end();
+  });
 
   // Keep repositories that store the three original frontend files at the
   // project root working. Files in /public still take precedence.

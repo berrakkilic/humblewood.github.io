@@ -6,10 +6,11 @@ const { createRoom } = require('./src/server/room');
 const { registerSocketHandlers } = require('./src/server/socket');
 
 const config = loadConfig(__dirname);
-const app = createHttpApp(config);
+let room;
+const app = createHttpApp(config, () => room);
 const server = http.createServer(app);
 const io = new Server(server);
-const room = createRoom({ dataDir: config.dataDir, uploadDir: config.uploadDir, dmPin: config.dmPin, io });
+room = createRoom({ dataDir: config.dataDir, uploadDir: config.uploadDir, dmPin: config.dmPin, io });
 
 registerSocketHandlers(io, room);
 

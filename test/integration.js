@@ -116,6 +116,7 @@ async function run() {
     assert.match(html, /id="dm-notifications-panel"/);
     assert.match(html, /id="dm-notification-count"/);
     assert.match(html, /id="player-question-form"/);
+    assert.match(html, /id="topbar-logout-btn"/);
     assert.match(html, /id="attack-preset-select"/);
     assert.match(html, /js\/phb-spell-presets\.js/);
     assert.match(html, /js\/creation-presets\.js/);
@@ -144,6 +145,9 @@ async function run() {
   assert.match(appSource, /function renderDmNotifications\(\)/);
   assert.match(appSource, /safety:request/);
   assert.match(appSource, /question:submit/);
+  assert.match(appSource, /fetch\('\/api\/auth\/session'/);
+  assert.match(appSource, /socket\.emit\('session:resume'\)/);
+  assert.match(appSource, /if \(idx === -1\) state\.tokens\.push\(updated\)/);
   const session0Response = await fetch(`http://127.0.0.1:${port}/handouts/session-0.html`);
   assert.equal(session0Response.status, 200);
   const session0Source = await session0Response.text();
@@ -217,6 +221,41 @@ async function run() {
   assert.equal(humblewoodMapResponse.status, 200);
   assert.match(humblewoodMapResponse.headers.get('content-type') || '', /image\/png/);
   assert((await humblewoodMapResponse.arrayBuffer()).byteLength > 1000000);
+
+  const sessionLoginResponse = await fetch(`http://127.0.0.1:${port}/api/auth/session`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      role: 'player', authMode: 'register', username: 'session-player',
+      password: 'session-password', name: 'Session Player'
+    })
+  });
+  assert.equal(sessionLoginResponse.status, 200);
+  const sessionLogin = await sessionLoginResponse.json();
+  assert.equal(sessionLogin.ok, true);
+  assert.equal(sessionLogin.username, 'session-player');
+  const setCookie = sessionLoginResponse.headers.get('set-cookie') || '';
+  assert.match(setCookie, /^humblewood_session=/);
+  assert.match(setCookie, /HttpOnly/i);
+  assert.match(setCookie, /SameSite=Lax/i);
+  assert.match(setCookie, /Max-Age=2592000/i);
+  const sessionCookie = setCookie.split(';')[0];
+  const sessionCheckResponse = await fetch(`http://127.0.0.1:${port}/api/auth/session`, {
+    headers: { Cookie: sessionCookie }
+  });
+  assert.equal(sessionCheckResponse.status, 200);
+  const sessionCheck = await sessionCheckResponse.json();
+  assert.equal(sessionCheck.role, 'player');
+  assert.equal(sessionCheck.name, 'Session Player');
+  const sessionLogoutResponse = await fetch(`http://127.0.0.1:${port}/api/auth/session`, {
+    method: 'DELETE', headers: { Cookie: sessionCookie }
+  });
+  assert.equal(sessionLogoutResponse.status, 204);
+  assert.match(sessionLogoutResponse.headers.get('set-cookie') || '', /Max-Age=0/i);
+  const revokedSessionResponse = await fetch(`http://127.0.0.1:${port}/api/auth/session`, {
+    headers: { Cookie: sessionCookie }
+  });
+  assert.equal(revokedSessionResponse.status, 401);
 
   global.window = global;
   global.self = global;
@@ -404,6 +443,14 @@ async function run() {
   const wolf = await pending;
   const playerWolf = await playerWolfPromise;
   assert.equal(playerWolf.pronouns, 'it/its');
+  const hiddenWolfPromise = once(playerOne.socket, 'token:remove', removed => removed.id === wolf.id);
+  dm.socket.emit('token:update', { id: wolf.id, visibleToPlayers: false });
+  await hiddenWolfPromise;
+  const shownWolfPromise = once(playerOne.socket, 'token:update', token => (
+    token.id === wolf.id && token.visibleToPlayers === true
+  ));
+  dm.socket.emit('token:update', { id: wolf.id, visibleToPlayers: true });
+  assert.equal((await shownWolfPromise).label, 'Wolf');
   pending = once(playerOne.socket, 'action:denied', denial => /only the dungeon master can duplicate/i.test(denial.message));
   playerOne.socket.emit('token:duplicate', { id: wolf.id });
   await pending;
@@ -588,7 +635,7 @@ async function run() {
   assert.equal(restored.savedScenes.length, 0);
   assert.deepEqual(restored.npcs, {});
 
-  console.log('Integration checks passed: frontend routes, permissions, drawings, fog, token duplication, badges, initiative editing, pointers, and scene persistence.');
+  console.log('Integration checks passed: frontend routes, saved auth sessions, token hide/show, permissions, drawings, fog, duplication, badges, initiative, pointers, and scene persistence.');
 }
 
 run().catch(error => {

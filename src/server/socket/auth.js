@@ -1,66 +1,72 @@
+const AUTH_COOKIE_NAME = 'humblewood_session';
+
+function cookieValue(header, name) {
+  const prefix = `${name}=`;
+  const part = String(header || '').split(';').map(value => value.trim()).find(value => value.startsWith(prefix));
+  if (!part) return '';
+  try {
+    return decodeURIComponent(part.slice(prefix.length));
+  } catch {
+    return '';
+  }
+}
+
 function registerAuthHandlers(socket, room) {
   const {
-    db, deny, dmPin, isDm, makePasswordRecord, normalizeUsername, publicStateFor,
-    validPassword, validUsername, verifyPassword
+    authSessionIdentity, authenticateIdentity, db, deny, isDm, makePasswordRecord,
+    normalizeUsername, publicStateFor, revokeAuthSessionsForUsername, validPassword
   } = room;
 
   socket.data.authAttempts = 0;
+
   const rejectIdentity = message => {
     socket.data.authAttempts += 1;
     socket.emit('identify:result', { ok: false, message });
     if (socket.data.authAttempts >= 10) setTimeout(() => socket.disconnect(true), 150);
   };
 
-  socket.on('identify', async (payload = {}) => {
-    const requestedRole = payload.role === 'dm' ? 'dm' : 'player';
-    let name;
-    let username = null;
-    try {
-      if (requestedRole === 'dm') {
-        if (String(payload.dmPin || '') !== dmPin) {
-          return rejectIdentity('That Dungeon Master PIN is not correct.');
-        }
-        name = String(payload.name || '').trim().slice(0, 80) || 'The DM';
-      } else {
-        username = normalizeUsername(payload.username);
-        const password = String(payload.password || '');
-        if (!validUsername(username)) {
-          return rejectIdentity('Use a 3–32 character username containing letters, numbers, dots, dashes or underscores.');
-        }
-        if (!validPassword(password)) return rejectIdentity('Passwords must be between 8 and 128 characters.');
-        const existingResult = await db.execute({
-          sql: 'SELECT * FROM player_accounts WHERE username = ?',
-          args: [username]
-        });
-        const existing = existingResult.rows[0];
-        if (payload.authMode === 'register') {
-          if (existing) return rejectIdentity('That username is already taken. Choose Sign in if it belongs to you.');
-          name = String(payload.name || '').trim().slice(0, 80) || username;
-          const passwordRecord = await makePasswordRecord(password);
-          await db.execute({
-            sql: 'INSERT INTO player_accounts (username, display_name, password_hash, salt, created_at) VALUES (?, ?, ?, ?, ?)',
-            args: [username, name, passwordRecord.passwordHash, passwordRecord.salt, Date.now()]
-          });
-        } else {
-          if (!existing || !(await verifyPassword(password, existing.salt, existing.password_hash))) {
-            return rejectIdentity('The username or password is incorrect.');
-          }
-          name = String(existing.display_name).slice(0, 80);
-        }
-      }
-    } catch (error) {
-      console.error('Account sign-in failed:', error.message);
-      return rejectIdentity('The account could not be checked right now. Please try again.');
-    }
-
-    socket.data.role = requestedRole;
-    socket.data.name = name;
-    socket.data.username = username;
+  const completeIdentity = (identity, restored = false) => {
+    socket.data.role = identity.role;
+    socket.data.name = identity.name;
+    socket.data.username = identity.username || null;
     socket.data.identified = true;
     socket.data.authAttempts = 0;
-    socket.emit('identify:result', { ok: true, role: requestedRole, name, username });
+    socket.emit('identify:result', {
+      ok: true,
+      role: identity.role,
+      name: identity.name,
+      username: identity.username || null,
+      restored
+    });
     socket.emit('state:full', publicStateFor(socket));
-    room.io.emit('presence', { role: requestedRole, name, connected: true });
+    room.io.emit('presence', { role: identity.role, name: identity.name, connected: true });
+  };
+
+  // Kept for older clients and automated tests. The browser UI uses the HTTP
+  // session endpoint so the credential never has to be stored in JavaScript.
+  socket.on('identify', async (payload = {}) => {
+    try {
+      const result = await authenticateIdentity(payload);
+      if (!result.ok) return rejectIdentity(result.message);
+      completeIdentity(result, false);
+    } catch (error) {
+      console.error('Account sign-in failed:', error.message);
+      rejectIdentity('The account could not be checked right now. Please try again.');
+    }
+  });
+
+  socket.on('session:resume', async () => {
+    if (socket.data.identified) return;
+    try {
+      const token = cookieValue(socket.request?.headers?.cookie, AUTH_COOKIE_NAME);
+      const identity = token ? await authSessionIdentity(token) : null;
+      if (!identity) return socket.emit('session:result', { ok: false });
+      completeIdentity(identity, true);
+      socket.emit('session:result', { ok: true });
+    } catch (error) {
+      console.error('Session restore failed:', error.message);
+      socket.emit('session:result', { ok: false });
+    }
   });
 
   socket.on('accounts:list', async () => {
@@ -93,6 +99,7 @@ function registerAuthHandlers(socket, room) {
         sql: 'UPDATE player_accounts SET password_hash = ?, salt = ? WHERE username = ?',
         args: [passwordRecord.passwordHash, passwordRecord.salt, username]
       });
+      await revokeAuthSessionsForUsername(username);
       socket.emit('account:passwordReset', { username });
     } catch (error) {
       console.error('Could not reset account password:', error.message);
@@ -101,4 +108,4 @@ function registerAuthHandlers(socket, room) {
   });
 }
 
-module.exports = { registerAuthHandlers };
+module.exports = { AUTH_COOKIE_NAME, cookieValue, registerAuthHandlers };

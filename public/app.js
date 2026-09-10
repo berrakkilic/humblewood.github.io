@@ -1,4 +1,4 @@
-const socket = io();
+const socket = io({ autoConnect: false });
 const {
   clampScale,
   fitStageInViewport,
@@ -16,10 +16,9 @@ const HUMBLEWOOD_FEAT_PRESETS = (window.HumblewoodAlmanacData || [])
 let myRole = 'dm';
 let myName = '';
 let myUsername = '';
-let myPassword = '';
 let authMode = 'login';
-let myDmPin = '';
 let joined = false;
+let awaitingSessionResume = false;
 let state = null;
 let dmPrivateRollsEnabled = false;
 let privateRollLog = [];
@@ -118,17 +117,17 @@ function setAuthMode(mode) {
   document.getElementById('confirm-password-field').classList.toggle('hidden', mode !== 'register');
   document.getElementById('password-input').autocomplete = mode === 'register' ? 'new-password' : 'current-password';
   document.getElementById('auth-help').textContent = mode === 'register'
-    ? 'Create one account, then use it anywhere you play.'
-    : 'Sign in from any device. If you forget it, ask the DM to look up your username or reset the password.';
+    ? 'Create one account, then use it anywhere you play. This device will stay signed in for 30 days.'
+    : 'Sign in from any device. This device will stay signed in for 30 days; if you forget your password, ask the DM to reset it.';
   document.getElementById('join-error').textContent = '';
 }
 
-document.getElementById('join-btn').onclick = () => {
+document.getElementById('join-btn').onclick = async () => {
   const nameInput = document.getElementById('name-input');
   myUsername = document.getElementById('username-input').value.trim();
-  myPassword = document.getElementById('password-input').value;
+  const password = document.getElementById('password-input').value;
   myName = nameInput.value.trim() || (myRole === 'dm' ? 'The DM' : myUsername);
-  if (myRole === 'player' && authMode === 'register' && myPassword !== document.getElementById('confirm-password-input').value) {
+  if (myRole === 'player' && authMode === 'register' && password !== document.getElementById('confirm-password-input').value) {
     document.getElementById('join-error').textContent = 'Those passwords do not match.';
     return;
   }
@@ -136,20 +135,32 @@ document.getElementById('join-btn').onclick = () => {
   joinButton.disabled = true;
   joinButton.textContent = 'Entering…';
   document.getElementById('join-error').textContent = '';
-  myDmPin = document.getElementById('dm-pin-input').value;
-  sendIdentity();
+  try {
+    const response = await fetch('/api/auth/session', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        role: myRole,
+        name: myName,
+        username: myUsername,
+        password,
+        authMode,
+        dmPin: document.getElementById('dm-pin-input').value
+      })
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok || !result.ok) throw new Error(result.message || 'Could not join the table.');
+    awaitingSessionResume = true;
+    socket.disconnect();
+    socket.connect();
+  } catch (error) {
+    awaitingSessionResume = false;
+    joinButton.disabled = false;
+    joinButton.textContent = 'Enter the Wood';
+    document.getElementById('join-error').textContent = error.message || 'Could not join the table.';
+  }
 };
-
-function sendIdentity() {
-  socket.emit('identify', {
-    role: myRole,
-    name: myName,
-    username: myUsername,
-    password: myPassword,
-    authMode,
-    dmPin: myDmPin
-  });
-}
 
 document.getElementById('dm-pin-input').addEventListener('keydown', event => {
   if (event.key === 'Enter') document.getElementById('join-btn').click();
@@ -169,6 +180,7 @@ socket.on('identify:result', result => {
     document.getElementById('join-error').textContent = result.message || 'Could not join the table.';
     return;
   }
+  awaitingSessionResume = false;
   myRole = result.role;
   myName = result.name;
   myUsername = result.username || '';
@@ -191,7 +203,15 @@ socket.on('identify:result', result => {
 });
 
 socket.on('connect', () => {
-  if (joined) sendIdentity();
+  socket.emit('session:resume');
+});
+socket.on('session:result', result => {
+  if (result.ok || !awaitingSessionResume) return;
+  awaitingSessionResume = false;
+  const joinButton = document.getElementById('join-btn');
+  joinButton.disabled = false;
+  joinButton.textContent = 'Enter the Wood';
+  document.getElementById('join-error').textContent = 'Your login succeeded, but the saved session could not be restored. Please try again.';
 });
 
 // ---------------- Frontend routes ----------------
@@ -210,6 +230,19 @@ const router = window.HumblewoodRouter.createRouter({
 window.HumblewoodAlmanac.mount(window.HumblewoodAlmanacData);
 
 document.getElementById('topbar-roll-btn').onclick = () => switchView('dice');
+document.getElementById('topbar-logout-btn').onclick = async () => {
+  const button = document.getElementById('topbar-logout-btn');
+  button.disabled = true;
+  button.textContent = 'Logging out…';
+  try {
+    await fetch('/api/auth/session', { method: 'DELETE', credentials: 'same-origin' });
+    window.location.reload();
+  } catch {
+    button.disabled = false;
+    button.textContent = 'Log out';
+    showToast('Could not log out. Please check your connection and try again.');
+  }
+};
 
 function renderRoute(viewName, route) {
   if (viewName === 'library' && myRole !== 'dm') {
@@ -292,7 +325,8 @@ socket.on('token:move', ({ id, x, y }) => {
 });
 socket.on('token:update', (updated) => {
   const idx = state.tokens.findIndex(t => t.id === updated.id);
-  if (idx !== -1) state.tokens[idx] = { ...state.tokens[idx], ...updated };
+  if (idx === -1) state.tokens.push(updated);
+  else state.tokens[idx] = { ...state.tokens[idx], ...updated };
   renderMapTokens(); renderTokenTray();
   renderNpcRoster();
   renderDmSidebarSummary();
@@ -4896,3 +4930,7 @@ async function uploadLibraryFile(file) {
   if (!res.ok) throw new Error(data.error || 'The file could not be uploaded.');
   return data;
 }
+
+// Connect only after every socket listener above has been registered. This is
+// especially important for an automatic session restore on a fast connection.
+socket.connect();

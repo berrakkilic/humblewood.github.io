@@ -178,7 +178,7 @@ header.topbar h1 { color: #fdf9ee; font-size: 22px; }
 header.topbar .tagline { font-family: 'Caveat', cursive; font-size: 18px; color: var(--gold); margin-left: 10px; }
 .topbar-right { display: flex; align-items: center; gap: 14px; font-size: 14px; }
 .topbar-player-actions { display: flex; align-items: center; gap: 7px; }
-.topbar-safety-btn, .topbar-question-btn, .topbar-notifications-btn {
+.topbar-safety-btn, .topbar-question-btn, .topbar-notifications-btn, .topbar-logout-btn {
   border-radius: 999px; padding: 6px 11px; font-weight: 700; cursor: pointer; white-space: nowrap;
 }
 .topbar-safety-btn {
@@ -190,6 +190,10 @@ header.topbar .tagline { font-family: 'Caveat', cursive; font-size: 18px; color:
   border: 1px solid rgba(255,255,255,.35); background: rgba(255,255,255,.14); color: #fff;
 }
 .topbar-question-btn:hover, .topbar-notifications-btn:hover { background: rgba(255,255,255,.24); }
+.topbar-logout-btn {
+  border: 0; background: transparent; color: rgba(255,255,255,.8); padding-inline: 5px;
+}
+.topbar-logout-btn:hover { color: #fff; text-decoration: underline; }
 .notification-count {
   display: inline-grid; place-items: center; min-width: 18px; height: 18px; margin-left: 3px;
   padding: 0 4px; border-radius: 999px; background: var(--rose); color: #fff; font-size: 10px; line-height: 1;
@@ -1294,7 +1298,7 @@ body[data-role="player"] .dm-only { display: none !important; }
   header.topbar h1 { font-size: 18px; }
   .role-pill { display: none; }
   .topbar-right { gap: 5px; font-size: 12px; }
-  .topbar-safety-btn, .topbar-question-btn, .topbar-notifications-btn, .topbar-roll-btn { padding: 5px 8px; font-size: 11px; }
+  .topbar-safety-btn, .topbar-question-btn, .topbar-notifications-btn, .topbar-roll-btn, .topbar-logout-btn { padding: 5px 8px; font-size: 11px; }
   .dm-notifications-panel { top: 58px; right: 10px; width: calc(100vw - 20px); max-height: 76vh; }
   .view { padding: 12px; }
   .almanac-hero { padding: 22px 18px; }
