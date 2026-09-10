@@ -40,6 +40,15 @@ function humanizeTrackFilename(filename) {
     .replace(/\b\w/g, letter => letter.toUpperCase());
 }
 
+function safeAudioFilename(filename) {
+  const extension = path.extname(filename).toLowerCase();
+  const basename = path.basename(filename, extension)
+    .replace(/[^a-zA-Z0-9._-]/g, '_')
+    .replace(/^\.+/, '')
+    .slice(0, 180) || 'track';
+  return `${basename}.mp3`;
+}
+
 function listMp3Tracks(directory, urlPrefix, source) {
   let entries = [];
   try {
@@ -59,6 +68,7 @@ function listMp3Tracks(directory, urlPrefix, source) {
 
 function createHttpApp(config, getRoom = () => null) {
   fs.mkdirSync(config.uploadDir, { recursive: true });
+  fs.mkdirSync(config.musicDir, { recursive: true });
 
   const storage = multer.diskStorage({
     destination: (req, file, callback) => callback(null, config.uploadDir),
@@ -68,8 +78,14 @@ function createHttpApp(config, getRoom = () => null) {
     }
   });
   const upload = multer({ storage, limits: { fileSize: 25 * 1024 * 1024 } });
+  const audioStorage = multer.diskStorage({
+    destination: (req, file, callback) => callback(null, config.musicDir),
+    // A stable filename keeps old /music/name.mp3 playlist entries working
+    // after the corresponding repository track is uploaded once.
+    filename: (req, file, callback) => callback(null, safeAudioFilename(file.originalname))
+  });
   const audioUpload = multer({
-    storage,
+    storage: audioStorage,
     limits: { fileSize: 100 * 1024 * 1024 },
     fileFilter: (req, file, callback) => {
       const extension = path.extname(file.originalname).toLowerCase();
@@ -90,6 +106,7 @@ function createHttpApp(config, getRoom = () => null) {
   app.use(express.json());
   app.use(express.static(config.publicDir));
   app.use('/uploads', express.static(config.uploadDir));
+  app.use('/music', express.static(config.musicDir));
 
   function authAttemptKey(req) {
     return String(req.ip || req.socket?.remoteAddress || 'unknown');
@@ -192,7 +209,10 @@ function createHttpApp(config, getRoom = () => null) {
         return res.status(status).json({ error: error.message || 'The MP3 could not be uploaded.' });
       }
       if (!req.file) return res.status(400).json({ error: 'Choose an MP3 file.' });
-      return res.json({ url: `/uploads/${req.file.filename}`, name: req.file.originalname });
+      return res.json({
+        url: `/music/${encodeURIComponent(req.file.filename)}`,
+        name: req.file.originalname
+      });
     });
   });
 
@@ -213,9 +233,11 @@ function createHttpApp(config, getRoom = () => null) {
   });
 
   app.get('/api/music', (req, res) => {
-    const builtIn = listMp3Tracks(path.join(config.publicDir, 'music'), '/music', 'Built-in');
-    const uploaded = listMp3Tracks(config.uploadDir, '/uploads', 'Uploaded');
-    res.json({ tracks: [...builtIn, ...uploaded].sort((a, b) => a.title.localeCompare(b.title)) });
+    const stored = listMp3Tracks(config.musicDir, '/music', 'Server');
+    // Tracks uploaded by older versions lived in the general uploads volume.
+    // Continue listing them so existing campaigns are not broken by the move.
+    const legacy = listMp3Tracks(config.uploadDir, '/uploads', 'Server (legacy)');
+    res.json({ tracks: [...stored, ...legacy].sort((a, b) => a.title.localeCompare(b.title)) });
   });
 
   // History API fallback for every client-side page. This makes refreshes and

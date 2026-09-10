@@ -3904,13 +3904,19 @@ addTrackButton.onclick = async () => {
       if (!title) title = uploaded.name.replace(/\.mp3$/i, '').replace(/[_-]+/g, ' ');
     }
     if (!title) return alert('Give the track a name.');
-    const playlist = [...state.jukebox.playlist, { id: 'm' + Date.now(), title, url }];
+    const existingIndex = state.jukebox.playlist.findIndex(track => track.url === url);
+    const playlist = existingIndex === -1
+      ? [...state.jukebox.playlist, { id: 'm' + Date.now(), title, url }]
+      : state.jukebox.playlist.map((track, index) => index === existingIndex ? { ...track, title } : track);
     socket.emit('jukebox:setPlaylist', playlist);
     trackTitleInput.value = '';
     trackUrlInput.value = '';
     trackFileInput.value = '';
     trackPresetSelect.value = '';
-    if (file) await loadMusicTracks();
+    if (file) {
+      await loadMusicTracks();
+      showToast(existingIndex === -1 ? 'Track saved on the server.' : 'Server track restored.');
+    }
   } catch (error) {
     alert(error.message || 'The MP3 could not be uploaded.');
   } finally {

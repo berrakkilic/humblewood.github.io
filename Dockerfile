@@ -11,9 +11,9 @@ RUN useradd --shell /bin/bash -u 10001 humblewood
 # Copy the rest of the app
 COPY --chown=humblewood:humblewood . .
 
-# Data (SQLite) and uploaded images live here — mount this as a volume
+# Data (SQLite), server-side music and uploaded images live here — mount these as volumes
 # so they survive container restarts/rebuilds.
-RUN mkdir -p /app/data /app/public/uploads
+RUN mkdir -p /app/data/music /app/public/uploads
 
 # Fix permissions (This may be unneccesary)
 RUN chown -R humblewood:humblewood /app

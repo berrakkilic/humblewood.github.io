@@ -39,7 +39,7 @@ Now hosted on `https://humblewood.sfseeger.de/` !!
 
 - **Map & tokens**: DM uploads the battle map image. Tokens for NPCs, items and PCs live in a tray and can be moved, snapped to the grid, hidden from players and given one-by-one HP adjustments. Pan and zoom controls work for everyone. Doodles and NPC/item names can be enabled by DM. Distance can be measured with the Ruler. Battle Fog can be drawn with rectangles. Conditions show up on tokens with its starting letters. 
 - **Initiative tracker**: turn order and rounds of NPCs and player characters are all visible directly beside the map (initiative table can be toggled on and off). DM can manually edit and reorder initiatives and their order. NPCs can enter the initiative tracker and have basic battle functions.
-- **Jukebox**: add tracks as files and play them for all users. (DM-Limited)
+- **Jukebox**: upload MP3 tracks to persistent server storage and play them for all users. Only their URLs and playlist metadata are kept in the database; the audio files are not part of the repository. (DM-Limited)
 - **Character sheets**: a basic 5e-style sheet (abilities, HP/AC, inventory, notes) per character, added Humblewood characteristics. A tiny reminder of your character can be found on the sidebar of the map page.
 - **Character-specific dice**: Select a character to roll ability checks, saving throws, skills, initiative, attacks, spell attacks etc. with the stored modifiers. d20 rolls support advantage and disadvantage and sync to the shared roll log. Spell and combat rolls are accessible on the combat page.
 - **Cottagecore Humblewood aesthetic**: parchment and forest tones, vine dividers, soft rounded shapes.
@@ -55,3 +55,16 @@ Now hosted on `https://humblewood.sfseeger.de/` !!
 - more attack presets
 - divide css because simo is a little bitch
 - create list of users currently online
+
+## Server-side music
+
+MP3 files selected in the Jukebox are saved under `/app/data/music` in the
+`humblewood-data` Docker volume. They therefore survive normal image rebuilds and
+deployments without being committed to Git. `public/music/` is ignored by both
+Git and Docker.
+
+For tracks that used to live in `public/music`, deploy this version and upload
+each original MP3 once from the DM Jukebox. The server keeps its filename stable,
+so an existing playlist URL such as `/music/farm.mp3` starts working again as
+soon as `farm.mp3` has been uploaded. Do not run `docker compose down -v`, because
+the `-v` option deletes the persistent database, upload and music volumes.

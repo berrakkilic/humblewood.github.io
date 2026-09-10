@@ -17,6 +17,7 @@ const server = spawn(process.execPath, ['server.js'], {
     PORT: String(port),
     DM_PIN: 'test-pin',
     DATA_DIR: path.join(temp, 'data'),
+    MUSIC_DIR: path.join(temp, 'music'),
     UPLOAD_DIR: path.join(temp, 'uploads')
   },
   stdio: ['ignore', 'pipe', 'pipe']
@@ -158,7 +159,7 @@ async function run() {
   const musicResponse = await fetch(`http://127.0.0.1:${port}/api/music`);
   assert.equal(musicResponse.status, 200);
   const musicCatalog = await musicResponse.json();
-  assert(musicCatalog.tracks.some(track => track.url === '/music/farm.mp3' && track.source === 'Built-in'));
+  assert.deepEqual(musicCatalog.tracks, []);
   const badUpload = new FormData();
   badUpload.append('file', new Blob(['not an mp3'], { type: 'text/plain' }), 'notes.txt');
   const badUploadResponse = await fetch(`http://127.0.0.1:${port}/api/upload/audio`, {
@@ -172,11 +173,11 @@ async function run() {
   });
   assert.equal(audioUploadResponse.status, 200);
   const uploadedAudio = await audioUploadResponse.json();
-  assert.match(uploadedAudio.url, /^\/uploads\/\d+-uploaded-forest\.mp3$/);
+  assert.equal(uploadedAudio.url, '/music/uploaded-forest.mp3');
   const uploadedTrackResponse = await fetch(`http://127.0.0.1:${port}${uploadedAudio.url}`);
   assert.equal(uploadedTrackResponse.status, 200);
   const updatedMusicCatalog = await (await fetch(`http://127.0.0.1:${port}/api/music`)).json();
-  assert(updatedMusicCatalog.tracks.some(track => track.url === uploadedAudio.url && track.source === 'Uploaded'));
+  assert(updatedMusicCatalog.tracks.some(track => track.url === uploadedAudio.url && track.source === 'Server'));
   const unsupportedLibraryUpload = new FormData();
   unsupportedLibraryUpload.append('file', new Blob(['binary'], { type: 'application/octet-stream' }), 'archive.zip');
   const unsupportedLibraryResponse = await fetch(`http://127.0.0.1:${port}/api/upload/library`, {
