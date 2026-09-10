@@ -725,7 +725,7 @@ body[data-role="dm"] .token-tray.dm-detailed .token-list-details { display: flex
 .account-list-item span { color: var(--ink-soft); font-size: 12px; }
 .account-reset-row { display: grid; grid-template-columns: minmax(130px, .7fr) minmax(190px, 1fr) auto; gap: 8px; }
 
-.sheet-form { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; max-width: 900px; }
+.sheet-form { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
 .sheet-form .field.span-2 { grid-column: span 2; }
 .sheet-form .field.span-4 { grid-column: span 4; }
 .ability-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; }
