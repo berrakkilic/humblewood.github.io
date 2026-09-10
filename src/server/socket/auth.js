@@ -13,7 +13,7 @@ function cookieValue(header, name) {
 
 function registerAuthHandlers(socket, room) {
   const {
-    authSessionIdentity, authenticateIdentity, db, deny, isDm, makePasswordRecord,
+    authSessionIdentity, authenticateIdentity, db, deny, emitOnlineUsers, isDm, makePasswordRecord,
     normalizeUsername, publicStateFor, revokeAuthSessionsForUsername, validPassword
   } = room;
 
@@ -40,6 +40,7 @@ function registerAuthHandlers(socket, room) {
     });
     socket.emit('state:full', publicStateFor(socket));
     room.io.emit('presence', { role: identity.role, name: identity.name, connected: true });
+    emitOnlineUsers();
   };
 
   // Kept for older clients and automated tests. The browser UI uses the HTTP

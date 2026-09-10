@@ -32,6 +32,53 @@ function createRoom({ dataDir, dmPin, io, uploadDir }) {
     return String(value || '').trim().replace(/\s+/g, ' ').slice(0, 60);
   }
 
+  function cleanInventory(inventory) {
+    const source = Array.isArray(inventory)
+      ? inventory
+      : typeof inventory === 'string'
+        ? inventory.split(/\n|,/).map(name => ({ name, qty: 1 }))
+        : [];
+    const seen = new Set();
+    const items = source.slice(0, 300).map((item, index) => {
+      if (!item || typeof item !== 'object') return null;
+      let id = String(item.id || `item-${index}`).trim().slice(0, 140);
+      if (!id || seen.has(id)) id = `item-${index}-${Math.random().toString(36).slice(2, 7)}`;
+      seen.add(id);
+      const rawQuantity = item.qty === 0 ? 0 : Number(item.qty);
+      const name = String(item.name || '').trim().slice(0, 200);
+      return {
+        id,
+        name,
+        qty: Math.max(0, Math.min(9999, Number.isFinite(rawQuantity) ? rawQuantity : 1)),
+        // Existing and unknown items stay in the backpack so migrations never
+        // make equipment disappear.
+        location: item.location === 'carried' ? 'carried' : 'backpack',
+        isContainer: !!(item.isContainer ?? item.container) || /(?:backpack|bag|pouch|chest|satchel|quiver|case|pack)$/i.test(name),
+        containerId: String(item.containerId || '').trim().slice(0, 140) || null
+      };
+    }).filter(item => item && item.name);
+
+    const byId = new Map(items.map(item => [item.id, item]));
+    items.forEach(item => {
+      if (!item.containerId || item.containerId === item.id) {
+        item.containerId = null;
+        return;
+      }
+      const visited = new Set([item.id]);
+      let parent = byId.get(item.containerId);
+      while (parent) {
+        if (visited.has(parent.id) || !parent.isContainer) {
+          item.containerId = null;
+          break;
+        }
+        visited.add(parent.id);
+        parent = parent.containerId ? byId.get(parent.containerId) : null;
+      }
+      if (item.containerId && !byId.has(item.containerId)) item.containerId = null;
+    });
+    return items;
+  }
+
   const LIBRARY_TEXT_EXTENSIONS = new Set([
     '.txt', '.md', '.markdown', '.json', '.csv', '.js', '.ts', '.css', '.html', '.xml', '.yaml', '.yml'
   ]);
@@ -220,11 +267,7 @@ function createRoom({ dataDir, dmPin, io, uploadDir }) {
         saveDc: Math.max(0, Math.min(99, Number(sheet.spellcasting?.saveDc) || 0)),
         attackBonus: Math.max(-99, Math.min(99, Number(sheet.spellcasting?.attackBonus) || 0))
       },
-      inventory: Array.isArray(sheet.inventory) ? sheet.inventory.slice(0, 300).map((item, index) => ({
-        id: String(item?.id || `item-${index}`).slice(0, 140),
-        name: String(item?.name || '').trim().slice(0, 200),
-        qty: Math.max(1, Math.min(9999, Number(item?.qty) || 1))
-      })).filter(item => item.name) : [],
+      inventory: cleanInventory(sheet.inventory),
       notes: String(sheet.notes || '').slice(0, 12000),
       fields
     };
@@ -382,6 +425,7 @@ function createRoom({ dataDir, dmPin, io, uploadDir }) {
 
   function normalizeCharacter(character) {
     if (!character.fields || typeof character.fields !== 'object') character.fields = {};
+    character.inventory = cleanInventory(character.inventory);
     character.pronouns = cleanPronouns(character.pronouns ?? character.fields.pronouns);
     character.fields.pronouns = character.pronouns;
     character.hp = Math.max(0, Number(character.hp ?? character.fields.hp) || 0);
@@ -832,6 +876,39 @@ function createRoom({ dataDir, dmPin, io, uploadDir }) {
     return cloneJson(state.notifications || []);
   }
 
+  function onlineUsers() {
+    const users = new Map();
+    for (const client of io.sockets.sockets.values()) {
+      if (!client.data.identified) continue;
+      const role = client.data.role === 'dm' ? 'dm' : 'player';
+      const identity = role === 'player'
+        ? (client.data.username || client.data.name || client.id)
+        : (client.data.name || client.id);
+      const key = `${role}:${identity}`;
+      const existing = users.get(key);
+      if (existing) {
+        existing.connections += 1;
+        continue;
+      }
+      users.set(key, {
+        id: key,
+        name: String(client.data.name || 'Unknown').slice(0, 100),
+        role,
+        connections: 1
+      });
+    }
+    return [...users.values()].sort((a, b) => (
+      (a.role === b.role ? 0 : a.role === 'dm' ? -1 : 1) || a.name.localeCompare(b.name)
+    ));
+  }
+
+  function emitOnlineUsers() {
+    const users = onlineUsers();
+    for (const client of io.sockets.sockets.values()) {
+      if (isDm(client)) client.emit('presence:list', users);
+    }
+  }
+
   function emitNotifications() {
     const notifications = publicNotifications();
     for (const client of io.sockets.sockets.values()) {
@@ -902,7 +979,8 @@ function createRoom({ dataDir, dmPin, io, uploadDir }) {
         : {},
       savedScenes: isDm(socket) ? savedSceneMetadata() : [],
       library: isDm(socket) ? publicLibrary() : { broadcast: publicLibraryBroadcast() },
-      notifications: isDm(socket) ? publicNotifications() : []
+      notifications: isDm(socket) ? publicNotifications() : [],
+      onlineUsers: isDm(socket) ? onlineUsers() : []
     };
   }
 
@@ -1097,6 +1175,7 @@ function createRoom({ dataDir, dmPin, io, uploadDir }) {
     emitLibraryBroadcast,
     emitLibraryUpdate,
     emitNotifications,
+    emitOnlineUsers,
     emitNpcRoster,
     emitSavedScenes,
     emitSceneUpdate,
@@ -1109,6 +1188,8 @@ function createRoom({ dataDir, dmPin, io, uploadDir }) {
     normalizeCharacter,
     normalizeNpc,
     normalizeToken,
+    cleanInventory,
+    onlineUsers,
     normalizeUsername,
     npcFromToken,
     ownsCharacter,

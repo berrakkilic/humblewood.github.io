@@ -20,6 +20,7 @@ let authMode = 'login';
 let joined = false;
 let awaitingSessionResume = false;
 let state = null;
+let onlineUsers = [];
 let dmPrivateRollsEnabled = false;
 let privateRollLog = [];
 let selectedTool = 'move';
@@ -36,6 +37,7 @@ let spacePanPressed = false;
 let lastFittedMapUrl = null;
 let editingOriginalName = null;
 let editingInventory = [];
+let inventoryExpandedContainers = new Set();
 let editingAttacks = [];
 let editingAttackId = null;
 let editingSpells = [];
@@ -268,6 +270,7 @@ router.start();
 // ---------------- Socket state sync ----------------
 socket.on('state:full', (s) => {
   state = s;
+  onlineUsers = Array.isArray(s.onlineUsers) ? s.onlineUsers : [];
   renderMap();
   renderTokenTray();
   renderNpcRoster();
@@ -278,6 +281,7 @@ socket.on('state:full', (s) => {
   renderJukebox();
   renderLibrary();
   renderDmNotifications();
+  renderOnlineUsers();
   renderSharedHandout();
   renderRollLog();
   renderInitiative();
@@ -486,6 +490,11 @@ socket.on('presence', ({ role, name, connected }) => {
   // lightweight ephemeral presence note
   el.textContent = `${name} ${connected ? 'joined' : 'left'} the wood`;
   setTimeout(() => { if (el.textContent.includes(name)) el.textContent = ''; }, 4000);
+});
+
+socket.on('presence:list', users => {
+  onlineUsers = Array.isArray(users) ? users : [];
+  renderOnlineUsers();
 });
 
 socket.on('pointer:move', renderSharedPointer);
@@ -2360,6 +2369,30 @@ function renderNpcRoster() {
   });
 }
 
+function renderOnlineUsers() {
+  const list = document.getElementById('dm-online-list');
+  const count = document.getElementById('dm-online-count');
+  if (!list || myRole !== 'dm') return;
+  const users = Array.isArray(onlineUsers) ? onlineUsers : [];
+  if (count) count.textContent = String(users.length);
+  list.innerHTML = '';
+  if (!users.length) {
+    list.innerHTML = '<p class="player-sidebar-empty">No one is currently connected.</p>';
+    return;
+  }
+  users.forEach(user => {
+    const row = document.createElement('div');
+    row.className = 'online-user-row';
+    const roleLabel = user.role === 'dm' ? 'Dungeon Master' : 'Player';
+    const connectionNote = Number(user.connections) > 1 ? ` · ${user.connections} tabs` : '';
+    row.innerHTML = `
+      <span class="online-user-dot" aria-hidden="true"></span>
+      <span class="online-user-copy"><strong>${escapeHtml(user.name)}</strong><small>${roleLabel}${connectionNote}</small></span>
+    `;
+    list.appendChild(row);
+  });
+}
+
 function renderPlayerSidebar() {
   const container = document.getElementById('player-character-summary');
   if (!container || !state) return;
@@ -2756,6 +2789,7 @@ function openSheetEditor(c, options = {}) {
   setCharacterRuleSelections(fields);
   if (!c && !fields['ac-method']) applyRecommendedArmorMethod();
   editingInventory = normalizeInventory(isNpc ? c?.sheet?.inventory : c?.inventory);
+  inventoryExpandedContainers = new Set(editingInventory.filter(item => item.isContainer).map(item => item.id));
   renderInventoryEditor();
   editingAttacks = normalizeAttackList(isNpc ? (c?.sheet?.attacks || c?.attacks) : c?.attacks);
   editingAttackId = null;
@@ -2812,50 +2846,220 @@ function setSheetEditable(canEdit, hasCharacter) {
 }
 
 function normalizeInventory(inventory) {
-  if (Array.isArray(inventory)) {
-    return inventory.map((item, index) => ({ id: item.id || `item-${Date.now()}-${index}`, name: String(item.name || ''), qty: Math.max(1, Number(item.qty) || 1) }));
+  const source = Array.isArray(inventory)
+    ? inventory
+    : typeof inventory === 'string' && inventory.trim()
+      ? inventory.split(/\n|,/).map(name => ({ name, qty: 1 }))
+      : [];
+  const seen = new Set();
+  const items = source.map((item, index) => {
+    if (!item || typeof item !== 'object') return null;
+    let id = String(item.id || `item-${Date.now()}-${index}`);
+    if (!id || seen.has(id)) id = `item-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 7)}`;
+    seen.add(id);
+    const quantity = item.qty === 0 ? 0 : Number(item.qty);
+    const name = String(item.name || '').trim();
+    return {
+      id,
+      name,
+      qty: Math.max(0, Math.min(9999, Number.isFinite(quantity) ? quantity : 1)),
+      location: item.location === 'carried' ? 'carried' : 'backpack',
+      isContainer: !!(item.isContainer ?? item.container) || /(?:backpack|bag|pouch|chest|satchel|quiver|case|pack)$/i.test(name),
+      containerId: String(item.containerId || '').trim() || null
+    };
+  }).filter(item => item && item.name);
+  const byId = new Map(items.map(item => [item.id, item]));
+  items.forEach(item => {
+    if (!item.containerId || item.containerId === item.id) {
+      item.containerId = null;
+      return;
+    }
+    const visited = new Set([item.id]);
+    let parent = byId.get(item.containerId);
+    while (parent) {
+      if (visited.has(parent.id) || !parent.isContainer) {
+        item.containerId = null;
+        break;
+      }
+      visited.add(parent.id);
+      parent = parent.containerId ? byId.get(parent.containerId) : null;
+    }
+    if (item.containerId && !byId.has(item.containerId)) item.containerId = null;
+  });
+  return items;
+}
+
+function inventoryChildren(itemId) {
+  return editingInventory.filter(item => item.containerId === itemId);
+}
+
+function inventoryEffectiveLocation(item) {
+  let current = item;
+  const visited = new Set();
+  while (current?.containerId && !visited.has(current.id)) {
+    visited.add(current.id);
+    const parent = editingInventory.find(candidate => candidate.id === current.containerId);
+    if (!parent) break;
+    current = parent;
   }
-  if (typeof inventory === 'string' && inventory.trim()) {
-    return inventory.split(/\n|,/).map((name, index) => ({ id: `legacy-${index}`, name: name.trim(), qty: 1 })).filter(item => item.name);
+  return current?.location === 'carried' ? 'carried' : 'backpack';
+}
+
+function renderInventoryContainerOptions() {
+  const select = document.getElementById('inv-item-container');
+  if (!select) return;
+  const selected = select.value;
+  select.innerHTML = '<option value="">No container</option>';
+  editingInventory.filter(item => item.isContainer).forEach(item => {
+    const option = document.createElement('option');
+    option.value = item.id;
+    option.textContent = `Inside ${item.name}`;
+    select.appendChild(option);
+  });
+  select.value = editingInventory.some(item => item.id === selected && item.isContainer) ? selected : '';
+}
+
+function removeInventoryItem(item) {
+  const parent = item.containerId ? editingInventory.find(candidate => candidate.id === item.containerId) : null;
+  editingInventory = editingInventory
+    .filter(entry => entry.id !== item.id)
+    .map(entry => entry.containerId === item.id
+      ? { ...entry, containerId: parent?.id || null, location: parent ? inventoryEffectiveLocation(parent) : item.location }
+      : entry);
+  inventoryExpandedContainers.delete(item.id);
+  renderInventoryContainerOptions();
+  renderInventoryEditor();
+}
+
+function moveInventoryItem(item) {
+  const effectiveLocation = inventoryEffectiveLocation(item);
+  if (item.containerId) {
+    item.containerId = null;
+    item.location = effectiveLocation === 'carried' ? 'backpack' : 'carried';
+  } else {
+    item.location = item.location === 'carried' ? 'backpack' : 'carried';
   }
-  return [];
+  renderInventoryEditor();
+}
+
+function renderInventoryItem(item) {
+  const children = inventoryChildren(item.id);
+  const row = document.createElement('div');
+  row.className = 'inventory-item';
+
+  const summary = document.createElement('div');
+  summary.className = 'inventory-item-summary';
+  const toggle = document.createElement('button');
+  toggle.type = 'button';
+  toggle.className = 'inventory-item-toggle';
+  toggle.setAttribute('aria-label', children.length ? `Toggle contents of ${item.name}` : 'No contents');
+  toggle.textContent = children.length ? (inventoryExpandedContainers.has(item.id) ? '▾' : '▸') : '·';
+  toggle.disabled = !children.length;
+  toggle.onclick = () => {
+    if (inventoryExpandedContainers.has(item.id)) inventoryExpandedContainers.delete(item.id);
+    else inventoryExpandedContainers.add(item.id);
+    renderInventoryEditor();
+  };
+
+  const main = document.createElement('div');
+  main.className = 'inventory-item-main';
+  const name = document.createElement('div');
+  name.className = 'inventory-item-name';
+  name.textContent = item.name;
+  if (item.isContainer) {
+    const badge = document.createElement('span');
+    badge.className = 'inventory-container-badge';
+    badge.textContent = 'container';
+    name.appendChild(badge);
+  }
+  const meta = document.createElement('div');
+  meta.className = 'inventory-item-meta';
+  meta.textContent = item.containerId ? `Inside ${editingInventory.find(parent => parent.id === item.containerId)?.name || 'container'}` : (item.location === 'carried' ? 'Carried / on character' : 'Backpack');
+  main.append(name, meta);
+  summary.append(toggle, main);
+
+  const controls = document.createElement('div');
+  controls.className = 'inventory-item-controls';
+  const decrease = document.createElement('button');
+  decrease.type = 'button'; decrease.textContent = '−'; decrease.title = 'Use one';
+  decrease.disabled = !editingCanEdit || item.qty <= 0;
+  decrease.onclick = () => { item.qty = Math.max(0, item.qty - 1); renderInventoryEditor(); };
+  const quantity = document.createElement('span');
+  quantity.className = 'qty'; quantity.textContent = `×${item.qty}`;
+  const increase = document.createElement('button');
+  increase.type = 'button'; increase.textContent = '+'; increase.title = 'Add one';
+  increase.disabled = !editingCanEdit || item.qty >= 9999;
+  increase.onclick = () => { item.qty = Math.min(9999, item.qty + 1); renderInventoryEditor(); };
+  const move = document.createElement('button');
+  move.type = 'button'; move.textContent = '↔'; move.title = item.containerId ? 'Take out of container' : 'Move between carried and backpack';
+  move.disabled = !editingCanEdit;
+  move.onclick = () => moveInventoryItem(item);
+  const remove = document.createElement('button');
+  remove.type = 'button'; remove.className = 'del'; remove.textContent = '×'; remove.title = 'Remove item';
+  remove.disabled = !editingCanEdit;
+  remove.onclick = () => removeInventoryItem(item);
+  controls.append(decrease, quantity, increase, move, remove);
+  row.append(summary, controls);
+
+  const wrapper = document.createDocumentFragment();
+  wrapper.appendChild(row);
+  if (children.length && inventoryExpandedContainers.has(item.id)) {
+    const childList = document.createElement('div');
+    childList.className = 'inventory-item-children';
+    children.forEach(child => childList.appendChild(renderInventoryItem(child)));
+    wrapper.appendChild(childList);
+  }
+  return wrapper;
 }
 
 function renderInventoryEditor() {
   const list = document.getElementById('inventory-list');
+  if (!list) return;
   list.innerHTML = '';
-  editingInventory.forEach(item => {
-    const row = document.createElement('div');
-    row.className = 'inventory-item';
-    const description = document.createElement('span');
-    description.textContent = item.name;
-    const qty = document.createElement('span');
-    qty.className = 'qty';
-    qty.textContent = `×${item.qty}`;
-    description.appendChild(qty);
-    const remove = document.createElement('button');
-    remove.type = 'button';
-    remove.className = 'del';
-    remove.textContent = '×';
-    remove.title = 'Remove item';
-    remove.disabled = !editingCanEdit;
-    remove.onclick = () => {
-      editingInventory = editingInventory.filter(entry => entry.id !== item.id);
-      renderInventoryEditor();
-    };
-    row.append(description, remove);
-    list.appendChild(row);
+  renderInventoryContainerOptions();
+  ['carried', 'backpack'].forEach(location => {
+    const group = document.createElement('section');
+    group.className = 'inventory-group';
+    const heading = document.createElement('h4');
+    heading.className = 'inventory-group-title';
+    heading.textContent = location === 'carried' ? 'Carried / on character' : 'Backpack';
+    group.appendChild(heading);
+    const roots = editingInventory.filter(item => !item.containerId && item.location === location);
+    if (!roots.length) {
+      const empty = document.createElement('p');
+      empty.className = 'inventory-group-empty';
+      empty.textContent = location === 'carried' ? 'Nothing carried or held.' : 'Nothing in the backpack.';
+      group.appendChild(empty);
+    } else roots.forEach(item => group.appendChild(renderInventoryItem(item)));
+    list.appendChild(group);
   });
 }
 
 document.getElementById('inv-add-btn').onclick = () => {
   const nameInput = document.getElementById('inv-item-name');
   const qtyInput = document.getElementById('inv-item-qty');
+  const locationInput = document.getElementById('inv-item-location');
+  const containerInput = document.getElementById('inv-item-container');
+  const containerFlag = document.getElementById('inv-item-is-container');
   const name = nameInput.value.trim();
   if (!name) return;
-  editingInventory.push({ id: `item-${Date.now()}`, name, qty: Math.max(1, Number(qtyInput.value) || 1) });
+  const parent = editingInventory.find(item => item.id === containerInput.value && item.isContainer);
+  const quantity = Number(qtyInput.value);
+  const location = parent ? inventoryEffectiveLocation(parent) : (locationInput.value === 'carried' ? 'carried' : 'backpack');
+  const item = {
+    id: `item-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    name,
+    qty: Math.max(0, Math.min(9999, Number.isFinite(quantity) ? quantity : 1)),
+    location,
+    isContainer: !!containerFlag.checked,
+    containerId: parent?.id || null
+  };
+  editingInventory.push(item);
+  if (parent) inventoryExpandedContainers.add(parent.id);
   nameInput.value = '';
   qtyInput.value = 1;
+  containerInput.value = '';
+  containerFlag.checked = false;
   renderInventoryEditor();
 };
 

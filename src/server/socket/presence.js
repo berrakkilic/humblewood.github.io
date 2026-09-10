@@ -38,6 +38,7 @@ function registerPresenceHandlers(socket, room) {
     if (socket.data.name) {
       io.emit('presence', { role: socket.data.role, name: socket.data.name, connected: false });
     }
+    room.emitOnlineUsers();
   });
 }
 

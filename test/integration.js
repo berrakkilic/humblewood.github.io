@@ -109,6 +109,9 @@ async function run() {
     assert.match(html, /id="token-pronouns"/);
     assert.match(html, /id="track-preset-select"/);
     assert.match(html, /id="track-file"/);
+    assert.match(html, /id="inventory-list"/);
+    assert.match(html, /id="inv-item-container"/);
+    assert.match(html, /id="dm-online-list"/);
     assert.match(html, /id="library-file-input"/);
     assert.match(html, /id="library-folder-list"/);
     assert.match(html, /id="shared-handout-overlay"/);
@@ -267,12 +270,23 @@ async function run() {
   const dm = await identify(io, { role: 'dm', name: 'Guide', dmPin: 'test-pin' });
   assert.equal(dm.state.scene.fogEnabled, true);
   assert.equal(dm.state.scene.snapToGrid, true);
+  assert(dm.state.onlineUsers.some(user => user.name === 'Guide' && user.role === 'dm'));
+  const dmHazelRosterPromise = once(dm.socket, 'presence:list', users => users.some(user => user.name === 'Hazel'));
   const playerOne = await identify(io, {
     role: 'player', authMode: 'register', username: 'hazel', password: 'password-1', name: 'Hazel'
   });
+  assert.deepEqual(playerOne.state.onlineUsers, [], 'Players must not receive the DM online roster');
+  const hazelRoster = await dmHazelRosterPromise;
+  assert(hazelRoster.some(user => user.name === 'Guide' && user.role === 'dm'));
+  assert(hazelRoster.some(user => user.name === 'Hazel' && user.role === 'player'));
+  const noPlayerPresenceRoster = expectNoEvent(playerOne.socket, 'presence:list');
+  const dmMossRosterPromise = once(dm.socket, 'presence:list', users => users.some(user => user.name === 'Moss'));
   const playerTwo = await identify(io, {
     role: 'player', authMode: 'register', username: 'moss', password: 'password-2', name: 'Moss'
   });
+  const mossRoster = await dmMossRosterPromise;
+  assert.equal(mossRoster.filter(user => user.role === 'player').length, 2);
+  await noPlayerPresenceRoster;
   let pending;
   assert.deepEqual(dm.state.notifications, []);
   assert.deepEqual(playerOne.state.notifications, [], 'Players must not receive DM notifications');
@@ -382,6 +396,11 @@ async function run() {
   playerOne.socket.emit('character:save', {
     name: 'Hazel Finch',
     pronouns: 'they/them',
+    inventory: [
+      { id: 'pack', name: 'Backpack', qty: 1, location: 'carried', isContainer: true },
+      { id: 'torches', name: 'Torches', qty: 10, location: 'backpack', containerId: 'pack' },
+      { id: 'dagger', name: 'Dagger', qty: 1, location: 'carried' }
+    ],
     fields: {
       name: 'Hazel Finch', pronouns: 'they/them', species: 'Corvum (birdfolk)', subrace: 'Dusk Corvum',
       class: 'Rogue', subclass: 'Thief', level: '1', hp: '10', maxhp: '10', ac: '13',
@@ -391,6 +410,9 @@ async function run() {
   const hazelFinch = await characterSavedPromise;
   assert.equal(hazelFinch.pronouns, 'they/them');
   assert.equal(hazelFinch.fields.pronouns, 'they/them');
+  assert.equal(hazelFinch.inventory.find(item => item.name === 'Torches').qty, 10);
+  assert.equal(hazelFinch.inventory.find(item => item.name === 'Torches').containerId, 'pack');
+  assert.equal(hazelFinch.inventory.find(item => item.name === 'Backpack').isContainer, true);
 
   const pcTokenForDmPromise = once(dm.socket, 'token:add', token => token.characterName === 'Hazel Finch');
   const pcTokenForPlayerTwoPromise = once(playerTwo.socket, 'token:add', token => token.characterName === 'Hazel Finch');
@@ -635,6 +657,11 @@ async function run() {
   assert.deepEqual(restored.initiative.entries.map(entry => entry.id), [duplicateEntry.id, wolfEntry.id]);
   assert.equal(restored.savedScenes.length, 0);
   assert.deepEqual(restored.npcs, {});
+
+  const mossLeftRosterPromise = once(dm.socket, 'presence:list', users => !users.some(user => user.name === 'Moss'));
+  playerTwo.socket.close();
+  const afterMossLeft = await mossLeftRosterPromise;
+  assert(!afterMossLeft.some(user => user.name === 'Moss'));
 
   console.log('Integration checks passed: frontend routes, saved auth sessions, token hide/show, permissions, drawings, fog, duplication, badges, initiative, pointers, and scene persistence.');
 }

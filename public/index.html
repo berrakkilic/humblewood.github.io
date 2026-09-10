@@ -122,11 +122,13 @@
 #sheet-editor .money-grid { display:grid; grid-template-columns:repeat(5,minmax(70px,1fr)); gap:8px; margin-bottom:12px; }
 #sheet-editor .inventory-add-row {
   display:grid;
-  grid-template-columns:minmax(180px,1fr) 80px auto;
+  grid-template-columns:minmax(150px,1.2fr) 76px minmax(135px,.8fr) minmax(135px,.8fr) auto auto;
   gap:10px;
   align-items:center;
 }
 #sheet-editor .inventory-add-row input { width:100% !important; min-width:0; }
+#sheet-editor .inventory-add-row select { width:100%; min-width:0; }
+#sheet-editor .inventory-add-container { display:flex; align-items:center; gap:5px; min-height:40px; color:var(--ink-soft); font-size:12px; }
 #sheet-editor .spell-slots-grid { display:grid; grid-template-columns:58px 74px 74px; gap:7px; align-items:center; margin:10px 0; max-width:320px; }
 #sheet-editor .spell-level-head { font-size:12px; font-weight:700; opacity:.72; padding:4px; }
 #sheet-editor .spell-level-label { font-weight:700; text-align:center; }
@@ -313,6 +315,15 @@
             Current: <strong id="current-scene-name">Unsaved scene</strong>
             <span class="scene-dirty-indicator hidden" id="scene-dirty-indicator">Unsaved changes</span>
           </div>
+        </section>
+
+        <section class="dm-only dm-online-panel" aria-labelledby="dm-online-title">
+          <div class="dm-online-heading">
+            <h3 id="dm-online-title">Currently online</h3>
+            <span class="online-count" id="dm-online-count">0</span>
+          </div>
+          <p class="sidebar-help">Players who are currently connected to the table.</p>
+          <div id="dm-online-list" class="dm-online-list"></div>
         </section>
 
         <div class="dm-only dm-sidebar-details" id="dm-sidebar-details">
@@ -795,10 +806,19 @@
             </div>
             <div class="field">
               <label>Equipment / Inventory</label>
+              <p class="inventory-help">Keep worn, pocketed and held items under <strong>Carried / on character</strong>. Put bags and their contents in <strong>Backpack</strong>; containers can be expanded below. Use −/+ for resources, then save the sheet.</p>
               <div id="inventory-list"></div>
               <div class="inventory-add-row">
                 <input type="text" id="inv-item-name" placeholder="Item name">
-                <input type="number" id="inv-item-qty" placeholder="Qty" value="1" min="1" style="width:70px;">
+                <input type="number" id="inv-item-qty" placeholder="Qty" value="1" min="0" style="width:70px;">
+                <select id="inv-item-location" aria-label="Item location">
+                  <option value="carried">Carried / on character</option>
+                  <option value="backpack">Backpack</option>
+                </select>
+                <select id="inv-item-container" aria-label="Containing item">
+                  <option value="">No container</option>
+                </select>
+                <label class="inventory-add-container"><input type="checkbox" id="inv-item-is-container"> Container</label>
                 <button type="button" class="btn-ghost" id="inv-add-btn">+ Add</button>
               </div>
             </div>
