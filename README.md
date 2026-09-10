@@ -54,3 +54,4 @@ Now hosted on `https://humblewood.sfseeger.de/` !!
 - check janas and nainas sheet
 - more attack presets
 - divide css because simo is a little bitch
+- create list of users currently online
