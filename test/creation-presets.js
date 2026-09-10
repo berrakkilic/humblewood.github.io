@@ -3,7 +3,10 @@ const fs = require('fs');
 const path = require('path');
 const presets = require('../public/js/creation-presets');
 
-assert(presets.ATTACK_PRESETS.length >= 35, 'common weapon and natural attack presets should be available');
+assert(presets.ATTACK_PRESETS.length >= 44, 'common weapon, gear, and natural attack presets should be available');
+for (const name of ['Improvised Weapon', 'Acid (vial)', "Alchemist's Fire", 'Holy Water (vs. fiend/undead)', 'Oil (ignited)']) {
+  assert(presets.ATTACK_PRESETS.some(value => value.name === name), `${name} attack preset should be available`);
+}
 assert.equal(presets.STANDARD_SPELL_PRESETS.length, 361, 'the complete 2014 Player\'s Handbook spell catalog should be available');
 assert.equal(new Set(presets.STANDARD_SPELL_PRESETS.map(spell => spell.name)).size, 361, 'Player\'s Handbook spell names should be unique');
 for (let level = 0; level <= 9; level += 1) {
@@ -179,5 +182,13 @@ const rapier = presets.attackPresetValues(
 );
 assert.equal(rapier.bonus, '+5');
 assert.equal(rapier.damage, '1d8+3 piercing');
+
+const acid = presets.attackPresetValues(
+  presets.ATTACK_PRESETS.find(value => value.name === 'Acid (vial)'),
+  { str: 8, dex: 16 },
+  2
+);
+assert.equal(acid.bonus, '+5');
+assert.equal(acid.damage, '2d6 acid');
 
 console.log('Creation preset checks passed: attacks, spells, NPC templates, and pasted stat-block parsing.');

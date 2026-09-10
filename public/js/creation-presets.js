@@ -19,8 +19,8 @@
     stealth: 'stealth', survival: 'survival'
   };
 
-  const attack = (name, die, damageType, ability = 'str', properties = '') => ({
-    name, die, damageType, ability, properties, source: 'Core 5e'
+  const attack = (name, die, damageType, ability = 'str', properties = '', addAbilityModifier = true) => ({
+    name, die, damageType, ability, properties, addAbilityModifier, source: 'Core 5e'
   });
 
   const ATTACK_PRESETS = [
@@ -64,7 +64,12 @@
     attack('Hand Crossbow', '1d6', 'piercing', 'dex', 'Ammunition (30/120 ft.), light, loading'),
     attack('Heavy Crossbow', '1d10', 'piercing', 'dex', 'Ammunition (100/400 ft.), heavy, loading, two-handed'),
     attack('Longbow', '1d8', 'piercing', 'dex', 'Ammunition (150/600 ft.), heavy, two-handed'),
-    attack('Net', '', '', 'dex', 'Thrown (5/15 ft.), special')
+    attack('Net', '', '', 'dex', 'Thrown (5/15 ft.), special'),
+    attack('Improvised Weapon', '1d4', 'varies', 'str', 'Damage type chosen by the DM; thrown range 20/60 ft. when appropriate'),
+    attack('Acid (vial)', '2d6', 'acid', 'dex', 'Ranged attack (20 ft.); treated as an improvised weapon', false),
+    attack("Alchemist's Fire", '1d4', 'fire', 'dex', 'Ranged attack (20 ft.); target takes 1d4 fire damage at the start of each turn until it extinguishes the flames', false),
+    attack('Holy Water (vs. fiend/undead)', '2d6', 'radiant', 'dex', 'Ranged attack (20 ft.); damage applies to a fiend or undead, treated as an improvised weapon', false),
+    attack('Oil (ignited)', '5', 'fire', 'dex', 'Ranged attack (20 ft.); ignite an oil-covered target or space', false)
   ];
 
   const spell = (name, level, school, range, castingTime, duration, components, attackOrSave, damage, effect) => ({
@@ -543,7 +548,8 @@
     const dex = Math.floor(((Number(scores.dex) || 10) - 10) / 2);
     const modifier = preset.ability === 'dex' ? dex : preset.ability === 'finesse' ? Math.max(str, dex) : str;
     const signed = value => value >= 0 ? `+${value}` : String(value);
-    const damage = preset.die ? `${preset.die}${modifier ? signed(modifier) : ''} ${preset.damageType}`.trim() : '';
+    const damageModifier = preset.addAbilityModifier === false ? '' : (modifier ? signed(modifier) : '');
+    const damage = preset.die ? `${preset.die}${damageModifier} ${preset.damageType}`.trim() : '';
     return {
       id: `attack-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       name: preset.name,

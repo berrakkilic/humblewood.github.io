@@ -38,6 +38,7 @@ let lastFittedMapUrl = null;
 let editingOriginalName = null;
 let editingInventory = [];
 let inventoryExpandedContainers = new Set();
+let inventoryDraggingId = '';
 let editingAttacks = [];
 let editingAttackId = null;
 let editingSpells = [];
@@ -2893,6 +2894,92 @@ function inventoryChildren(itemId) {
   return editingInventory.filter(item => item.containerId === itemId);
 }
 
+function inventoryIsInSubtree(itemId, rootId) {
+  if (!itemId || !rootId || itemId === rootId) return itemId === rootId;
+  const visited = new Set();
+  let current = editingInventory.find(item => item.id === itemId);
+  while (current?.containerId && !visited.has(current.id)) {
+    visited.add(current.id);
+    if (current.containerId === rootId) return true;
+    current = editingInventory.find(item => item.id === current.containerId);
+  }
+  return false;
+}
+
+function inventorySubtree(itemId) {
+  return editingInventory.filter(item => item.id === itemId || inventoryIsInSubtree(item.id, itemId));
+}
+
+function clearInventoryDropIndicators() {
+  document.querySelectorAll('.inventory-item.inventory-drop-before, .inventory-item.inventory-drop-after, .inventory-item.inventory-drop-inside, .inventory-group.inventory-drop-group').forEach(element => {
+    element.classList.remove('inventory-drop-before', 'inventory-drop-after', 'inventory-drop-inside', 'inventory-drop-group');
+    delete element.dataset.dropMode;
+  });
+}
+
+function inventoryDragId(event) {
+  return event.dataTransfer?.getData('text/plain') || inventoryDraggingId;
+}
+
+function inventoryCanDropOn(sourceId, targetId) {
+  return !!sourceId && !!targetId && sourceId !== targetId && !inventoryIsInSubtree(targetId, sourceId);
+}
+
+function inventoryMoveSubtree(sourceId, mode, target = null, location = null) {
+  const source = editingInventory.find(item => item.id === sourceId);
+  if (!source || !editingCanEdit) return false;
+  if (target && !inventoryCanDropOn(sourceId, target.id)) return false;
+
+  const targetLocation = target ? inventoryEffectiveLocation(target) : (location === 'carried' ? 'carried' : 'backpack');
+  const moving = inventorySubtree(sourceId);
+  const movingIds = new Set(moving.map(item => item.id));
+  const remaining = editingInventory.filter(item => !movingIds.has(item.id));
+
+  source.containerId = mode === 'inside' ? target.id : (target?.containerId || null);
+  source.location = source.containerId ? targetLocation : (target ? target.location : targetLocation);
+
+  let insertAt = remaining.length;
+  if (target) {
+    const targetIndex = remaining.findIndex(item => item.id === target.id);
+    if (targetIndex < 0) return false;
+    if (mode === 'inside') {
+      let lastDescendant = targetIndex;
+      for (let index = targetIndex + 1; index < remaining.length; index += 1) {
+        if (inventoryIsInSubtree(remaining[index].id, target.id)) lastDescendant = index;
+      }
+      insertAt = lastDescendant + 1;
+    } else {
+      insertAt = targetIndex + (mode === 'after' ? 1 : 0);
+    }
+  } else {
+    // A drop on a group appends after the last root (and its descendants) in that group.
+    let lastRootEnd = -1;
+    remaining.forEach((item, index) => {
+      if (!item.containerId && item.location === targetLocation) {
+        lastRootEnd = index;
+        for (let descendantIndex = index + 1; descendantIndex < remaining.length; descendantIndex += 1) {
+          if (inventoryIsInSubtree(remaining[descendantIndex].id, item.id)) lastRootEnd = descendantIndex;
+        }
+      }
+    });
+    insertAt = lastRootEnd >= 0 ? lastRootEnd + 1 : remaining.length;
+  }
+
+  remaining.splice(insertAt, 0, ...moving);
+  editingInventory = remaining;
+  if (mode === 'inside') inventoryExpandedContainers.add(target.id);
+  clearInventoryDropIndicators();
+  renderInventoryEditor();
+  return true;
+}
+
+function inventoryDropMode(event, item) {
+  const rect = item.getBoundingClientRect();
+  const ratio = rect.height ? (event.clientY - rect.top) / rect.height : 0.5;
+  if (item.dataset.isContainer === 'true' && ratio > 0.25 && ratio < 0.75) return 'inside';
+  return ratio < 0.5 ? 'before' : 'after';
+}
+
 function inventoryEffectiveLocation(item) {
   let current = item;
   const visited = new Set();
@@ -2946,6 +3033,45 @@ function renderInventoryItem(item) {
   const children = inventoryChildren(item.id);
   const row = document.createElement('div');
   row.className = 'inventory-item';
+  row.dataset.itemId = item.id;
+  row.dataset.isContainer = item.isContainer ? 'true' : 'false';
+  row.draggable = !!editingCanEdit;
+  if (editingCanEdit) {
+    row.addEventListener('dragstart', event => {
+      inventoryDraggingId = item.id;
+      event.dataTransfer?.setData('text/plain', item.id);
+      if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move';
+      row.classList.add('inventory-dragging');
+    });
+    row.addEventListener('dragend', () => {
+      inventoryDraggingId = '';
+      row.classList.remove('inventory-dragging');
+      clearInventoryDropIndicators();
+    });
+    row.addEventListener('dragover', event => {
+      const sourceId = inventoryDragId(event);
+      if (!inventoryCanDropOn(sourceId, item.id)) return;
+      event.preventDefault();
+      if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+      clearInventoryDropIndicators();
+      const mode = inventoryDropMode(event, row);
+      row.dataset.dropMode = mode;
+      row.classList.add(mode === 'inside' ? 'inventory-drop-inside' : mode === 'before' ? 'inventory-drop-before' : 'inventory-drop-after');
+    });
+    row.addEventListener('dragleave', event => {
+      if (!row.contains(event.relatedTarget)) {
+        row.classList.remove('inventory-drop-before', 'inventory-drop-after', 'inventory-drop-inside');
+        delete row.dataset.dropMode;
+      }
+    });
+    row.addEventListener('drop', event => {
+      const sourceId = inventoryDragId(event);
+      if (!inventoryCanDropOn(sourceId, item.id)) return;
+      event.preventDefault();
+      const mode = row.dataset.dropMode || inventoryDropMode(event, row);
+      inventoryMoveSubtree(sourceId, mode, item);
+    });
+  }
 
   const summary = document.createElement('div');
   summary.className = 'inventory-item-summary';
@@ -3020,6 +3146,32 @@ function renderInventoryEditor() {
   ['carried', 'backpack'].forEach(location => {
     const group = document.createElement('section');
     group.className = 'inventory-group';
+    group.dataset.location = location;
+    if (editingCanEdit) {
+      group.addEventListener('dragover', event => {
+        if (event.target.closest('.inventory-item')) return;
+        const sourceId = inventoryDragId(event);
+        if (!sourceId || !editingInventory.some(item => item.id === sourceId)) return;
+        event.preventDefault();
+        if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+        clearInventoryDropIndicators();
+        group.dataset.dropMode = 'group';
+        group.classList.add('inventory-drop-group');
+      });
+      group.addEventListener('dragleave', event => {
+        if (!group.contains(event.relatedTarget)) {
+          group.classList.remove('inventory-drop-group');
+          delete group.dataset.dropMode;
+        }
+      });
+      group.addEventListener('drop', event => {
+        if (event.target.closest('.inventory-item')) return;
+        const sourceId = inventoryDragId(event);
+        if (!sourceId || !editingInventory.some(item => item.id === sourceId)) return;
+        event.preventDefault();
+        inventoryMoveSubtree(sourceId, 'group', null, location);
+      });
+    }
     const heading = document.createElement('h4');
     heading.className = 'inventory-group-title';
     heading.textContent = location === 'carried' ? 'Carried / on character' : 'Backpack';

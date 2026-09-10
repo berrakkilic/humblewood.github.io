@@ -765,6 +765,13 @@ body[data-role="dm"] .token-tray.dm-detailed .token-list-details { display: flex
 .inventory-item {
   background: var(--parchment-dark); border-radius: 8px; padding: 7px 9px; margin-bottom: 6px; font-size: 14px;
 }
+.inventory-item[draggable="true"] { cursor: grab; }
+.inventory-item[draggable="true"]:active { cursor: grabbing; }
+.inventory-item.inventory-dragging { opacity: .48; }
+.inventory-item.inventory-drop-before { border-top: 2px solid var(--rose); }
+.inventory-item.inventory-drop-after { border-bottom: 2px solid var(--rose); }
+.inventory-item.inventory-drop-inside { outline: 2px dashed var(--gold); background: rgba(218,181,93,.18); }
+.inventory-group.inventory-drop-group { outline: 2px dashed var(--rose); outline-offset: 3px; border-radius: 10px; }
 .inventory-item-summary { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .inventory-item-main { min-width: 0; flex: 1; }
 .inventory-item-name { overflow-wrap: anywhere; font-weight: 700; }

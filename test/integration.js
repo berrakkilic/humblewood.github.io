@@ -135,6 +135,11 @@ async function run() {
     assert.match(html, /The Humble Almanac/);
     assert.doesNotMatch(html, /Mossbound Almanac/i);
   }
+  const sheetCssResponse = await fetch(`http://127.0.0.1:${port}/sheet-editor.css`);
+  assert.equal(sheetCssResponse.status, 200, 'the extracted sheet-editor stylesheet should load');
+  const sheetCss = await sheetCssResponse.text();
+  assert.match(sheetCss, /\.inventory-add-row/);
+  assert.match(sheetCss, /minmax\(0, 1\.2fr\)/);
   const appSource = await (await fetch(`http://127.0.0.1:${port}/app.js`)).text();
   assert.match(appSource, /function tokenHoverText\(token\)/);
   assert.match(appSource, /Pronouns: \$\{pronouns\}/);
@@ -413,6 +418,7 @@ async function run() {
   assert.equal(hazelFinch.inventory.find(item => item.name === 'Torches').qty, 10);
   assert.equal(hazelFinch.inventory.find(item => item.name === 'Torches').containerId, 'pack');
   assert.equal(hazelFinch.inventory.find(item => item.name === 'Backpack').isContainer, true);
+  assert.deepEqual(hazelFinch.inventory.map(item => item.id), ['pack', 'torches', 'dagger']);
 
   const pcTokenForDmPromise = once(dm.socket, 'token:add', token => token.characterName === 'Hazel Finch');
   const pcTokenForPlayerTwoPromise = once(playerTwo.socket, 'token:add', token => token.characterName === 'Hazel Finch');

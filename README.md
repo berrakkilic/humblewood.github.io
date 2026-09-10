@@ -49,12 +49,7 @@ Now hosted on `https://humblewood.sfseeger.de/` !!
 - **Almanac**: provides necessary information on the Humblewood in an easily organizable and digestible collection. Includes a FAQ Section at the end.
 
 ## Known limitations to work out next
-- npc no appear again
-- cookies for saving login and auth backend
-- check janas and nainas sheet
-- more attack presets
-- divide css because simo is a little bitch
-- create list of users currently online
+
 
 ## Server-side music
 
