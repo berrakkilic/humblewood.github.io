@@ -1,3 +1,5 @@
+const { initialShopStock } = require('./shop-catalog');
+
 function createDefaultState() {
   return {
     scene: {
@@ -35,6 +37,7 @@ function createDefaultState() {
     },
     notifications: [],
     characters: {},
+    shopStock: initialShopStock(),
     rollLog: [],
     initiative: { entries: [], round: 1, currentIndex: -1 }
   };

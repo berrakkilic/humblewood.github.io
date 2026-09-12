@@ -7,6 +7,7 @@ const { registerNotificationHandlers } = require('./notifications');
 const { registerPresenceHandlers } = require('./presence');
 const { registerRollHandlers } = require('./rolls');
 const { registerSceneHandlers } = require('./scenes');
+const { registerShopHandlers } = require('./shop');
 const { registerTokenHandlers } = require('./tokens');
 
 function registerSocketHandlers(io, room) {
@@ -18,6 +19,7 @@ function registerSocketHandlers(io, room) {
     registerLibraryHandlers(socket, room);
     registerNotificationHandlers(socket, room);
     registerCharacterHandlers(socket, room);
+    registerShopHandlers(socket, room);
     registerRollHandlers(socket, room);
     registerInitiativeHandlers(socket, room);
     registerPresenceHandlers(socket, room);

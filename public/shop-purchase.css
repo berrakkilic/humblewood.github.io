@@ -1,0 +1,65 @@
+.purchase-row {
+  display: none;
+  grid-column: 1 / -1;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  margin-top: 7px;
+}
+
+body.player-shop .purchase-row,
+body.shop-connected .purchase-row.has-stock {
+  display: flex;
+}
+
+.purchase-btn {
+  display: none;
+  appearance: none;
+  border: 1px solid rgba(41, 69, 50, .28);
+  border-radius: 999px;
+  padding: 7px 15px;
+  color: #fffdf8;
+  background: #294532;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.2;
+  cursor: pointer;
+}
+
+body.player-shop .purchase-btn {
+  display: inline-block;
+}
+
+.purchase-btn:hover:not(:disabled) {
+  background: #52735a;
+}
+
+.purchase-btn:focus-visible {
+  outline: 3px solid rgba(185, 104, 124, .4);
+  outline-offset: 2px;
+}
+
+.purchase-btn:disabled {
+  cursor: not-allowed;
+  opacity: .52;
+}
+
+.purchase-stock,
+.purchase-message {
+  color: #75695d;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.purchase-message.purchase-error {
+  color: #9c384b;
+}
+
+.purchase-message.purchase-success {
+  color: #294532;
+}
+
+@media print {
+  .purchase-row { display: none !important; }
+}

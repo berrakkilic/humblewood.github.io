@@ -162,6 +162,16 @@ async function run() {
   assert.match(appSource, /if \(idx === -1\) state\.tokens\.push\(updated\)/);
   assert.match(appSource, /function consumePendingDiceRollMode\(\)/);
   assert.match(appSource, /function rollDiceFromDiceScreen\(/);
+  assert.match(appSource, /humblewood:shop-purchase-request/);
+  assert.match(appSource, /socket\.emit\('shop:purchase'/);
+  assert.match(appSource, /sandbox', 'allow-scripts'/);
+  assert.doesNotMatch(appSource, /allow-same-origin/);
+  const shopScriptResponse = await fetch(`http://127.0.0.1:${port}/shop-purchase.js`);
+  assert.equal(shopScriptResponse.status, 200);
+  assert.match(await shopScriptResponse.text(), /humblewood:shop-purchase-request/);
+  const shopCssResponse = await fetch(`http://127.0.0.1:${port}/shop-purchase.css`);
+  assert.equal(shopCssResponse.status, 200);
+  assert.match(await shopCssResponse.text(), /\.purchase-btn/);
   const session0Response = await fetch(`http://127.0.0.1:${port}/handouts/session-0.html`);
   assert.equal(session0Response.status, 200);
   const session0Source = await session0Response.text();
@@ -280,6 +290,13 @@ async function run() {
   const dm = await identify(io, { role: 'dm', name: 'Guide', dmPin: 'test-pin' });
   assert.equal(dm.state.scene.fogEnabled, true);
   assert.equal(dm.state.scene.snapToGrid, true);
+  assert.deepEqual(dm.state.shopStock, {
+    'normals-abnormals:minor-healing-draught': 3,
+    'normals-abnormals:potion-of-healing': 1,
+    'normals-abnormals:antitoxin': 1
+  });
+  assert.equal(dm.state.shopCatalog['festival-trinkets:bloom-ribbons'].priceLabel, '3 for 1 cp');
+  assert.equal(dm.state.shopCatalog['festival-trinkets:bloom-ribbons'].inventoryQuantity, 3);
   assert(dm.state.onlineUsers.some(user => user.name === 'Guide' && user.role === 'dm'));
   const dmHazelRosterPromise = once(dm.socket, 'presence:list', users => users.some(user => user.name === 'Hazel'));
   const playerOne = await identify(io, {
@@ -437,7 +454,8 @@ async function run() {
     fields: {
       name: 'Hazel Finch', pronouns: 'they/them', species: 'Corvum (birdfolk)', subrace: 'Dusk Corvum',
       class: 'Rogue', subclass: 'Thief', level: '1', hp: '10', maxhp: '10', ac: '13',
-      str: '10', dex: '16', con: '10', int: '10', wis: '10', cha: '10'
+      str: '10', dex: '16', con: '10', int: '10', wis: '10', cha: '10',
+      cp: '0', sp: '0', ep: '0', gp: '16', pp: '0'
     }
   });
   const hazelFinch = await characterSavedPromise;
@@ -447,6 +465,78 @@ async function run() {
   assert.equal(hazelFinch.inventory.find(item => item.name === 'Torches').containerId, 'pack');
   assert.equal(hazelFinch.inventory.find(item => item.name === 'Backpack').isContainer, true);
   assert.deepEqual(hazelFinch.inventory.map(item => item.id), ['pack', 'torches', 'dagger']);
+
+  pending = once(playerTwo.socket, 'shop:purchase:result', result => result.requestId === 'not-owned');
+  playerTwo.socket.emit('shop:purchase', {
+    requestId: 'not-owned', itemId: 'seed-stall:redroot-seeds', characterName: 'Hazel Finch'
+  });
+  assert.match((await pending).message, /own characters/i);
+
+  pending = once(dm.socket, 'shop:purchase:result', result => result.requestId === 'dm-purchase');
+  dm.socket.emit('shop:purchase', {
+    requestId: 'dm-purchase', itemId: 'seed-stall:redroot-seeds', characterName: 'Hazel Finch'
+  });
+  assert.match((await pending).message, /only signed-in players/i);
+
+  pending = once(playerOne.socket, 'shop:purchase:result', result => result.requestId === 'too-expensive');
+  playerOne.socket.emit('shop:purchase', {
+    requestId: 'too-expensive', itemId: 'normals-abnormals:potion-of-healing', characterName: 'Hazel Finch'
+  });
+  const tooExpensive = await pending;
+  assert.equal(tooExpensive.ok, false);
+  assert.match(tooExpensive.message, /not have enough coin/i);
+  assert.equal(tooExpensive.stock, undefined);
+
+  for (let purchaseNumber = 1; purchaseNumber <= 3; purchaseNumber += 1) {
+    const requestId = `draught-${purchaseNumber}`;
+    const purchaseResult = once(playerOne.socket, 'shop:purchase:result', result => result.requestId === requestId);
+    const characterUpdate = once(playerOne.socket, 'character:update', character => (
+      character.name === 'Hazel Finch' &&
+      character.inventory.some(item => item.name === 'Minor Healing Draught' && item.qty === purchaseNumber)
+    ));
+    const stockUpdate = once(playerOne.socket, 'shop:stock:update', stock => (
+      stock['normals-abnormals:minor-healing-draught'] === 3 - purchaseNumber
+    ));
+    playerOne.socket.emit('shop:purchase', {
+      requestId,
+      itemId: 'normals-abnormals:minor-healing-draught',
+      characterName: 'Hazel Finch'
+    });
+    const [purchase, updatedCharacter, updatedStock] = await Promise.all([
+      purchaseResult, characterUpdate, stockUpdate
+    ]);
+    assert.equal(purchase.ok, true);
+    assert.equal(purchase.stock, 3 - purchaseNumber);
+    const draught = updatedCharacter.inventory.find(item => item.name === 'Minor Healing Draught');
+    assert.equal(draught.containerId, 'pack');
+    assert.equal(updatedStock['normals-abnormals:potion-of-healing'], 1);
+  }
+
+  pending = once(playerOne.socket, 'shop:purchase:result', result => result.requestId === 'sold-out');
+  playerOne.socket.emit('shop:purchase', {
+    requestId: 'sold-out',
+    itemId: 'normals-abnormals:minor-healing-draught',
+    characterName: 'Hazel Finch'
+  });
+  const soldOut = await pending;
+  assert.equal(soldOut.ok, false);
+  assert.equal(soldOut.stock, 0);
+  assert.match(soldOut.message, /sold out/i);
+
+  const ribbonResult = once(playerOne.socket, 'shop:purchase:result', result => result.requestId === 'ribbons');
+  const ribbonCharacterUpdate = once(playerOne.socket, 'character:update', character => (
+    character.name === 'Hazel Finch' && character.inventory.some(item => item.name === 'Bloom ribbons')
+  ));
+  playerOne.socket.emit('shop:purchase', {
+    requestId: 'ribbons', itemId: 'festival-trinkets:bloom-ribbons', characterName: 'Hazel Finch'
+  });
+  const [boughtRibbons, ribbonCharacter] = await Promise.all([ribbonResult, ribbonCharacterUpdate]);
+  assert.equal(boughtRibbons.ok, true);
+  assert.equal(ribbonCharacter.inventory.find(item => item.name === 'Bloom ribbons').qty, 3);
+  assert.equal(ribbonCharacter.fields.gp, '0');
+  assert.equal(ribbonCharacter.fields.ep, '0');
+  assert.equal(ribbonCharacter.fields.sp, '9');
+  assert.equal(ribbonCharacter.fields.cp, '9');
 
   const pcTokenForDmPromise = once(dm.socket, 'token:add', token => token.characterName === 'Hazel Finch');
   const pcTokenForPlayerTwoPromise = once(playerTwo.socket, 'token:add', token => token.characterName === 'Hazel Finch');

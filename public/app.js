@@ -65,6 +65,7 @@ let libraryCurrentFolderId = 'all';
 let sharedHandoutRenderKey = '';
 let sharedHandoutTimer = null;
 let sharedHandoutContentRequest = 0;
+let shopPurchaseCharacterName = '';
 let npcSearchQuery = '';
 let npcRaceFilter = 'all';
 let npcClassFilter = 'all';
@@ -272,6 +273,9 @@ router.start();
 // ---------------- Socket state sync ----------------
 socket.on('state:full', (s) => {
   state = s;
+  if (shopPurchaseCharacterName && !state.characters?.[shopPurchaseCharacterName]?.canManage) {
+    shopPurchaseCharacterName = '';
+  }
   onlineUsers = Array.isArray(s.onlineUsers) ? s.onlineUsers : [];
   renderMap();
   renderTokenTray();
@@ -431,6 +435,15 @@ socket.on('character:update', (sheet) => {
   renderInitiative();
   refreshCharacterRoller();
   if (activeCombatTarget?.type === 'character' && activeCombatTarget.id === sheet.name) renderCombatManager();
+});
+socket.on('shop:stock:update', shopStock => {
+  if (!state) return;
+  state.shopStock = shopStock || {};
+  postShopContext();
+});
+socket.on('shop:purchase:result', result => {
+  postShopMessage({ type: 'humblewood:shop-purchase-result', ...result });
+  showToast(result.message || (result.ok ? 'Purchase complete.' : 'Purchase could not be completed.'));
 });
 socket.on('character:remove', ({ name }) => {
   delete state.characters[name];
@@ -1853,6 +1866,79 @@ document.addEventListener('click', event => {
   }
 });
 
+function activeShopFrame() {
+  return document.querySelector('#shared-handout-content iframe[data-shop-handout="true"]');
+}
+
+function postShopMessage(message, frame = activeShopFrame()) {
+  if (frame?.contentWindow) frame.contentWindow.postMessage(message, '*');
+}
+
+function postShopContext(frame = activeShopFrame()) {
+  postShopMessage({
+    type: 'humblewood:shop-context',
+    role: myRole,
+    stock: state?.shopStock || {}
+  }, frame);
+}
+
+function rejectShopRequest(request, message) {
+  postShopMessage({
+    type: 'humblewood:shop-purchase-result',
+    requestId: request.requestId,
+    itemId: request.itemId,
+    ok: false,
+    message
+  });
+  if (message) showToast(message);
+}
+
+function choosePurchaseCharacter() {
+  const characters = Object.values(state?.characters || {}).filter(character => character.canManage);
+  if (characters.length === 1) return characters[0];
+  if (!characters.length) return null;
+  const choices = characters.map((character, index) => `${index + 1}. ${character.name}`).join('\n');
+  const preferredIndex = characters.findIndex(character => character.name === shopPurchaseCharacterName);
+  const answer = prompt(
+    `Which character is buying this item?\n\n${choices}`,
+    preferredIndex >= 0 ? String(preferredIndex + 1) : '1'
+  );
+  if (answer === null) return null;
+  const number = Number(answer.trim());
+  if (Number.isInteger(number) && characters[number - 1]) return characters[number - 1];
+  return characters.find(character => character.name.toLowerCase() === answer.trim().toLowerCase()) || null;
+}
+
+window.addEventListener('message', event => {
+  const frame = activeShopFrame();
+  if (!frame || event.source !== frame.contentWindow || !event.data || typeof event.data !== 'object') return;
+  const request = event.data;
+  if (request.type === 'humblewood:shop-ready') {
+    postShopContext(frame);
+    return;
+  }
+  if (request.type !== 'humblewood:shop-purchase-request') return;
+  if (myRole !== 'player') return rejectShopRequest(request, 'Only players can purchase items.');
+
+  const catalogItem = state?.shopCatalog?.[String(request.itemId || '')];
+  if (!catalogItem) return rejectShopRequest(request, 'That item is not available for purchase.');
+
+  const character = choosePurchaseCharacter();
+  if (!character) return rejectShopRequest(request, 'No character was selected for this purchase.');
+  shopPurchaseCharacterName = character.name;
+
+  const confirmed = confirm(
+    `Are you sure ${character.name} wants to purchase ${catalogItem.name} for ${catalogItem.priceLabel}?`
+  );
+  if (!confirmed) return rejectShopRequest(request, 'Purchase cancelled.');
+
+  socket.emit('shop:purchase', {
+    requestId: String(request.requestId || '').slice(0, 100),
+    itemId: String(request.itemId || '').slice(0, 180),
+    characterName: character.name
+  });
+});
+
 function formatSharedHandoutTimer(expiresAt) {
   const seconds = Math.max(0, Math.ceil((Number(expiresAt) - Date.now()) / 1000));
   if (seconds < 60) return `${seconds}s remaining`;
@@ -1882,7 +1968,9 @@ function renderSharedHandoutContent(broadcast) {
     const frame = document.createElement('iframe');
     frame.src = broadcast.url;
     frame.title = broadcast.name;
-    frame.setAttribute('sandbox', '');
+    frame.dataset.shopHandout = 'true';
+    frame.setAttribute('sandbox', 'allow-scripts');
+    frame.addEventListener('load', () => postShopContext(frame));
     content.appendChild(frame);
     return;
   }

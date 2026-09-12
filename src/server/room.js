@@ -4,6 +4,7 @@ const path = require('path');
 const { promisify } = require('util');
 const { createClient } = require('@libsql/client');
 const { createDefaultState } = require('./default-state');
+const { normalizeShopStock, publicShopCatalog } = require('./shop-catalog');
 
 const scryptAsync = promisify(crypto.scrypt);
 const AUTH_SESSION_DAYS = 30;
@@ -506,6 +507,7 @@ function createRoom({ dataDir, dmPin, io, uploadDir }) {
         library: saved.library && typeof saved.library === 'object' ? saved.library : defaultState.library,
         notifications: Array.isArray(saved.notifications) ? saved.notifications : defaultState.notifications,
         characters: saved.characters || {},
+        shopStock: normalizeShopStock(saved.shopStock),
         npcs: saved.npcs && typeof saved.npcs === 'object' ? saved.npcs : {},
         savedScenes: saved.savedScenes && typeof saved.savedScenes === 'object' ? saved.savedScenes : {},
         activeSceneName: saved.activeSceneName || null,
@@ -525,6 +527,7 @@ function createRoom({ dataDir, dmPin, io, uploadDir }) {
       if (!Array.isArray(state.initiative.entries)) state.initiative.entries = [];
       normalizeLibrary(state.library);
       normalizeNotifications(state.notifications);
+      state.shopStock = normalizeShopStock(state.shopStock);
       Object.values(state.characters).forEach(normalizeCharacter);
       Object.values(state.npcs).forEach(normalizeNpc);
       state.tokens.forEach(token => {
@@ -980,6 +983,7 @@ function createRoom({ dataDir, dmPin, io, uploadDir }) {
       savedScenes: isDm(socket) ? savedSceneMetadata() : [],
       library: isDm(socket) ? publicLibrary() : { broadcast: publicLibraryBroadcast() },
       notifications: isDm(socket) ? publicNotifications() : [],
+      shopCatalog: publicShopCatalog(),
       onlineUsers: isDm(socket) ? onlineUsers() : []
     };
   }
