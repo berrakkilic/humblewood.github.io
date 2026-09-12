@@ -98,6 +98,9 @@ async function run() {
     assert.match(html, /id="spell-preset-select"/);
     assert.match(html, /id="dm-private-roll-toggle"/);
     assert.match(html, /id="dm-private-roll-banner"/);
+    assert.match(html, /class="dice-roll-mode-btn"[^>]+data-mode="advantage"/);
+    assert.match(html, /class="dice-roll-mode-btn"[^>]+data-mode="disadvantage"/);
+    assert.doesNotMatch(html, /id="dice-roll-mode"/);
     assert.match(html, /id="new-npc-sheet-btn"/);
     assert.match(html, /id="npc-statblock-import-btn"/);
     assert.match(html, /id="npc-directory-search"/);
@@ -157,6 +160,8 @@ async function run() {
   assert.match(appSource, /fetch\('\/api\/auth\/session'/);
   assert.match(appSource, /socket\.emit\('session:resume'\)/);
   assert.match(appSource, /if \(idx === -1\) state\.tokens\.push\(updated\)/);
+  assert.match(appSource, /function consumePendingDiceRollMode\(\)/);
+  assert.match(appSource, /function rollDiceFromDiceScreen\(/);
   const session0Response = await fetch(`http://127.0.0.1:${port}/handouts/session-0.html`);
   assert.equal(session0Response.status, 200);
   const session0Source = await session0Response.text();
@@ -387,11 +392,34 @@ async function run() {
   dm.socket.emit('roll:make', { count: 1, sides: 6, private: false, label: 'Public weather roll' });
   assert.equal((await pending).name, 'Guide');
 
+  pending = once(playerTwo.socket, 'roll:made', entry => entry.label === 'Any-dice advantage roll');
+  playerOne.socket.emit('roll:make', {
+    count: 2, sides: 6, modifier: 3, mode: 'advantage', label: 'Any-dice advantage roll'
+  });
+  const anyDiceAdvantage = await pending;
+  assert.equal(anyDiceAdvantage.mode, 'advantage');
+  assert.equal(anyDiceAdvantage.rollSets.length, 2);
+  assert.deepEqual(anyDiceAdvantage.rollSets.map(set => set.length), [2, 2]);
+  assert.equal(anyDiceAdvantage.rolls.length, 4);
+  assert.equal(anyDiceAdvantage.kept, Math.max(...anyDiceAdvantage.rollSetTotals));
+  assert.equal(anyDiceAdvantage.total, anyDiceAdvantage.kept + 3);
+  assert.deepEqual(anyDiceAdvantage.keptRolls, anyDiceAdvantage.rollSets[anyDiceAdvantage.keptSetIndex]);
+
   pending = once(playerOne.socket, 'action:denied', denial => /level.*1 to 20/i.test(denial.message));
   playerOne.socket.emit('character:save', {
     name: 'Impossible Hero',
     fields: {
       species: 'Corvum (birdfolk)', subrace: 'Dusk Corvum', class: 'Rogue', subclass: 'Thief', level: '21',
+      str: '10', dex: '10', con: '10', int: '10', wis: '10', cha: '10'
+    }
+  });
+  await pending;
+
+  pending = once(playerOne.socket, 'action:denied', denial => /only available to NPCs/i.test(denial.message));
+  playerOne.socket.emit('character:save', {
+    name: 'Forbidden Frog Hero',
+    fields: {
+      species: 'Frog', subrace: '', class: 'Rogue', subclass: 'Thief', level: '1',
       str: '10', dex: '10', con: '10', int: '10', wis: '10', cha: '10'
     }
   });

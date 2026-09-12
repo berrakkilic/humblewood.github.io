@@ -14,8 +14,13 @@ function validFields(overrides = {}) {
 }
 
 assert.equal(rules.canonicalSpecies('corvum'), 'Corvum (birdfolk)');
+assert.equal(rules.canonicalSpecies('changeling'), 'Changeling (2014)');
 assert.deepEqual(rules.subracesFor('Cervan'), ['Grove Cervan', 'Pronghorn Cervan']);
 assert.deepEqual(rules.subracesFor('Hedge (humblefolk)'), []);
+assert.equal(rules.speciesOptions().includes('Frog'), false);
+assert.equal(rules.speciesOptions({ includeNpcOnly: true }).includes('Frog'), true);
+assert.equal(rules.canonicalSpecies('frog'), '');
+assert.equal(rules.canonicalSpecies('frog', { includeNpcOnly: true }), 'Frog');
 assert.ok(rules.subclassesFor('Bard').includes('College of the Road (Bard)'));
 assert.ok(rules.subclassesFor('Barbarian').includes('Path of the Giant'));
 assert.ok(rules.subclassesFor('Cleric').includes('Twilight Domain'));
@@ -34,6 +39,8 @@ Object.entries(rules.CLASS_SUBCLASSES).forEach(([className, subclasses]) => {
   assert.equal(new Set(subclasses).size, subclasses.length, `${className} contains duplicate subclasses`);
 });
 assert.equal(rules.validatePlayerCharacter({ fields: validFields() }), '');
+assert.equal(rules.validatePlayerCharacter({ fields: validFields({ species: 'Changeling (2014)', subrace: '' }) }), '');
+assert.match(rules.validatePlayerCharacter({ fields: validFields({ species: 'Frog', subrace: '' }) }), /only available to NPCs/i);
 assert.match(rules.validatePlayerCharacter({ fields: validFields({ subrace: 'Sera Luma' }) }), /not a subrace/i);
 assert.match(rules.validatePlayerCharacter({ fields: validFields({ subclass: 'Champion' }) }), /not a subclass/i);
 assert.match(rules.validatePlayerCharacter({ fields: validFields({ level: '21' }) }), /1 to 20/i);
@@ -53,6 +60,7 @@ Object.entries(rules.SPECIES_SUBRACES).forEach(([species, subraces]) => {
   });
 });
 const duskTraits = rules.automaticSpeciesTraitText('Corvum', 'Dusk Corvum');
+assert.match(rules.automaticSpeciesTraitText('Changeling'), /Shapechanger/);
 assert.match(duskTraits, /Dusk Corvum/);
 assert.doesNotMatch(rules.automaticSpeciesTraitText('Corvum', 'Sera Luma'), /Sera Luma/);
 const customTraits = 'Custom campaign trait: Friend of the Alderheart.';

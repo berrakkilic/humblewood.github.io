@@ -31,19 +31,21 @@ function registerRollHandlers(socket, room) {
     const count = Math.max(1, Math.min(20, Number(payload.count) || 1));
     const sides = Math.max(2, Math.min(1000, Number(payload.sides) || 20));
     const modifier = Math.max(-1000, Math.min(1000, Number(payload.modifier) || 0));
-    const mode = ['advantage', 'disadvantage'].includes(payload.mode) && sides === 20 && count === 1
-      ? payload.mode
-      : 'normal';
-    const actualCount = mode === 'normal' ? count : 2;
-    const rolls = Array.from({ length: actualCount }, () => 1 + Math.floor(Math.random() * sides));
-    const kept = mode === 'advantage'
-      ? Math.max(...rolls)
-      : mode === 'disadvantage' ? Math.min(...rolls) : null;
-    const diceTotal = kept ?? rolls.reduce((total, roll) => total + roll, 0);
+    const mode = ['advantage', 'disadvantage'].includes(payload.mode) ? payload.mode : 'normal';
+    const makeRollSet = () => Array.from({ length: count }, () => 1 + Math.floor(Math.random() * sides));
+    const rollSets = mode === 'normal' ? [makeRollSet()] : [makeRollSet(), makeRollSet()];
+    const rollSetTotals = rollSets.map(set => set.reduce((total, roll) => total + roll, 0));
+    const keptSetIndex = mode === 'advantage'
+      ? (rollSetTotals[0] >= rollSetTotals[1] ? 0 : 1)
+      : mode === 'disadvantage' ? (rollSetTotals[0] <= rollSetTotals[1] ? 0 : 1) : null;
+    const keptRolls = keptSetIndex === null ? null : rollSets[keptSetIndex];
+    const diceTotal = keptSetIndex === null ? rollSetTotals[0] : rollSetTotals[keptSetIndex];
+    const rolls = rollSets.flat();
+    const kept = keptSetIndex === null ? null : diceTotal;
     const total = diceTotal + modifier;
     const expression = mode === 'normal'
       ? `${count}d${sides}${modifier ? (modifier > 0 ? `+${modifier}` : modifier) : ''}`
-      : `2d20${mode === 'advantage' ? 'kh1' : 'kl1'}${modifier ? (modifier > 0 ? `+${modifier}` : modifier) : ''}`;
+      : `2×(${count}d${sides}) ${mode === 'advantage' ? 'keep higher' : 'keep lower'}${modifier ? ` ${modifier > 0 ? '+' : ''}${modifier}` : ''}`;
     const rollerName = String(socket.data.name || 'Someone').slice(0, 80);
     const entry = {
       id: `r${Date.now()}${Math.random().toString(36).slice(2, 6)}`,
@@ -58,7 +60,13 @@ function registerRollHandlers(socket, room) {
       npcId: npc?.id || rollToken?.npcId || null,
       label: String(payload.label || '').slice(0, 140),
       expression,
+      count,
+      sides,
       rolls,
+      rollSets,
+      rollSetTotals,
+      keptRolls,
+      keptSetIndex,
       kept,
       mode,
       modifier,

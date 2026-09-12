@@ -966,13 +966,44 @@ body[data-role="player"] .dm-only { display: none !important; }
   gap: 18px;
   margin-bottom: 14px;
 }
-.character-roll-selectors { display: flex; gap: 10px; flex-wrap: wrap; }
+.character-roll-selectors { display: flex; align-items: flex-start; gap: 10px; flex-wrap: wrap; }
 .character-roll-selectors label {
   color: var(--forest);
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 700;
 }
 .character-roll-selectors select { display: block; min-width: 160px; margin-top: 4px; }
+.dice-roll-mode-control { display: grid; gap: 4px; }
+.dice-roll-mode-label {
+  color: var(--forest);
+  font-size: 14px;
+  font-weight: 700;
+}
+.dice-roll-mode-buttons { display: flex; gap: 6px; }
+.dice-roll-mode-btn {
+  border: 1px solid var(--moss-light);
+  border-radius: 9px;
+  background: #fffdf8;
+  color: var(--forest-deep);
+  padding: 8px 11px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background .15s ease, border-color .15s ease, color .15s ease, transform .08s ease;
+}
+.dice-roll-mode-btn:hover { border-color: var(--forest); background: var(--moss-light); }
+.dice-roll-mode-btn:active { transform: scale(.97); }
+.dice-roll-mode-btn:focus-visible { outline: 3px solid rgba(145, 61, 83, .28); outline-offset: 2px; }
+.dice-roll-mode-btn[data-mode="advantage"].active {
+  border-color: var(--forest);
+  background: var(--forest);
+  color: #fff;
+}
+.dice-roll-mode-btn[data-mode="disadvantage"].active {
+  border-color: var(--rose-deep);
+  background: var(--rose-deep);
+  color: #fff;
+}
+.dice-roll-mode-hint { color: var(--ink-soft); font-size: 12px; }
 .character-roll-options { display: grid; gap: 12px; }
 .roll-group {
   border-top: 1px solid rgba(58,46,37,0.12);

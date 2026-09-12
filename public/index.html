@@ -934,14 +934,14 @@
                 Character / NPC
                 <select id="dice-character"></select>
               </label>
-              <label>
-                d20 mode
-                <select id="dice-roll-mode">
-                  <option value="normal">Normal</option>
-                  <option value="advantage">Advantage</option>
-                  <option value="disadvantage">Disadvantage</option>
-                </select>
-              </label>
+              <div class="dice-roll-mode-control">
+                <span class="dice-roll-mode-label" id="dice-roll-mode-label">Next roll</span>
+                <div class="dice-roll-mode-buttons" role="group" aria-labelledby="dice-roll-mode-label">
+                  <button class="dice-roll-mode-btn" type="button" data-mode="advantage" aria-pressed="false">Advantage</button>
+                  <button class="dice-roll-mode-btn" type="button" data-mode="disadvantage" aria-pressed="false">Disadvantage</button>
+                </div>
+                <span class="dice-roll-mode-hint" id="dice-roll-mode-hint" aria-live="polite">Choose one for your next roll.</span>
+              </div>
             </div>
           </div>
           <div id="character-roll-options" class="character-roll-options"></div>

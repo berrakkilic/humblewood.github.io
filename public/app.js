@@ -23,6 +23,7 @@ let state = null;
 let onlineUsers = [];
 let dmPrivateRollsEnabled = false;
 let privateRollLog = [];
+let pendingDiceRollMode = 'normal';
 let selectedTool = 'move';
 let draggingToken = null;
 let draggingTokenTouchId = null;
@@ -2452,10 +2453,27 @@ function replaceSelectOptions(select, options, placeholder, selected = '') {
   select.value = canonicalSelected;
 }
 
+function sheetSpeciesOptions() {
+  return characterRules.speciesOptions({ includeNpcOnly: !!editingNpcSheetId });
+}
+
+function updateSpeciesOptions(selected = '') {
+  replaceSelectOptions(
+    document.getElementById('sf-species'),
+    sheetSpeciesOptions(),
+    'Choose a species...',
+    selected
+  );
+}
+
 function updateSubraceOptions(selected = '') {
-  const species = characterRules.canonicalSpecies(document.getElementById('sf-species').value);
+  const includeNpcOnly = !!editingNpcSheetId;
+  const species = characterRules.canonicalSpecies(
+    document.getElementById('sf-species').value,
+    { includeNpcOnly }
+  );
   const select = document.getElementById('sf-subrace');
-  const options = characterRules.subracesFor(species);
+  const options = characterRules.subracesFor(species, { includeNpcOnly });
   const placeholder = !species ? 'Choose a species first...' : options.length ? 'Choose a subrace...' : 'This species has no subrace';
   replaceSelectOptions(select, options, placeholder, selected);
   select.disabled = !species || !options.length || !editingCanEdit;
@@ -2503,7 +2521,7 @@ function updateSubclassOptions(selected = '') {
 }
 
 function setCharacterRuleSelections(fields = {}) {
-  document.getElementById('sf-species').value = characterRules.canonicalSpecies(fields.species) || '';
+  updateSpeciesOptions(fields.species);
   updateSubraceOptions(fields.subrace);
   syncAutomaticSpeciesTraits();
   document.getElementById('sf-class').value = characterRules.canonicalClass(fields.class) || '';
@@ -2512,7 +2530,7 @@ function setCharacterRuleSelections(fields = {}) {
 }
 
 function initializeCharacterRuleControls() {
-  replaceSelectOptions(document.getElementById('sf-species'), Object.keys(characterRules.SPECIES_SUBRACES), 'Choose a species...');
+  updateSpeciesOptions();
   replaceSelectOptions(document.getElementById('sf-class'), Object.keys(characterRules.CLASS_SUBCLASSES), 'Choose a class...');
   updateSubraceOptions();
   updateSubclassOptions();
@@ -4375,11 +4393,46 @@ function privateDiceRollActive() {
     document.getElementById('view-dice')?.classList.contains('active');
 }
 
+function setPendingDiceRollMode(mode = 'normal') {
+  pendingDiceRollMode = ['advantage', 'disadvantage'].includes(mode) ? mode : 'normal';
+  document.querySelectorAll('.dice-roll-mode-btn').forEach(button => {
+    const active = button.dataset.mode === pendingDiceRollMode;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-pressed', String(active));
+  });
+  const hint = document.getElementById('dice-roll-mode-hint');
+  if (hint) {
+    hint.textContent = pendingDiceRollMode === 'normal'
+      ? 'Choose one for your next roll.'
+      : `${pendingDiceRollMode === 'advantage' ? 'Advantage' : 'Disadvantage'} is on for one roll.`;
+  }
+}
+
+function consumePendingDiceRollMode() {
+  const mode = pendingDiceRollMode;
+  setPendingDiceRollMode('normal');
+  return mode;
+}
+
+document.querySelectorAll('.dice-roll-mode-btn').forEach(button => {
+  button.onclick = () => {
+    const requested = button.dataset.mode;
+    setPendingDiceRollMode(pendingDiceRollMode === requested ? 'normal' : requested);
+  };
+});
+
+function rollDiceFromDiceScreen(count, sides, modifier, options = {}) {
+  rollDice(count, sides, modifier, {
+    ...options,
+    mode: consumePendingDiceRollMode()
+  });
+}
+
 document.querySelectorAll('.die-btn').forEach(btn => {
-  btn.onclick = () => rollDice(1, Number(btn.dataset.sides), 0, { label: `Quick d${btn.dataset.sides}` });
+  btn.onclick = () => rollDiceFromDiceScreen(1, Number(btn.dataset.sides), 0, { label: `Quick d${btn.dataset.sides}` });
 });
 document.getElementById('roll-custom-btn').onclick = () => {
-  rollDice(
+  rollDiceFromDiceScreen(
     Number(document.getElementById('dice-count').value) || 1,
     Number(document.getElementById('dice-sides').value) || 20,
     Number(document.getElementById('dice-mod').value) || 0,
@@ -4425,6 +4478,22 @@ socket.on('roll:private', (entry) => {
   showToast(`🔒 ${entry.label || entry.expression}: ${entry.total}${outcome}`);
 });
 
+function rollBreakdownText(entry) {
+  const modifier = entry.modifier
+    ? ` ${entry.modifier > 0 ? '+' : ''}${entry.modifier}`
+    : '';
+  if (entry.mode && entry.mode !== 'normal' && Array.isArray(entry.rollSets) && entry.rollSets.length === 2) {
+    const sets = entry.rollSets.map(set => `[${set.join(', ')}]`);
+    const keptRolls = Array.isArray(entry.keptRolls)
+      ? entry.keptRolls
+      : entry.rollSets[Number(entry.keptSetIndex) || 0];
+    return `${sets[0]} vs ${sets[1]} → kept [${keptRolls.join(', ')}]${modifier}`;
+  }
+  const rolls = Array.isArray(entry.rolls) ? entry.rolls : [];
+  const kept = Number.isFinite(Number(entry.kept)) ? Number(entry.kept) : (rolls.length === 1 ? rolls[0] : null);
+  return `[${rolls.join(', ')}]${entry.mode && entry.mode !== 'normal' ? ` → kept ${kept}` : ''}${modifier}`;
+}
+
 function renderRollLog() {
   const log = document.getElementById('roll-log');
   if (!log) return;
@@ -4435,15 +4504,21 @@ function renderRollLog() {
   ].sort((a, b) => Number(b.ts) - Number(a.ts));
   entries.forEach(entry => {
     const row = document.createElement('div');
-    const kept = Number.isFinite(Number(entry.kept)) ? Number(entry.kept) : (entry.rolls.length === 1 ? entry.rolls[0] : null);
-    const isCrit = entry.expression.includes('d20') && kept === 20;
-    const isFumble = entry.expression.includes('d20') && kept === 1;
+    const rolls = Array.isArray(entry.rolls) ? entry.rolls : [];
+    const kept = Number.isFinite(Number(entry.kept)) ? Number(entry.kept) : (rolls.length === 1 ? rolls[0] : null);
+    const keptDice = Array.isArray(entry.keptRolls) && entry.keptRolls.length
+      ? entry.keptRolls
+      : (rolls.length === 1 ? rolls : [kept]);
+    const isSingleD20 = (Number(entry.count) === 1 && Number(entry.sides) === 20) ||
+      (!entry.count && /(?:^|\()1d20\b|^2d20/.test(entry.expression || ''));
+    const isCrit = isSingleD20 && keptDice.length === 1 && keptDice[0] === 20;
+    const isFumble = isSingleD20 && keptDice.length === 1 && keptDice[0] === 1;
     row.className = 'roll-entry' + (entry.private ? ' private' : '') + (isCrit ? ' crit' : '') + (isFumble ? ' fumble' : '');
     row.innerHTML = `
       <div>
         <span class="who">${escapeHtml(entry.name)}</span>${entry.private ? '<span class="private-roll-badge">DM only</span>' : ''}
         <span class="expr">${entry.label ? escapeHtml(entry.label) + ' · ' : ''}${escapeHtml(entry.expression)}</span><br>
-        <span class="breakdown">[${entry.rolls.join(', ')}]${entry.mode && entry.mode !== 'normal' ? ` → kept ${kept}` : ''}${entry.modifier ? (entry.modifier > 0 ? ' +' + entry.modifier : ' ' + entry.modifier) : ''}</span>
+        <span class="breakdown">${escapeHtml(rollBreakdownText(entry))}</span>
         ${entry.targetDc && !/\b(?:attack|damage)\b/i.test(entry.label || '') ? `<span class="roll-outcome ${entry.success ? 'success' : 'failure'}">DC ${entry.targetDc} · ${entry.success ? 'Success' : 'Failure'}</span>` : ''}
       </div>
       <div class="total">${entry.total}</div>
@@ -4533,7 +4608,7 @@ function renderCharacterRollOptions() {
     const damage = parseDiceExpression(attack.damage);
     if (attack.name && damage) {
       appendRollButton(combatButtons, `${attack.name} damage`, damage.modifier, () => {
-        rollDice(damage.count, damage.sides, damage.modifier, {
+        rollDiceFromDiceScreen(damage.count, damage.sides, damage.modifier, {
           name: characterRollName(character),
           characterName: character.name,
           label: `${attack.name} damage`
@@ -4583,7 +4658,7 @@ function renderNpcRollOptions(container, npc) {
     const damage = parseDiceExpression(attack.damage);
     if (attack.name && damage) {
       appendRollButton(combatButtons, `${attack.name} damage`, damage.modifier, () => {
-        rollDice(damage.count, damage.sides, damage.modifier, {
+        rollDiceFromDiceScreen(damage.count, damage.sides, damage.modifier, {
           npcId: npc.id,
           label: `${attack.name} damage`
         });
@@ -4604,7 +4679,7 @@ function renderNpcRollOptions(container, npc) {
       const damage = parseDiceExpression(spell.damage || spell.effect || spell.name);
       if (damage) {
         appendRollButton(spellButtons, `${spell.name} damage`, damage.modifier, () => {
-          rollDice(damage.count, damage.sides, damage.modifier, {
+          rollDiceFromDiceScreen(damage.count, damage.sides, damage.modifier, {
             npcId: npc.id,
             label: `${spell.name} damage`
           });
@@ -4667,11 +4742,12 @@ function characterRollName(character) {
 }
 
 function rollCharacterD20(character, label, modifier, extra = {}) {
+  const mode = extra.mode || consumePendingDiceRollMode();
   rollDice(1, 20, modifier, {
     name: characterRollName(character),
     characterName: character.name,
     label,
-    mode: document.getElementById('dice-roll-mode').value,
+    mode,
     ...extra
   });
 }
@@ -4682,7 +4758,7 @@ function rollCharacterInitiative(character, forcedMode) {
     name: characterRollName(character),
     characterName: character.name,
     label: `${character.name} initiative`,
-    mode: forcedMode || document.getElementById('dice-roll-mode').value,
+    mode: forcedMode || consumePendingDiceRollMode(),
     initiativeName: character.name,
     tokenId: token?.id || null
   });
@@ -4706,10 +4782,11 @@ function rollNpcInitiative(token, mode = 'normal') {
 }
 
 function rollNpcSheetD20(npc, label, modifier, extra = {}) {
+  const mode = extra.mode || consumePendingDiceRollMode();
   rollDice(1, 20, modifier, {
     npcId: npc.id,
     label,
-    mode: document.getElementById('dice-roll-mode').value,
+    mode,
     ...extra
   });
 }

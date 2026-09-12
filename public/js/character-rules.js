@@ -335,7 +335,11 @@
     'Mapach (humblefolk)': [],
     'Jerbeen (humblefolk)': [],
     'Hedge (humblefolk)': [],
-    'Cervan (humblefolk)': ['Grove Cervan', 'Pronghorn Cervan']
+    'Cervan (humblefolk)': ['Grove Cervan', 'Pronghorn Cervan'],
+    'Changeling (2014)': []
+  };
+  const NPC_ONLY_SPECIES_SUBRACES = {
+    Frog: []
   };
 
   const AUTO_SPECIES_TRAITS_START = '[Automatic Humblewood species traits]';
@@ -478,6 +482,16 @@
         'Bewitching Guile: gain charm person, then Ambush Prey at 3rd level and fear at 5th level.'
       ],
       subraces: {}
+    },
+    'Changeling (2014)': {
+      abilityScores: '+2 Charisma, +1 to one other ability score',
+      sizeSpeed: 'Medium; 30 ft.',
+      languages: 'Common and two other languages',
+      core: [
+        'Shapechanger: as an action, change your appearance and voice into another Medium humanoid form you have seen; your equipment does not change.',
+        'Changeling Instincts: proficiency in two of Deception, Insight, Intimidation, and Persuasion.'
+      ],
+      subraces: {}
     }
   };
 
@@ -555,19 +569,28 @@
     return options.find(option => normalized(option) === needle) || '';
   }
 
-  function canonicalSpecies(value) {
-    const exact = canonicalFromList(value, Object.keys(SPECIES_SUBRACES));
+  function speciesOptions({ includeNpcOnly = false } = {}) {
+    return [
+      ...Object.keys(SPECIES_SUBRACES),
+      ...(includeNpcOnly ? Object.keys(NPC_ONLY_SPECIES_SUBRACES) : [])
+    ];
+  }
+
+  function canonicalSpecies(value, { includeNpcOnly = false } = {}) {
+    const options = speciesOptions({ includeNpcOnly });
+    const exact = canonicalFromList(value, options);
     if (exact) return exact;
-    const base = normalized(value).replace(/\s*\((?:birdfolk|humblefolk)\)$/, '');
-    return Object.keys(SPECIES_SUBRACES).find(option => normalized(option).replace(/\s*\((?:birdfolk|humblefolk)\)$/, '') === base) || '';
+    const base = normalized(value).replace(/\s*\((?:birdfolk|humblefolk|2014)\)$/, '');
+    return options.find(option => normalized(option).replace(/\s*\((?:birdfolk|humblefolk|2014)\)$/, '') === base) || '';
   }
 
   function canonicalClass(value) {
     return canonicalFromList(value, Object.keys(CLASS_SUBCLASSES));
   }
 
-  function subracesFor(species) {
-    return [...(SPECIES_SUBRACES[canonicalSpecies(species)] || [])];
+  function subracesFor(species, { includeNpcOnly = false } = {}) {
+    const canonical = canonicalSpecies(species, { includeNpcOnly });
+    return [...(SPECIES_SUBRACES[canonical] || NPC_ONLY_SPECIES_SUBRACES[canonical] || [])];
   }
 
   function automaticSpeciesTraitText(species, subrace = '') {
@@ -835,6 +858,10 @@
 
   function validatePlayerCharacter(character = {}) {
     const fields = fieldsFromCharacter(character);
+    const npcOnlySpecies = canonicalSpecies(fields.species, { includeNpcOnly: true });
+    if (Object.prototype.hasOwnProperty.call(NPC_ONLY_SPECIES_SUBRACES, npcOnlySpecies)) {
+      return `${npcOnlySpecies} is only available to NPCs.`;
+    }
     const species = canonicalSpecies(fields.species);
     if (String(fields.species || '').trim() && !species) return 'Choose a supported Humblewood species.';
 
@@ -905,6 +932,7 @@
     GLIDE_FEATS,
     HUMBLEWOOD_SPECIES_FEATURES,
     HUMBLEWOOD_SUBCLASS_FEATURES,
+    NPC_ONLY_SPECIES_SUBRACES,
     SPECIES_SUBRACES,
     SPECIES_TRAITS,
     abilityModifier,
@@ -930,6 +958,7 @@
     spellSlotsFor,
     spellcastingAbilityFor,
     spellcastingValues,
+    speciesOptions,
     subclassesFor,
     subracesFor,
     validatePlayerCharacter
