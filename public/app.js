@@ -54,6 +54,7 @@ let suppressLevelUpPrompt = false;
 let acMethodManuallySelected = false;
 let toastTimer = null;
 let activeCombatTarget = null;
+let pendingSpellPreparation = null;
 let editingNpcId = null;
 let editingNpcSheetId = null;
 let rulerStartPoint = null;
@@ -2634,12 +2635,14 @@ function initializeCharacterRuleControls() {
     updateSubclassOptions();
     syncAutomaticClassFeatures(true);
     applyClassDefaults();
+    renderSpellListEditor();
   });
   document.getElementById('sf-subclass').addEventListener('change', () => {
     syncAutomaticClassFeatures(true);
     applySpellcastingDefaults();
     updateSpellSlotsForLevel();
     refreshCharacterCalculations(false, true);
+    renderSpellListEditor();
   });
 }
 
@@ -3566,7 +3569,7 @@ function normalizeSpell(spell, index = 0) {
   if (!spell || typeof spell !== 'object') return null;
   const name = String(spell.name || '').trim();
   if (!name) return null;
-  return {
+  const normalized = {
     id: String(spell.id || `spell-normalized-${index}`),
     name,
     level: Math.max(0, Math.min(9, Number(spell.level) || 0)),
@@ -3580,6 +3583,9 @@ function normalizeSpell(spell, index = 0) {
     effect: String(spell.effect ?? spell.description ?? '').trim(),
     source: String(spell.source || '').trim()
   };
+  if (typeof spell.prepared === 'boolean') normalized.prepared = spell.prepared;
+  if (spell.alwaysPrepared === true) normalized.alwaysPrepared = true;
+  return normalized;
 }
 
 function normalizeSpellList(raw) {
@@ -3620,6 +3626,11 @@ function renderSpellListEditor() {
     syncSpellListField();
     return;
   }
+  const preparesSpells = characterRules.preparedSpellCount(
+    document.getElementById('sf-class').value,
+    document.getElementById('sf-level').value,
+    10
+  ) !== null;
   const byLevel = new Map();
   editingSpells.forEach(spell => {
     const level = Math.max(0, Math.min(9, Number(spell.level) || 0));
@@ -3646,6 +3657,12 @@ function renderSpellListEditor() {
         source.className = 'spell-source-badge';
         source.textContent = spell.source;
         name.appendChild(source);
+      }
+      if (spell.alwaysPrepared || (preparesSpells && spell.level > 0 && spell.prepared === true)) {
+        const prepared = document.createElement('span');
+        prepared.className = `spell-prepared-badge${spell.alwaysPrepared ? ' always' : ''}`;
+        prepared.textContent = spell.alwaysPrepared ? 'Always prepared' : 'Prepared';
+        name.appendChild(prepared);
       }
       main.appendChild(name);
       const metadata = [
@@ -3707,6 +3724,7 @@ function populateSpellForm(spell = {}) {
   document.getElementById('spell-form-attack').value = normalized.attack || '';
   document.getElementById('spell-form-damage').value = normalized.damage || '';
   document.getElementById('spell-form-effect').value = normalized.effect || '';
+  document.getElementById('spell-form-always-prepared').checked = !!normalized.alwaysPrepared;
 }
 
 function openSpellForm(spell) {
@@ -3776,6 +3794,7 @@ document.getElementById('spell-form-cancel').onclick = () => {
 document.getElementById('spell-form-save').onclick = () => {
   const name = document.getElementById('spell-form-name').value.trim();
   if (!name) return alert('Give the spell a name first.');
+  const existing = editingSpells.find(entry => entry.id === editingSpellId);
   const spell = normalizeSpell({
     id: editingSpellId || `spell-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
     name,
@@ -3788,7 +3807,9 @@ document.getElementById('spell-form-save').onclick = () => {
     attack: document.getElementById('spell-form-attack').value,
     damage: document.getElementById('spell-form-damage').value,
     effect: document.getElementById('spell-form-effect').value,
-    source: document.getElementById('spell-add-form').dataset.spellSource || ''
+    source: document.getElementById('spell-add-form').dataset.spellSource || '',
+    prepared: existing?.prepared,
+    alwaysPrepared: document.getElementById('spell-form-always-prepared').checked
   });
   if (editingSpellId) {
     const index = editingSpells.findIndex(entry => entry.id === editingSpellId);
@@ -4057,6 +4078,7 @@ ABILITIES.forEach(ability => document.getElementById(`sf-${ability}`).addEventLi
 document.getElementById('sf-level').addEventListener('input', () => {
   refreshCharacterCalculations(true, true);
   syncAutomaticClassFeatures(true);
+  renderSpellListEditor();
 });
 document.getElementById('sf-initiative').addEventListener('input', () => { initiativeManuallyEdited = true; });
 ABILITIES.forEach(ability => document.getElementById(`sf-save-${ability}-prof`).addEventListener('change', () => refreshCharacterCalculations(true)));
@@ -5019,7 +5041,10 @@ function renderCombatManager() {
   document.getElementById('combat-death-section').classList.toggle('hidden', isNpc);
   const hasSpellSlots = Object.values(combat.spellSlots || {}).some(slot => Number(slot.total) > 0);
   document.getElementById('combat-spell-slots-section').classList.toggle('hidden', isNpc && !hasSpellSlots);
-  document.getElementById('combat-long-rest-btn').textContent = isNpc ? 'Restore NPC' : 'Complete long rest';
+  const preparesSpells = !isNpc && characterPreparationDetails(entity) !== null;
+  document.getElementById('combat-long-rest-btn').textContent = isNpc
+    ? 'Restore NPC'
+    : (preparesSpells ? 'Long rest & prepare spells' : 'Complete long rest');
   renderCombatRolls(entity, isNpc);
   document.getElementById('combat-concentration').checked = !!combat.concentration;
   document.getElementById('combat-exhaustion').textContent = Number(combat.exhaustion) || 0;
@@ -5190,7 +5215,7 @@ function makeCombatRollButton(label, onclick, damage = false) {
   return button;
 }
 
-function characterSpellEntries(character) {
+function characterKnownSpellEntries(character) {
   const structured = normalizeSpellList(character.fields?.['spell-list']);
   if (structured.length) {
     return structured
@@ -5208,12 +5233,157 @@ function characterSpellEntries(character) {
   return entries;
 }
 
+function characterPreparationDetails(character) {
+  if (!character) return null;
+  const fields = character.fields || {};
+  const className = character.charClass || fields.class || '';
+  const subclass = character.subclass || fields.subclass || '';
+  const level = character.level || fields.level || 1;
+  const ability = characterRules.spellcastingAbilityFor(className, subclass);
+  const abilityScore = ability ? (character.abilities?.[ability] ?? fields[ability] ?? 10) : 10;
+  const limit = characterRules.preparedSpellCount(className, level, abilityScore);
+  if (limit === null) return null;
+  const maximumSpellLevel = characterRules.maximumSpellLevelFor(className, subclass, level);
+  const available = characterKnownSpellEntries(character)
+    .filter(spell => spell.level > 0 && spell.level <= maximumSpellLevel)
+    .sort((a, b) => a.level - b.level || a.name.localeCompare(b.name));
+  const alwaysPrepared = available.filter(spell => spell.alwaysPrepared);
+  const selectable = available.filter(spell => !spell.alwaysPrepared);
+  return {
+    className: characterRules.canonicalClass(className) || className,
+    maximumSpellLevel,
+    limit,
+    available,
+    alwaysPrepared,
+    selectable,
+    target: Math.min(limit, selectable.length)
+  };
+}
+
+function characterSpellEntries(character) {
+  const known = characterKnownSpellEntries(character);
+  const preparation = characterPreparationDetails(character);
+  if (!preparation) return known;
+  const hasSavedPreparation = preparation.available.some(spell => (
+    spell.alwaysPrepared || typeof spell.prepared === 'boolean'
+  ));
+  if (!hasSavedPreparation) return known;
+  return known.filter(spell => (
+    spell.level === 0 ||
+    (spell.level <= preparation.maximumSpellLevel && (spell.alwaysPrepared || spell.prepared === true))
+  ));
+}
+
+function closeSpellPreparation() {
+  pendingSpellPreparation = null;
+  const overlay = document.getElementById('spell-preparation-overlay');
+  overlay.classList.add('hidden');
+  overlay.setAttribute('aria-hidden', 'true');
+}
+
+function updateSpellPreparationCount() {
+  if (!pendingSpellPreparation) return;
+  const { selected, target, alwaysPrepared } = pendingSpellPreparation;
+  const valid = selected.size === target;
+  const count = document.getElementById('spell-preparation-count');
+  count.textContent = `${selected.size} / ${target} selected${alwaysPrepared.length ? ` · ${alwaysPrepared.length} always prepared` : ''}`;
+  count.classList.toggle('invalid', !valid);
+  document.getElementById('spell-preparation-complete-btn').disabled = !valid;
+}
+
+function renderSpellPreparationList() {
+  if (!pendingSpellPreparation) return;
+  const container = document.getElementById('spell-preparation-list');
+  const query = document.getElementById('spell-preparation-search').value.trim().toLowerCase();
+  const visible = pendingSpellPreparation.available.filter(spell => (
+    !query || [spell.name, spell.school, spell.source].some(value => String(value || '').toLowerCase().includes(query))
+  ));
+  container.innerHTML = '';
+  if (!visible.length) {
+    container.innerHTML = `<p class="spell-preparation-empty">${query ? 'No available spells match that search.' : 'No leveled spells on this sheet are available at the character’s current level.'}</p>`;
+    updateSpellPreparationCount();
+    return;
+  }
+  const byLevel = new Map();
+  visible.forEach(spell => {
+    if (!byLevel.has(spell.level)) byLevel.set(spell.level, []);
+    byLevel.get(spell.level).push(spell);
+  });
+  [...byLevel.entries()].forEach(([level, spells]) => {
+    const group = document.createElement('section');
+    group.className = 'spell-preparation-level';
+    const title = document.createElement('h3');
+    title.textContent = `Level ${level}`;
+    const options = document.createElement('div');
+    options.className = 'spell-preparation-options';
+    spells.forEach(spell => {
+      const option = document.createElement('label');
+      option.className = `spell-preparation-option${spell.alwaysPrepared ? ' always' : ''}`;
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.checked = spell.alwaysPrepared || pendingSpellPreparation.selected.has(spell.id);
+      checkbox.disabled = spell.alwaysPrepared;
+      checkbox.setAttribute('aria-label', spell.alwaysPrepared ? `${spell.name}, always prepared` : `Prepare ${spell.name}`);
+      checkbox.onchange = () => {
+        if (checkbox.checked && pendingSpellPreparation.selected.size >= pendingSpellPreparation.target) {
+          checkbox.checked = false;
+          showToast(`You can prepare ${pendingSpellPreparation.target} spell${pendingSpellPreparation.target === 1 ? '' : 's'}.`);
+          return;
+        }
+        if (checkbox.checked) pendingSpellPreparation.selected.add(spell.id);
+        else pendingSpellPreparation.selected.delete(spell.id);
+        updateSpellPreparationCount();
+      };
+      const copy = document.createElement('span');
+      copy.className = 'spell-preparation-option-copy';
+      const name = document.createElement('strong');
+      name.textContent = spell.name;
+      const details = document.createElement('small');
+      details.textContent = spell.alwaysPrepared
+        ? ['Always prepared', spell.school, spell.source].filter(Boolean).join(' · ')
+        : [spell.school, spell.source].filter(Boolean).join(' · ');
+      copy.append(name);
+      if (details.textContent) copy.append(details);
+      option.append(checkbox, copy);
+      options.appendChild(option);
+    });
+    group.append(title, options);
+    container.appendChild(group);
+  });
+  updateSpellPreparationCount();
+}
+
+function openSpellPreparation(character, preparation = characterPreparationDetails(character)) {
+  if (!preparation) return false;
+  const current = preparation.selectable.filter(spell => spell.prepared === true).map(spell => spell.id);
+  const hasSavedPreparation = preparation.selectable.some(spell => typeof spell.prepared === 'boolean');
+  const selected = new Set(current.slice(0, preparation.target));
+  if (!hasSavedPreparation && preparation.selectable.length <= preparation.target) {
+    preparation.selectable.forEach(spell => selected.add(spell.id));
+  }
+  pendingSpellPreparation = { characterName: character.name, ...preparation, selected };
+  document.getElementById('spell-preparation-title').textContent = `Prepare ${character.name}’s spells`;
+  document.getElementById('spell-preparation-intro').textContent = `${preparation.className} level ${character.level || character.fields?.level || 1} can prepare ${preparation.limit} spell${preparation.limit === 1 ? '' : 's'} of level ${preparation.maximumSpellLevel} or lower. Choose ${preparation.target} from the spells currently on the sheet.`;
+  document.getElementById('spell-preparation-note').textContent = preparation.alwaysPrepared.length
+    ? 'Cantrips and always-prepared spells remain available without using this limit.'
+    : 'Cantrips are always available and do not need to be prepared.';
+  document.getElementById('spell-preparation-search').value = '';
+  const overlay = document.getElementById('spell-preparation-overlay');
+  overlay.classList.remove('hidden');
+  overlay.setAttribute('aria-hidden', 'false');
+  renderSpellPreparationList();
+  document.getElementById('spell-preparation-search').focus();
+  return true;
+}
+
 document.getElementById('combat-close-btn').onclick = closeCombatManager;
 document.getElementById('combat-overlay').addEventListener('mousedown', event => {
   if (event.target.id === 'combat-overlay') closeCombatManager();
 });
 document.addEventListener('keydown', event => {
-  if (event.key === 'Escape' && activeCombatTarget) closeCombatManager();
+  if (event.key !== 'Escape') return;
+  if (pendingSpellPreparation) closeSpellPreparation();
+  else if (activeCombatTarget) closeCombatManager();
 });
 document.getElementById('combat-damage-btn').onclick = () => combatAction('damage', { amount: Number(document.getElementById('combat-amount').value) || 0 });
 document.getElementById('combat-heal-btn').onclick = () => combatAction('heal', { amount: Number(document.getElementById('combat-amount').value) || 0 });
@@ -5238,10 +5408,28 @@ document.getElementById('combat-long-rest-btn').onclick = () => {
   const target = activeCombatEntity();
   if (!target) return;
   const name = target.type === 'npc' ? target.entity.label : target.entity.name;
-  const message = target.type === 'npc'
-    ? `Restore ${name} to full HP?`
-    : `Give ${name} a long rest? This restores HP and all spell slots.`;
-  if (confirm(message)) combatAction('longRest');
+  if (target.type === 'npc') {
+    if (confirm(`Restore ${name} to full HP?`)) combatAction('longRest');
+    return;
+  }
+  const preparation = characterPreparationDetails(target.entity);
+  if (preparation?.available.length) {
+    openSpellPreparation(target.entity, preparation);
+    return;
+  }
+  if (confirm(`Give ${name} a long rest? This restores HP and all spell slots.`)) combatAction('longRest');
+};
+document.getElementById('spell-preparation-close-btn').onclick = closeSpellPreparation;
+document.getElementById('spell-preparation-overlay').addEventListener('mousedown', event => {
+  if (event.target.id === 'spell-preparation-overlay') closeSpellPreparation();
+});
+document.getElementById('spell-preparation-search').addEventListener('input', renderSpellPreparationList);
+document.getElementById('spell-preparation-complete-btn').onclick = () => {
+  if (!pendingSpellPreparation || pendingSpellPreparation.selected.size !== pendingSpellPreparation.target) return;
+  const characterName = pendingSpellPreparation.characterName;
+  const preparedSpellIds = [...pendingSpellPreparation.selected];
+  closeSpellPreparation();
+  socket.emit('character:combat:update', { name: characterName, action: 'longRest', preparedSpellIds });
 };
 document.getElementById('combat-concentration-roll').onclick = () => {
   if (activeCombatTarget?.type !== 'character') return;

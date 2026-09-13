@@ -132,6 +132,9 @@ async function run() {
     assert.match(html, /id="level-up-btn"/);
     assert.match(html, /id="sf-ac-method"/);
     assert.match(html, /id="sf-spells-prepared"/);
+    assert.match(html, /id="spell-form-always-prepared"/);
+    assert.match(html, /id="spell-preparation-overlay"/);
+    assert.match(html, /id="spell-preparation-complete-btn"/);
     assert.match(html, /id="view-almanac"/);
     assert.match(html, /id="almanac-search"/);
     assert.match(html, /js\/almanac-data\.js/);
@@ -164,6 +167,8 @@ async function run() {
   assert.match(appSource, /function rollDiceFromDiceScreen\(/);
   assert.match(appSource, /humblewood:shop-purchase-request/);
   assert.match(appSource, /socket\.emit\('shop:purchase'/);
+  assert.match(appSource, /function characterPreparationDetails\(character\)/);
+  assert.match(appSource, /preparedSpellIds/);
   assert.match(appSource, /sandbox', 'allow-scripts'/);
   assert.doesNotMatch(appSource, /allow-same-origin/);
   const shopScriptResponse = await fetch(`http://127.0.0.1:${port}/shop-purchase.js`);
@@ -465,6 +470,45 @@ async function run() {
   assert.equal(hazelFinch.inventory.find(item => item.name === 'Torches').containerId, 'pack');
   assert.equal(hazelFinch.inventory.find(item => item.name === 'Backpack').isContainer, true);
   assert.deepEqual(hazelFinch.inventory.map(item => item.id), ['pack', 'torches', 'dagger']);
+
+  const clericSpellList = [
+    { id: 'guidance', name: 'Guidance', level: 0 },
+    { id: 'bless', name: 'Bless', level: 1, alwaysPrepared: true },
+    { id: 'cure-wounds', name: 'Cure Wounds', level: 1 },
+    { id: 'command', name: 'Command', level: 1 },
+    { id: 'aid', name: 'Aid', level: 2 }
+  ];
+  pending = once(playerOne.socket, 'character:update', character => character.name === 'Willow Cleric');
+  playerOne.socket.emit('character:save', {
+    name: 'Willow Cleric', hp: 2, maxHp: 9,
+    fields: {
+      name: 'Willow Cleric', species: 'Gallus (birdfolk)', subrace: 'Huden Gallus',
+      class: 'Cleric', subclass: 'Life Domain', level: '1', hp: '2', maxhp: '9', ac: '15',
+      str: '10', dex: '10', con: '10', int: '10', wis: '12', cha: '10',
+      'spell-list': JSON.stringify(clericSpellList), 'spell-slots-1': '2', 'spell-used-1': '1'
+    }
+  });
+  await pending;
+
+  pending = once(playerOne.socket, 'action:denied', denial => /prepare exactly 2 spells/i.test(denial.message));
+  playerOne.socket.emit('character:combat:update', {
+    name: 'Willow Cleric', action: 'longRest', preparedSpellIds: ['cure-wounds']
+  });
+  await pending;
+
+  pending = once(playerOne.socket, 'character:update', character => (
+    character.name === 'Willow Cleric' && character.hp === 9 && character.combat?.spellSlots?.[1]?.used === 0
+  ));
+  playerOne.socket.emit('character:combat:update', {
+    name: 'Willow Cleric', action: 'longRest', preparedSpellIds: ['cure-wounds', 'command']
+  });
+  const restedCleric = await pending;
+  const preparedClericSpells = JSON.parse(restedCleric.fields['spell-list']);
+  assert.equal(preparedClericSpells.find(spell => spell.id === 'guidance').prepared, true, 'cantrips stay available');
+  assert.equal(preparedClericSpells.find(spell => spell.id === 'bless').prepared, true, 'always-prepared spells stay available');
+  assert.equal(preparedClericSpells.find(spell => spell.id === 'cure-wounds').prepared, true);
+  assert.equal(preparedClericSpells.find(spell => spell.id === 'command').prepared, true);
+  assert.equal(preparedClericSpells.find(spell => spell.id === 'aid').prepared, false, 'spells above the current slot level cannot be prepared');
 
   pending = once(playerTwo.socket, 'shop:purchase:result', result => result.requestId === 'not-owned');
   playerTwo.socket.emit('shop:purchase', {

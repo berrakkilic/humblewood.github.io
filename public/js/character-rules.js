@@ -805,8 +805,19 @@
     const modifier = abilityModifier(abilityScore);
     const bounded = boundedLevel(level);
     if (['Cleric', 'Druid', 'Wizard'].includes(canonicalClassName)) return Math.max(1, bounded + modifier);
-    if (['Artificer', 'Paladin'].includes(canonicalClassName)) return Math.max(1, Math.floor(bounded / 2) + modifier);
+    if (canonicalClassName === 'Artificer') return Math.max(1, Math.floor(bounded / 2) + modifier);
+    if (canonicalClassName === 'Paladin') {
+      return bounded < 2 ? 0 : Math.max(1, Math.floor(bounded / 2) + modifier);
+    }
     return null;
+  }
+
+  function maximumSpellLevelFor(className, subclass, level) {
+    const slots = spellSlotsFor(className, subclass, level);
+    for (let index = slots.length - 1; index >= 0; index -= 1) {
+      if (Number(slots[index]) > 0) return index + 1;
+    }
+    return 0;
   }
 
   function defaultArmorMethod(species, className) {
@@ -951,6 +962,7 @@
     hitPointGain,
     levelUpHitPointIncrease,
     levelUpGains,
+    maximumSpellLevelFor,
     mergeAutomaticClassFeatures,
     mergeAutomaticSpeciesTraits,
     preparedSpellCount,

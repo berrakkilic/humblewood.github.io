@@ -3,7 +3,7 @@ const almanac = require('../public/js/almanac');
 const data = require('../public/js/almanac-data');
 
 const totalEntries = data.reduce((sum, category) => sum + category.entries.length, 0);
-assert.equal(totalEntries, 48);
+assert.equal(totalEntries, 53);
 
 const map = data.find(category => category.id === 'map');
 assert.equal(map.entries[0].image.src, '/images/humblewood-expanded-nohex-v0.3.png');
@@ -31,7 +31,7 @@ assert(clericSpellNames.includes('Elevated Sight'));
 assert(clericSpellNames.includes('Invoke the Amaranthine'));
 
 const brackenmillTrade = almanac.filterCategories(data, 'brackenmill trade');
-assert.deepEqual(brackenmillTrade.map(category => category.id), ['brackenmill']);
+assert.deepEqual(brackenmillTrade.map(category => category.id), ['brackenmill', 'faq']);
 assert.equal(almanac.normalizeSearch('Veil of Dúsk!'), 'veil of dusk');
 assert.doesNotMatch(JSON.stringify(data), /\b(?:you|your)\b|my personal/i);
 

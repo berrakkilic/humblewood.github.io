@@ -1,7 +1,72 @@
 const {
   applyPlayerCharacterConstraints,
+  canonicalClass,
+  maximumSpellLevelFor,
+  preparedSpellCount,
+  spellcastingAbilityFor,
   validatePlayerCharacter
 } = require('../../../public/js/character-rules');
+
+function normalizedCharacterSpells(character) {
+  const fields = character?.fields || {};
+  let spells = [];
+  try {
+    const parsed = JSON.parse(String(fields['spell-list'] || '[]'));
+    if (Array.isArray(parsed)) spells = parsed;
+  } catch { /* Fall through to legacy level-by-level spell fields. */ }
+  if (!spells.length) {
+    for (let level = 0; level <= 9; level += 1) {
+      const text = String(fields[`spells-${level}`] || '').trim();
+      if (!text) continue;
+      text.split(/\n|;/).flatMap(line => {
+        const trimmed = line.trim();
+        return trimmed.includes(',') && !/\d+d\d+/i.test(trimmed) ? trimmed.split(',') : [trimmed];
+      }).map(name => name.trim()).filter(Boolean).forEach(name => {
+        spells.push({ name, level });
+      });
+    }
+  }
+  return spells.slice(0, 300).filter(spell => spell && typeof spell === 'object' && String(spell.name || '').trim()).map((spell, index) => ({
+    ...spell,
+    id: String(spell.id || `spell-normalized-${index}`).slice(0, 140),
+    name: String(spell.name || '').trim().slice(0, 100),
+    level: Math.max(0, Math.min(9, Number(spell.level) || 0)),
+    alwaysPrepared: spell.alwaysPrepared === true,
+    ...(typeof spell.prepared === 'boolean' ? { prepared: spell.prepared } : {})
+  }));
+}
+
+function prepareSpellsForLongRest(character, requestedIds) {
+  const fields = character.fields || {};
+  const className = character.charClass || fields.class || '';
+  const subclass = character.subclass || fields.subclass || '';
+  const level = character.level || fields.level || 1;
+  const ability = spellcastingAbilityFor(className, subclass);
+  const abilityScore = ability ? (character.abilities?.[ability] ?? fields[ability] ?? 10) : 10;
+  const limit = preparedSpellCount(className, level, abilityScore);
+  if (limit === null) return null;
+
+  const maximumSpellLevel = maximumSpellLevelFor(className, subclass, level);
+  const spells = normalizedCharacterSpells(character);
+  const selectable = spells.filter(spell => (
+    spell.level > 0 && spell.level <= maximumSpellLevel && !spell.alwaysPrepared
+  ));
+  const target = Math.min(limit, selectable.length);
+  const selectedIds = new Set((Array.isArray(requestedIds) ? requestedIds : []).map(id => String(id).slice(0, 140)));
+  const selectableIds = new Set(selectable.map(spell => spell.id));
+  if (selectedIds.size !== target || [...selectedIds].some(id => !selectableIds.has(id))) {
+    const classLabel = canonicalClass(className) || 'This character';
+    return `${classLabel} must prepare exactly ${target} spell${target === 1 ? '' : 's'} from the available list before completing the long rest.`;
+  }
+
+  spells.forEach(spell => {
+    if (spell.level === 0) spell.prepared = true;
+    else if (spell.alwaysPrepared) spell.prepared = spell.level <= maximumSpellLevel;
+    else spell.prepared = selectedIds.has(spell.id);
+  });
+  character.fields['spell-list'] = JSON.stringify(spells);
+  return null;
+}
 
 function registerCharacterHandlers(socket, room) {
   const {
@@ -152,6 +217,8 @@ function registerCharacterHandlers(socket, room) {
     } else if (payload.action === 'restoreAllSlots') {
       Object.values(combat.spellSlots).forEach(slot => { slot.used = 0; });
     } else if (payload.action === 'longRest') {
+      const preparationError = prepareSpellsForLongRest(character, payload.preparedSpellIds);
+      if (preparationError) return deny(socket, preparationError);
       character.hp = character.maxHp;
       character.tempHp = 0;
       combat.concentration = false;

@@ -150,7 +150,11 @@ assert.deepEqual(rules.spellSlotsFor('Fighter', 'Eldritch Knight', 7), [4, 2, 0,
 assert.deepEqual(rules.spellSlotsFor('Warlock', '', 11), [0, 0, 0, 0, 3, 0, 0, 0, 0]);
 assert.equal(rules.preparedSpellCount('Cleric', 5, 16), 8);
 assert.equal(rules.preparedSpellCount('Paladin', 5, 16), 5);
+assert.equal(rules.preparedSpellCount('Paladin', 1, 16), 0, 'paladins do not prepare spells before gaining Spellcasting');
 assert.equal(rules.preparedSpellCount('Bard', 5, 16), null);
+assert.equal(rules.maximumSpellLevelFor('Cleric', '', 3), 2);
+assert.equal(rules.maximumSpellLevelFor('Paladin', '', 1), 0);
+assert.equal(rules.maximumSpellLevelFor('Wizard', '', 17), 9);
 
 assert.equal(rules.defaultArmorMethod('Hedge (humblefolk)', 'Wizard'), 'hedge');
 assert.equal(rules.defaultArmorMethod('Corvum (birdfolk)', 'Monk'), 'monk');

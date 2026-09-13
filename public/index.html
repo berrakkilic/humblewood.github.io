@@ -669,7 +669,7 @@
               <div class="field"><label>Spellcasting ability</label><select id="sf-spell-ability"><option value="">—</option><option>INT</option><option>WIS</option><option>CHA</option></select></div>
               <div class="field"><label>Spell Save DC</label><input type="number" id="sf-spell-dc"></div>
               <div class="field"><label>Spell Attack Bonus</label><input type="number" id="sf-spell-attack"></div>
-              <div class="field"><label>Prepared spells</label><input type="number" id="sf-spells-prepared" readonly placeholder="Uses spells known"></div>
+              <div class="field"><label>Preparation limit</label><input type="number" id="sf-spells-prepared" readonly placeholder="Uses spells known"></div>
             </div>
             <div class="spell-slots-grid">
               <div class="spell-level-head">Level</div><div class="spell-level-head">Slots</div><div class="spell-level-head">Used</div>
@@ -746,6 +746,10 @@
                   </label>
                   <label class="spell-form-field spell-form-wide">Effect
                     <textarea id="spell-form-effect" rows="3" placeholder="What the spell does, conditions it applies, and any upcasting notes..."></textarea>
+                  </label>
+                  <label class="spell-always-prepared spell-form-wide">
+                    <input type="checkbox" id="spell-form-always-prepared">
+                    <span><strong>Always prepared</strong><small>For domain, oath, circle, or similar spells that do not count toward the normal preparation limit.</small></span>
                   </label>
                 </div>
                 <div class="spell-form-actions">
@@ -1162,6 +1166,29 @@
     <div class="combat-footer">
       <p>Changes save immediately and stay synced with the character sheet and map token.</p>
       <button class="btn-primary" id="combat-long-rest-btn" type="button">Complete long rest</button>
+    </div>
+  </section>
+</div>
+
+<div class="combat-overlay spell-preparation-overlay hidden" id="spell-preparation-overlay" aria-hidden="true">
+  <section class="combat-modal panel spell-preparation-modal" role="dialog" aria-modal="true" aria-labelledby="spell-preparation-title">
+    <div class="combat-modal-header">
+      <div>
+        <p class="combat-kicker">Long rest</p>
+        <h2 id="spell-preparation-title">Prepare spells</h2>
+        <p id="spell-preparation-intro" class="spell-preparation-intro"></p>
+      </div>
+      <button class="btn-ghost" id="spell-preparation-close-btn" type="button" aria-label="Cancel long rest">Cancel</button>
+    </div>
+    <div class="spell-preparation-toolbar">
+      <label for="spell-preparation-search">Find a spell</label>
+      <input type="search" id="spell-preparation-search" placeholder="Search known spells..." autocomplete="off">
+      <strong id="spell-preparation-count" aria-live="polite">0 / 0 selected</strong>
+    </div>
+    <div id="spell-preparation-list" class="spell-preparation-list"></div>
+    <div class="combat-footer spell-preparation-footer">
+      <p id="spell-preparation-note">Cantrips are always available and do not need to be prepared.</p>
+      <button class="btn-primary" id="spell-preparation-complete-btn" type="button" disabled>Prepare &amp; complete rest</button>
     </div>
   </section>
 </div>

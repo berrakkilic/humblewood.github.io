@@ -214,20 +214,25 @@ function createRoom({ dataDir, dmPin, io, uploadDir }) {
 
   function cleanSpells(spells) {
     if (!Array.isArray(spells)) return [];
-    return spells.slice(0, 300).map((spell, index) => ({
-      id: String(spell?.id || `spell-${index}`).slice(0, 140),
-      name: String(spell?.name || '').trim().slice(0, 100),
-      level: Math.max(0, Math.min(9, Number(spell?.level) || 0)),
-      school: String(spell?.school || '').trim().slice(0, 80),
-      range: String(spell?.range || '').trim().slice(0, 160),
-      castingTime: String(spell?.castingTime || '').trim().slice(0, 160),
-      duration: String(spell?.duration || '').trim().slice(0, 160),
-      components: String(spell?.components || '').trim().slice(0, 500),
-      attack: String(spell?.attack || '').trim().slice(0, 160),
-      damage: String(spell?.damage || '').trim().slice(0, 160),
-      effect: String(spell?.effect || '').trim().slice(0, 3000),
-      source: String(spell?.source || '').trim().slice(0, 80)
-    })).filter(spell => spell.name);
+    return spells.slice(0, 300).map((spell, index) => {
+      const cleaned = {
+        id: String(spell?.id || `spell-${index}`).slice(0, 140),
+        name: String(spell?.name || '').trim().slice(0, 100),
+        level: Math.max(0, Math.min(9, Number(spell?.level) || 0)),
+        school: String(spell?.school || '').trim().slice(0, 80),
+        range: String(spell?.range || '').trim().slice(0, 160),
+        castingTime: String(spell?.castingTime || '').trim().slice(0, 160),
+        duration: String(spell?.duration || '').trim().slice(0, 160),
+        components: String(spell?.components || '').trim().slice(0, 500),
+        attack: String(spell?.attack || '').trim().slice(0, 160),
+        damage: String(spell?.damage || '').trim().slice(0, 160),
+        effect: String(spell?.effect || '').trim().slice(0, 3000),
+        source: String(spell?.source || '').trim().slice(0, 80)
+      };
+      if (typeof spell?.prepared === 'boolean') cleaned.prepared = spell.prepared;
+      if (spell?.alwaysPrepared === true) cleaned.alwaysPrepared = true;
+      return cleaned;
+    }).filter(spell => spell.name);
   }
 
   function cleanNpcSheet(sheet) {

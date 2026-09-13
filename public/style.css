@@ -1310,6 +1310,47 @@ body[data-role="player"] .dm-only { display: none !important; }
 .combat-footer { margin-top: 16px; }
 .combat-footer p { margin: 0; color: var(--ink-soft); font-size: 12px; }
 .combat-footer .btn-primary { width: auto; min-width: 180px; }
+.spell-preparation-overlay { z-index: 1200; }
+.spell-preparation-modal { width: min(760px, 100%); }
+.spell-preparation-modal h2 { margin: 2px 0 0; color: var(--forest-deep); }
+.spell-preparation-intro { margin: 5px 0 0; color: var(--ink-soft); font-size: 12px; line-height: 1.45; }
+.spell-preparation-toolbar {
+  display: grid;
+  grid-template-columns: auto minmax(180px, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  margin: 16px 0 12px;
+  padding: 11px;
+  border-radius: 11px;
+  background: var(--parchment-dark);
+}
+.spell-preparation-toolbar label { color: var(--forest); font-size: 12px; font-weight: 800; }
+.spell-preparation-toolbar input { min-width: 0; }
+.spell-preparation-toolbar strong { color: var(--forest-deep); font-size: 12px; white-space: nowrap; }
+.spell-preparation-toolbar strong.invalid { color: var(--rose-deep); }
+.spell-preparation-list { max-height: min(52vh, 480px); overflow-y: auto; padding-right: 4px; }
+.spell-preparation-level { margin: 0 0 12px; }
+.spell-preparation-level h3 { margin: 0 0 6px; color: var(--forest); font-size: 12px; letter-spacing: .04em; text-transform: uppercase; }
+.spell-preparation-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
+.spell-preparation-option {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 9px;
+  padding: 10px;
+  border: 1px solid rgba(58,46,37,.12);
+  border-radius: 10px;
+  background: #fffdf8;
+  cursor: pointer;
+}
+.spell-preparation-option:has(input:checked) { border-color: var(--rose); background: rgba(217,138,158,.10); }
+.spell-preparation-option.always { border-color: var(--gold); cursor: default; }
+.spell-preparation-option input { width: auto; margin-top: 3px; accent-color: var(--rose-deep); }
+.spell-preparation-option-copy { min-width: 0; }
+.spell-preparation-option-copy strong { display: block; color: var(--forest-deep); font-size: 13px; }
+.spell-preparation-option-copy small { display: block; margin-top: 3px; color: var(--ink-soft); font-size: 10px; line-height: 1.35; }
+.spell-preparation-empty { margin: 20px 0; text-align: center; color: var(--ink-soft); font-size: 12px; }
+.spell-preparation-footer p { line-height: 1.4; }
 .roll-outcome { display: inline-block; margin-left: 8px; font-size: 11px; font-weight: 800; }
 .roll-outcome.success { color: var(--forest); }
 .roll-outcome.failure { color: var(--rose-deep); }
@@ -1412,6 +1453,9 @@ body[data-role="player"] .dm-only { display: none !important; }
   .combat-spell-slots { grid-template-columns: 1fr; }
   .combat-footer { align-items: stretch; flex-direction: column; }
   .combat-footer .btn-primary { width: 100%; }
+  .spell-preparation-toolbar { grid-template-columns: 1fr; }
+  .spell-preparation-toolbar strong { justify-self: start; }
+  .spell-preparation-options { grid-template-columns: 1fr; }
   .level-up-columns, .level-up-summary { grid-template-columns: 1fr; }
   .level-up-hp-row { grid-template-columns: 1fr 1fr; }
   .level-up-hp-row > strong { grid-column: 1 / -1; }
