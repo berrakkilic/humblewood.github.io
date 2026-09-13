@@ -7,6 +7,7 @@ const targets = [
   path.join(projectRoot, 'server.js'),
   path.join(projectRoot, 'src', 'server'),
   path.join(projectRoot, 'public'),
+  path.join(projectRoot, 'scripts'),
   path.join(projectRoot, 'test')
 ];
 

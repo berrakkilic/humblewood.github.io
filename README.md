@@ -10,10 +10,30 @@ Req: [Node.js](https://nodejs.org) installed (v18+).
 
 ```bash
 npm ci
+npm run build
 npm start
 ```
 
 Then open `http://localhost:3000` in your browser. 
+
+## Frontend development
+
+The editable browser code lives in `frontend/app/`, split by feature. TypeScript
+checks those files and esbuild combines them into the generated `public/app.js`
+that the existing HTML loads. Do not edit `public/app.js` directly.
+
+For normal development, run these in separate terminals:
+
+```bash
+npm run watch:frontend
+npm run dev:server
+```
+
+Run `npm test` before committing. It rebuilds the browser bundle, checks both
+the TypeScript sources and generated JavaScript, and runs the existing tests.
+
+See [`frontend/README.md`](frontend/README.md) for the feature map and the rules
+for adding or splitting frontend code.
 
 ## Deploying with Docker
 - **`Dockerfile`** — builds the app into a container.

@@ -35,11 +35,11 @@ assert.match(parsedGoodberry.spells[0].effect, /ten magical berries/i);
   assert(presets.STANDARD_SPELL_PRESETS.some(spell => spell.name === name), `missing Player's Handbook spell: ${name}`);
 });
 
-const appSource = fs.readFileSync(path.resolve(__dirname, '../public/app.js'), 'utf8');
+const spellSource = fs.readFileSync(path.resolve(__dirname, '../frontend/app/characters/spells.ts'), 'utf8');
 [
   'Ambush Prey', 'Elevated Sight', 'Feathered Reach', 'Globe of Twilight', 'Gust Barrier',
   'Invoke the Amaranthine', 'Shape Plants', 'Spiny Shield', 'Stellar Bodies', 'Veil of Dusk'
-].forEach(name => assert(appSource.includes(`name: '${name}'`), `missing Humblewood spell preset: ${name}`));
+].forEach(name => assert(spellSource.includes(`name: '${name}'`), `missing Humblewood spell preset: ${name}`));
 assert(presets.NPC_PRESETS.some(preset => preset.id === 'hw-birdfolk-dockmaster'));
 assert(presets.NPC_PRESETS.some(preset => preset.id === '5e-priest'));
 

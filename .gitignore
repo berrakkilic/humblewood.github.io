@@ -4,3 +4,4 @@ dist/
 data/
 public/uploads/
 public/music/
+public/app.js.map

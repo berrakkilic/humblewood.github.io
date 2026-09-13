@@ -9,6 +9,7 @@ const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'humblewood-integration-'));
 const port = 22000 + (process.pid % 10000);
 const clients = [];
 let serverError = '';
+let serverOutput = '';
 
 const server = spawn(process.execPath, ['server.js'], {
   cwd: project,
@@ -22,18 +23,32 @@ const server = spawn(process.execPath, ['server.js'], {
   },
   stdio: ['ignore', 'pipe', 'pipe']
 });
+server.stdout.on('data', data => { serverOutput += String(data); });
 server.stderr.on('data', data => { serverError += String(data); });
 
-function serverReady() {
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error(`Server startup timed out.\n${serverError}`)), 5000);
-    server.stdout.on('data', data => {
-      if (!String(data).includes('running at')) return;
-      clearTimeout(timer);
-      resolve();
-    });
-    server.once('exit', code => reject(new Error(`Server exited early (${code}).\n${serverError}`)));
-  });
+async function serverReady(timeout = 20000) {
+  const deadline = Date.now() + timeout;
+  let lastRequestError = '';
+
+  while (Date.now() < deadline) {
+    if (server.exitCode !== null || server.signalCode !== null) {
+      throw new Error(`Server exited early (${server.exitCode ?? server.signalCode}).\n${serverError}`);
+    }
+    try {
+      const response = await fetch(`http://127.0.0.1:${port}/map`);
+      if (response.ok && (await response.text()).includes('The Humblewood Table')) return;
+    } catch (error) {
+      lastRequestError = error.message;
+    }
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+
+  throw new Error([
+    `Server startup timed out after ${timeout / 1000} seconds.`,
+    lastRequestError && `Last request error: ${lastRequestError}`,
+    serverOutput && `Server output:\n${serverOutput}`,
+    serverError && `Server error:\n${serverError}`
+  ].filter(Boolean).join('\n'));
 }
 
 function once(socket, event, predicate = () => true, timeout = 3000) {
@@ -146,31 +161,37 @@ async function run() {
   const sheetCss = await sheetCssResponse.text();
   assert.match(sheetCss, /\.inventory-add-row/);
   assert.match(sheetCss, /minmax\(0, 1\.2fr\)/);
-  const appSource = await (await fetch(`http://127.0.0.1:${port}/app.js`)).text();
-  assert.match(appSource, /function tokenHoverText\(token\)/);
-  assert.match(appSource, /Pronouns: \$\{pronouns\}/);
-  assert.match(appSource, /function uploadAudioFile\(file\)/);
-  assert.match(appSource, /fetch\('\/api\/music'\)/);
-  assert.match(appSource, /function renderLibrary\(\)/);
-  assert.match(appSource, /library:broadcast/);
-  assert.match(appSource, /function uploadLibraryFile\(file\)/);
-  assert.match(appSource, /function npcDirectoryMatches\(npc\)/);
-  assert.match(appSource, /npcRaceFilter/);
-  assert.match(appSource, /broadcast\.kind === 'html'/);
-  assert.match(appSource, /function renderDmNotifications\(\)/);
-  assert.match(appSource, /safety:request/);
-  assert.match(appSource, /question:submit/);
-  assert.match(appSource, /fetch\('\/api\/auth\/session'/);
-  assert.match(appSource, /socket\.emit\('session:resume'\)/);
-  assert.match(appSource, /if \(idx === -1\) state\.tokens\.push\(updated\)/);
-  assert.match(appSource, /function consumePendingDiceRollMode\(\)/);
-  assert.match(appSource, /function rollDiceFromDiceScreen\(/);
-  assert.match(appSource, /humblewood:shop-purchase-request/);
-  assert.match(appSource, /socket\.emit\('shop:purchase'/);
-  assert.match(appSource, /function characterPreparationDetails\(character\)/);
-  assert.match(appSource, /preparedSpellIds/);
-  assert.match(appSource, /sandbox', 'allow-scripts'/);
-  assert.doesNotMatch(appSource, /allow-same-origin/);
+  const appBundle = await (await fetch(`http://127.0.0.1:${port}/app.js`)).text();
+  assert.match(appBundle, /^\/\/ GENERATED FILE/, 'the server should expose the generated frontend bundle');
+  const frontendManifest = JSON.parse(fs.readFileSync(path.join(project, 'tsconfig.frontend.json'), 'utf8'));
+  const frontendSource = frontendManifest.files
+    .filter(file => file.endsWith('.ts') && !file.endsWith('.d.ts'))
+    .map(file => fs.readFileSync(path.join(project, file), 'utf8'))
+    .join('\n');
+  assert.match(frontendSource, /function tokenHoverText\(token\)/);
+  assert.match(frontendSource, /Pronouns: \$\{pronouns\}/);
+  assert.match(frontendSource, /function uploadAudioFile\(file\)/);
+  assert.match(frontendSource, /fetch\('\/api\/music'\)/);
+  assert.match(frontendSource, /function renderLibrary\(\)/);
+  assert.match(frontendSource, /library:broadcast/);
+  assert.match(frontendSource, /function uploadLibraryFile\(file\)/);
+  assert.match(frontendSource, /function npcDirectoryMatches\(npc\)/);
+  assert.match(frontendSource, /npcRaceFilter/);
+  assert.match(frontendSource, /broadcast\.kind === 'html'/);
+  assert.match(frontendSource, /function renderDmNotifications\(\)/);
+  assert.match(frontendSource, /safety:request/);
+  assert.match(frontendSource, /question:submit/);
+  assert.match(frontendSource, /fetch\('\/api\/auth\/session'/);
+  assert.match(frontendSource, /socket\.emit\('session:resume'\)/);
+  assert.match(frontendSource, /if \(idx === -1\) state\.tokens\.push\(updated\)/);
+  assert.match(frontendSource, /function consumePendingDiceRollMode\(\)/);
+  assert.match(frontendSource, /function rollDiceFromDiceScreen\(/);
+  assert.match(frontendSource, /humblewood:shop-purchase-request/);
+  assert.match(frontendSource, /socket\.emit\('shop:purchase'/);
+  assert.match(frontendSource, /function characterPreparationDetails\(character\)/);
+  assert.match(frontendSource, /preparedSpellIds/);
+  assert.match(frontendSource, /sandbox', 'allow-scripts'/);
+  assert.doesNotMatch(frontendSource, /allow-same-origin/);
   const shopScriptResponse = await fetch(`http://127.0.0.1:${port}/shop-purchase.js`);
   assert.equal(shopScriptResponse.status, 200);
   assert.match(await shopScriptResponse.text(), /humblewood:shop-purchase-request/);

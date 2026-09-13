@@ -5,7 +5,12 @@
   "main": "index.js",
   "scripts": {
     "start": "node server.js",
-    "check": "node scripts/check-syntax.js",
+    "build": "npm run build:frontend",
+    "build:frontend": "npm run typecheck:frontend && node scripts/build-frontend.js",
+    "typecheck:frontend": "tsc -p tsconfig.frontend.json --pretty false",
+    "watch:frontend": "node scripts/watch-frontend.js",
+    "dev:server": "node --watch server.js",
+    "check": "npm run build:frontend && node scripts/check-syntax.js && node test/frontend-structure.js",
     "test": "npm run check && node test/router.js && node test/map-geometry.js && node test/combat-state.js && node test/character-rules.js && node test/creation-presets.js && node test/almanac.js && node test/shop-purchase.js && node test/integration.js"
   },
   "keywords": [],
@@ -16,5 +21,9 @@
     "express": "^5.2.1",
     "multer": "^2.2.0",
     "socket.io": "^4.8.3"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2",
+    "typescript": "^7.0.2"
   }
 }

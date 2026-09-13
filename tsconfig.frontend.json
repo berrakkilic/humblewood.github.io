@@ -1,0 +1,31 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "preserve",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "noEmit": true,
+    "strict": false,
+    "noImplicitAny": false,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true
+  },
+  "files": [
+    "frontend/types/globals.d.ts",
+    "frontend/app/state.ts",
+    "frontend/app/session.ts",
+    "frontend/app/map.ts",
+    "frontend/app/library.ts",
+    "frontend/app/tokens.ts",
+    "frontend/app/characters/sheet.ts",
+    "frontend/app/characters/inventory.ts",
+    "frontend/app/characters/attacks.ts",
+    "frontend/app/characters/spells.ts",
+    "frontend/app/characters/level-up.ts",
+    "frontend/app/jukebox.ts",
+    "frontend/app/dice.ts",
+    "frontend/app/combat.ts",
+    "frontend/app/initiative.ts",
+    "frontend/app/shared.ts",
+    "frontend/app/bootstrap.ts"
+  ]
+}

@@ -1,1695 +1,1645 @@
-const socket = io({ autoConnect: false });
-const {
-  clampScale,
-  fitStageInViewport,
-  gridMeasurement,
-  positionStagePoint,
-  snapCoordinateToCell,
-  zoomAroundPoint
-} = window.HumblewoodMapGeometry;
-const combatState = window.HumblewoodCombatState;
-const characterRules = window.HumblewoodCharacterRules;
-const creationPresets = window.HumblewoodCreationPresets;
-const HUMBLEWOOD_FEAT_PRESETS = (window.HumblewoodAlmanacData || [])
-  .find(category => category.id === 'feats')?.entries || [];
-
-let myRole = 'dm';
-let myName = '';
-let myUsername = '';
-let authMode = 'login';
-let joined = false;
-let awaitingSessionResume = false;
-let state = null;
-let onlineUsers = [];
-let dmPrivateRollsEnabled = false;
-let privateRollLog = [];
-let pendingDiceRollMode = 'normal';
-let selectedTool = 'move';
-let draggingToken = null;
-let draggingTokenTouchId = null;
-let dragOffset = { x: 0, y: 0 };
-let pendingTrayToken = null; // token about to be dropped from tray
-let mapScale = 1;
-let mapPan = { x: 0, y: 0 };
-let panStart = null;
-let gridMoveStart = null;
-let touchGesture = null;
-let spacePanPressed = false;
-let lastFittedMapUrl = null;
-let editingOriginalName = null;
-let editingInventory = [];
-let inventoryExpandedContainers = new Set();
-let inventoryDraggingId = '';
-let editingAttacks = [];
-let editingAttackId = null;
-let editingSpells = [];
-let editingSpellId = null;
-let editingPortraitUrl = null;
-let pendingPortraitFile = null;
-let editingCanEdit = true;
-let initiativeManuallyEdited = false;
-let editingBaseLevel = 1;
-let pendingLevelUp = null;
-let suppressLevelUpPrompt = false;
-let acMethodManuallySelected = false;
-let toastTimer = null;
-let activeCombatTarget = null;
-let pendingSpellPreparation = null;
-let editingNpcId = null;
-let editingNpcSheetId = null;
-let rulerStartPoint = null;
-let rulerAnchorPoint = null;
-let mapAreaDrag = null;
-let lastPointerSentAt = 0;
-let draggedInitiativeId = null;
-let libraryCurrentFolderId = 'all';
-let sharedHandoutRenderKey = '';
-let sharedHandoutTimer = null;
-let sharedHandoutContentRequest = 0;
-let shopPurchaseCharacterName = '';
-let npcSearchQuery = '';
-let npcRaceFilter = 'all';
-let npcClassFilter = 'all';
-let dmNotificationsOpen = false;
-let safetyButtonTimer = null;
-let questionSubmitting = false;
-const pendingConcentrationChecks = new Map();
-const pointerFadeTimers = new Map();
-
-const ABILITIES = ['str', 'dex', 'con', 'int', 'wis', 'cha'];
-const ABILITY_LABELS = { str: 'Strength', dex: 'Dexterity', con: 'Constitution', int: 'Intelligence', wis: 'Wisdom', cha: 'Charisma' };
-const SKILL_ABILITIES = {
-  acrobatics: 'dex', animal: 'wis', arcana: 'int', athletics: 'str', deception: 'cha', history: 'int',
-  insight: 'wis', intimidation: 'cha', investigation: 'int', medicine: 'wis', nature: 'int', perception: 'wis',
-  performance: 'cha', persuasion: 'cha', religion: 'int', sleight: 'dex', stealth: 'dex', survival: 'wis'
-};
-const SKILL_LABELS = {
-  acrobatics: 'Acrobatics', animal: 'Animal Handling', arcana: 'Arcana', athletics: 'Athletics', deception: 'Deception',
-  history: 'History', insight: 'Insight', intimidation: 'Intimidation', investigation: 'Investigation', medicine: 'Medicine',
-  nature: 'Nature', perception: 'Perception', performance: 'Performance', persuasion: 'Persuasion', religion: 'Religion',
-  sleight: 'Sleight of Hand', stealth: 'Stealth', survival: 'Survival'
-};
-const CONDITIONS = [
-  'Blinded', 'Charmed', 'Deafened', 'Frightened', 'Grappled', 'Incapacitated',
-  'Invisible', 'Paralyzed', 'Petrified', 'Poisoned', 'Prone', 'Restrained',
-  'Stunned', 'Unconscious'
-];
-
-initializeCharacterRuleControls();
-initializeFeatPresetControls();
-initializeAttackPresetControls();
-initializeNpcPresetControls();
-
-// ---------------- Join flow ----------------
-document.getElementById('role-dm').onclick = () => setRole('dm');
-document.getElementById('role-player').onclick = () => setRole('player');
-document.getElementById('auth-login').onclick = () => setAuthMode('login');
-document.getElementById('auth-register').onclick = () => setAuthMode('register');
-function setRole(role) {
-  myRole = role;
-  document.getElementById('role-dm').classList.toggle('active', role === 'dm');
-  document.getElementById('role-player').classList.toggle('active', role === 'player');
-  document.getElementById('dm-pin-field').classList.toggle('hidden', role !== 'dm');
-  document.getElementById('player-auth-fields').classList.toggle('hidden', role !== 'player');
-  document.getElementById('name-field').classList.toggle('hidden', role === 'player' && authMode === 'login');
-  document.getElementById('join-error').textContent = '';
-}
-
-function setAuthMode(mode) {
-  authMode = mode;
-  document.getElementById('auth-login').classList.toggle('active', mode === 'login');
-  document.getElementById('auth-register').classList.toggle('active', mode === 'register');
-  document.getElementById('name-field').classList.toggle('hidden', myRole === 'player' && mode === 'login');
-  document.getElementById('confirm-password-field').classList.toggle('hidden', mode !== 'register');
-  document.getElementById('password-input').autocomplete = mode === 'register' ? 'new-password' : 'current-password';
-  document.getElementById('auth-help').textContent = mode === 'register'
-    ? 'Create one account, then use it anywhere you play. This device will stay signed in for 30 days.'
-    : 'Sign in from any device. This device will stay signed in for 30 days; if you forget your password, ask the DM to reset it.';
-  document.getElementById('join-error').textContent = '';
-}
-
-document.getElementById('join-btn').onclick = async () => {
-  const nameInput = document.getElementById('name-input');
-  myUsername = document.getElementById('username-input').value.trim();
-  const password = document.getElementById('password-input').value;
-  myName = nameInput.value.trim() || (myRole === 'dm' ? 'The DM' : myUsername);
-  if (myRole === 'player' && authMode === 'register' && password !== document.getElementById('confirm-password-input').value) {
-    document.getElementById('join-error').textContent = 'Those passwords do not match.';
-    return;
+// GENERATED FILE — edit frontend/app/**/*.ts, then run npm run build:frontend.
+(() => {
+  const socket = io({ autoConnect: false });
+  const {
+    clampScale,
+    fitStageInViewport,
+    gridMeasurement,
+    positionStagePoint,
+    snapCoordinateToCell,
+    zoomAroundPoint
+  } = window.HumblewoodMapGeometry;
+  const combatState = window.HumblewoodCombatState;
+  const characterRules = window.HumblewoodCharacterRules;
+  const creationPresets = window.HumblewoodCreationPresets;
+  const HUMBLEWOOD_FEAT_PRESETS = (window.HumblewoodAlmanacData || []).find((category) => category.id === "feats")?.entries || [];
+  let myRole = "dm";
+  let myName = "";
+  let myUsername = "";
+  let authMode = "login";
+  let joined = false;
+  let awaitingSessionResume = false;
+  let state = null;
+  let onlineUsers = [];
+  let dmPrivateRollsEnabled = false;
+  let privateRollLog = [];
+  let pendingDiceRollMode = "normal";
+  let selectedTool = "move";
+  let draggingToken = null;
+  let draggingTokenTouchId = null;
+  let dragOffset = { x: 0, y: 0 };
+  let mapScale = 1;
+  let mapPan = { x: 0, y: 0 };
+  let panStart = null;
+  let gridMoveStart = null;
+  let touchGesture = null;
+  let spacePanPressed = false;
+  let lastFittedMapUrl = null;
+  let editingOriginalName = null;
+  let editingInventory = [];
+  let inventoryExpandedContainers = /* @__PURE__ */ new Set();
+  let inventoryDraggingId = "";
+  let editingAttacks = [];
+  let editingAttackId = null;
+  let editingSpells = [];
+  let editingSpellId = null;
+  let editingPortraitUrl = null;
+  let pendingPortraitFile = null;
+  let editingCanEdit = true;
+  let initiativeManuallyEdited = false;
+  let editingBaseLevel = 1;
+  let pendingLevelUp = null;
+  let suppressLevelUpPrompt = false;
+  let acMethodManuallySelected = false;
+  let toastTimer = null;
+  let activeCombatTarget = null;
+  let pendingSpellPreparation = null;
+  let editingNpcId = null;
+  let editingNpcSheetId = null;
+  let rulerStartPoint = null;
+  let rulerAnchorPoint = null;
+  let mapAreaDrag = null;
+  let lastPointerSentAt = 0;
+  let draggedInitiativeId = null;
+  let libraryCurrentFolderId = "all";
+  let sharedHandoutRenderKey = "";
+  let sharedHandoutTimer = null;
+  let sharedHandoutContentRequest = 0;
+  let shopPurchaseCharacterName = "";
+  let npcSearchQuery = "";
+  let npcRaceFilter = "all";
+  let npcClassFilter = "all";
+  let dmNotificationsOpen = false;
+  let safetyButtonTimer = null;
+  let questionSubmitting = false;
+  const pendingConcentrationChecks = /* @__PURE__ */ new Map();
+  const pointerFadeTimers = /* @__PURE__ */ new Map();
+  const ABILITIES = ["str", "dex", "con", "int", "wis", "cha"];
+  const ABILITY_LABELS = { str: "Strength", dex: "Dexterity", con: "Constitution", int: "Intelligence", wis: "Wisdom", cha: "Charisma" };
+  const SKILL_ABILITIES = {
+    acrobatics: "dex",
+    animal: "wis",
+    arcana: "int",
+    athletics: "str",
+    deception: "cha",
+    history: "int",
+    insight: "wis",
+    intimidation: "cha",
+    investigation: "int",
+    medicine: "wis",
+    nature: "int",
+    perception: "wis",
+    performance: "cha",
+    persuasion: "cha",
+    religion: "int",
+    sleight: "dex",
+    stealth: "dex",
+    survival: "wis"
+  };
+  const SKILL_LABELS = {
+    acrobatics: "Acrobatics",
+    animal: "Animal Handling",
+    arcana: "Arcana",
+    athletics: "Athletics",
+    deception: "Deception",
+    history: "History",
+    insight: "Insight",
+    intimidation: "Intimidation",
+    investigation: "Investigation",
+    medicine: "Medicine",
+    nature: "Nature",
+    perception: "Perception",
+    performance: "Performance",
+    persuasion: "Persuasion",
+    religion: "Religion",
+    sleight: "Sleight of Hand",
+    stealth: "Stealth",
+    survival: "Survival"
+  };
+  const CONDITIONS = [
+    "Blinded",
+    "Charmed",
+    "Deafened",
+    "Frightened",
+    "Grappled",
+    "Incapacitated",
+    "Invisible",
+    "Paralyzed",
+    "Petrified",
+    "Poisoned",
+    "Prone",
+    "Restrained",
+    "Stunned",
+    "Unconscious"
+  ];
+  document.getElementById("role-dm").onclick = () => setRole("dm");
+  document.getElementById("role-player").onclick = () => setRole("player");
+  document.getElementById("auth-login").onclick = () => setAuthMode("login");
+  document.getElementById("auth-register").onclick = () => setAuthMode("register");
+  function setRole(role) {
+    myRole = role;
+    document.getElementById("role-dm").classList.toggle("active", role === "dm");
+    document.getElementById("role-player").classList.toggle("active", role === "player");
+    document.getElementById("dm-pin-field").classList.toggle("hidden", role !== "dm");
+    document.getElementById("player-auth-fields").classList.toggle("hidden", role !== "player");
+    document.getElementById("name-field").classList.toggle("hidden", role === "player" && authMode === "login");
+    document.getElementById("join-error").textContent = "";
   }
-  const joinButton = document.getElementById('join-btn');
-  joinButton.disabled = true;
-  joinButton.textContent = 'Entering…';
-  document.getElementById('join-error').textContent = '';
-  try {
-    const response = await fetch('/api/auth/session', {
-      method: 'POST',
-      credentials: 'same-origin',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        role: myRole,
-        name: myName,
-        username: myUsername,
-        password,
-        authMode,
-        dmPin: document.getElementById('dm-pin-input').value
-      })
-    });
-    const result = await response.json().catch(() => ({}));
-    if (!response.ok || !result.ok) throw new Error(result.message || 'Could not join the table.');
-    awaitingSessionResume = true;
-    socket.disconnect();
-    socket.connect();
-  } catch (error) {
-    awaitingSessionResume = false;
+  function setAuthMode(mode) {
+    authMode = mode;
+    document.getElementById("auth-login").classList.toggle("active", mode === "login");
+    document.getElementById("auth-register").classList.toggle("active", mode === "register");
+    document.getElementById("name-field").classList.toggle("hidden", myRole === "player" && mode === "login");
+    document.getElementById("confirm-password-field").classList.toggle("hidden", mode !== "register");
+    document.getElementById("password-input").autocomplete = mode === "register" ? "new-password" : "current-password";
+    document.getElementById("auth-help").textContent = mode === "register" ? "Create one account, then use it anywhere you play. This device will stay signed in for 30 days." : "Sign in from any device. This device will stay signed in for 30 days; if you forget your password, ask the DM to reset it.";
+    document.getElementById("join-error").textContent = "";
+  }
+  document.getElementById("join-btn").onclick = async () => {
+    const nameInput = document.getElementById("name-input");
+    myUsername = document.getElementById("username-input").value.trim();
+    const password = document.getElementById("password-input").value;
+    myName = nameInput.value.trim() || (myRole === "dm" ? "The DM" : myUsername);
+    if (myRole === "player" && authMode === "register" && password !== document.getElementById("confirm-password-input").value) {
+      document.getElementById("join-error").textContent = "Those passwords do not match.";
+      return;
+    }
+    const joinButton = document.getElementById("join-btn");
+    joinButton.disabled = true;
+    joinButton.textContent = "Entering\u2026";
+    document.getElementById("join-error").textContent = "";
+    try {
+      const response = await fetch("/api/auth/session", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          role: myRole,
+          name: myName,
+          username: myUsername,
+          password,
+          authMode,
+          dmPin: document.getElementById("dm-pin-input").value
+        })
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || !result.ok) throw new Error(result.message || "Could not join the table.");
+      awaitingSessionResume = true;
+      socket.disconnect();
+      socket.connect();
+    } catch (error) {
+      awaitingSessionResume = false;
+      joinButton.disabled = false;
+      joinButton.textContent = "Enter the Wood";
+      document.getElementById("join-error").textContent = error.message || "Could not join the table.";
+    }
+  };
+  document.getElementById("dm-pin-input").addEventListener("keydown", (event) => {
+    if (event.key === "Enter") document.getElementById("join-btn").click();
+  });
+  document.getElementById("password-input").addEventListener("keydown", (event) => {
+    if (event.key === "Enter") document.getElementById("join-btn").click();
+  });
+  document.getElementById("confirm-password-input").addEventListener("keydown", (event) => {
+    if (event.key === "Enter") document.getElementById("join-btn").click();
+  });
+  socket.on("identify:result", (result) => {
+    const joinButton = document.getElementById("join-btn");
     joinButton.disabled = false;
-    joinButton.textContent = 'Enter the Wood';
-    document.getElementById('join-error').textContent = error.message || 'Could not join the table.';
-  }
-};
-
-document.getElementById('dm-pin-input').addEventListener('keydown', event => {
-  if (event.key === 'Enter') document.getElementById('join-btn').click();
-});
-document.getElementById('password-input').addEventListener('keydown', event => {
-  if (event.key === 'Enter') document.getElementById('join-btn').click();
-});
-document.getElementById('confirm-password-input').addEventListener('keydown', event => {
-  if (event.key === 'Enter') document.getElementById('join-btn').click();
-});
-
-socket.on('identify:result', result => {
-  const joinButton = document.getElementById('join-btn');
-  joinButton.disabled = false;
-  joinButton.textContent = 'Enter the Wood';
-  if (!result.ok) {
-    document.getElementById('join-error').textContent = result.message || 'Could not join the table.';
-    return;
-  }
-  awaitingSessionResume = false;
-  myRole = result.role;
-  myName = result.name;
-  myUsername = result.username || '';
-  if (myRole === 'player') authMode = 'login';
-  joined = true;
-  document.getElementById('password-input').value = '';
-  document.getElementById('confirm-password-input').value = '';
-  document.getElementById('dm-pin-input').value = '';
-  document.getElementById('join-screen').style.display = 'none';
-  document.getElementById('app').style.display = 'flex';
-  document.body.setAttribute('data-role', myRole);
-  document.getElementById('my-role-pill').textContent = myRole === 'dm' ? 'Dungeon Master' : `Player · ${myName}`;
-  if (myRole !== 'dm') {
-    dmPrivateRollsEnabled = false;
-    privateRollLog = [];
-    if (router.current === 'library') router.navigate('map');
-  }
-  renderDmPrivateRollMode();
-  if (myRole === 'dm') socket.emit('accounts:list');
-});
-
-socket.on('connect', () => {
-  socket.emit('session:resume');
-});
-socket.on('session:result', result => {
-  if (result.ok || !awaitingSessionResume) return;
-  awaitingSessionResume = false;
-  const joinButton = document.getElementById('join-btn');
-  joinButton.disabled = false;
-  joinButton.textContent = 'Enter the Wood';
-  document.getElementById('join-error').textContent = 'Your login succeeded, but the saved session could not be restored. Please try again.';
-});
-
-// ---------------- Frontend routes ----------------
-const router = window.HumblewoodRouter.createRouter({
-  routes: {
-    map: { path: '/map', title: 'Map' },
-    characters: { path: '/characters', title: 'Characters' },
-    almanac: { path: '/almanac', title: 'Humble Almanac' },
-    jukebox: { path: '/jukebox', title: 'Jukebox' },
-    library: { path: '/library', title: 'DM Library' },
-    dice: { path: '/dice', title: 'Dice' }
-  },
-  onRoute: renderRoute
-});
-
-window.HumblewoodAlmanac.mount(window.HumblewoodAlmanacData);
-
-document.getElementById('topbar-roll-btn').onclick = () => switchView('dice');
-document.getElementById('topbar-logout-btn').onclick = async () => {
-  const button = document.getElementById('topbar-logout-btn');
-  button.disabled = true;
-  button.textContent = 'Logging out…';
-  try {
-    await fetch('/api/auth/session', { method: 'DELETE', credentials: 'same-origin' });
-    window.location.reload();
-  } catch {
-    button.disabled = false;
-    button.textContent = 'Log out';
-    showToast('Could not log out. Please check your connection and try again.');
-  }
-};
-
-function renderRoute(viewName, route) {
-  if (viewName === 'library' && myRole !== 'dm') {
-    router.navigate('map');
-    return;
-  }
-  document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.view === viewName));
-  document.querySelectorAll('.tab-btn').forEach(btn => {
-    if (btn.dataset.view === viewName) btn.setAttribute('aria-current', 'page');
-    else btn.removeAttribute('aria-current');
+    joinButton.textContent = "Enter the Wood";
+    if (!result.ok) {
+      document.getElementById("join-error").textContent = result.message || "Could not join the table.";
+      return;
+    }
+    awaitingSessionResume = false;
+    myRole = result.role;
+    myName = result.name;
+    myUsername = result.username || "";
+    if (myRole === "player") authMode = "login";
+    joined = true;
+    document.getElementById("password-input").value = "";
+    document.getElementById("confirm-password-input").value = "";
+    document.getElementById("dm-pin-input").value = "";
+    document.getElementById("join-screen").style.display = "none";
+    document.getElementById("app").style.display = "flex";
+    document.body.setAttribute("data-role", myRole);
+    document.getElementById("my-role-pill").textContent = myRole === "dm" ? "Dungeon Master" : `Player \xB7 ${myName}`;
+    if (myRole !== "dm") {
+      dmPrivateRollsEnabled = false;
+      privateRollLog = [];
+      if (router.current === "library") router.navigate("map");
+    }
+    renderDmPrivateRollMode();
+    if (myRole === "dm") socket.emit("accounts:list");
   });
-  document.querySelectorAll('.view').forEach(view => view.classList.toggle('active', view.id === 'view-' + viewName));
-  document.title = `${route.title} · The Humblewood Table`;
-  if (viewName === 'dice') refreshCharacterRoller();
-}
-
-function switchView(viewName) {
-  router.navigate(viewName);
-}
-
-router.start();
-
-// ---------------- Socket state sync ----------------
-socket.on('state:full', (s) => {
-  state = s;
-  if (shopPurchaseCharacterName && !state.characters?.[shopPurchaseCharacterName]?.canManage) {
-    shopPurchaseCharacterName = '';
-  }
-  onlineUsers = Array.isArray(s.onlineUsers) ? s.onlineUsers : [];
-  renderMap();
-  renderTokenTray();
-  renderNpcRoster();
-  renderSavedScenes();
-  renderPlayerSidebar();
-  renderDmSidebarSummary();
-  renderCharacters();
-  renderJukebox();
-  renderLibrary();
-  renderDmNotifications();
-  renderOnlineUsers();
-  renderSharedHandout();
-  renderRollLog();
-  renderInitiative();
-  refreshCharacterRoller();
-  if (activeCombatTarget) renderCombatManager();
-});
-
-socket.on('scene:update', (scene) => {
-  if (!state) return;
-  state.scene = scene;
-  renderMap();
-  renderTokenTray();
-  renderSavedScenes();
-  renderDmSidebarSummary();
-});
-socket.on('scene:doodle:add', (path) => { if (state) { state.scene.doodlePaths.push(path); drawDoodlePath(path); } });
-socket.on('scene:doodle:clear', () => { if (state) { state.scene.doodlePaths = []; clearDoodleCanvas(); } });
-socket.on('scene:doodle:redrawAll', (paths) => { if (state) { state.scene.doodlePaths = paths || []; redrawAllDoodles(); } });
-socket.on('scene:fog:update', ({ enabled, shapes }) => {
-  if (!state) return;
-  state.scene.fogEnabled = !!enabled;
-  state.scene.fogShapes = Array.isArray(shapes) ? shapes : [];
-  updateMapPermissionControls();
-  renderFog();
-});
-socket.on('scene:dirty', ({ dirty }) => {
-  if (!state) return;
-  state.sceneDirty = !!dirty;
-  renderSavedScenes();
-});
-
-socket.on('token:add', (t) => {
-  state.tokens.push(t);
-  renderTokenTray();
-  renderMapTokens();
-  renderNpcRoster();
-  renderDmSidebarSummary();
-  renderCharacters();
-});
-socket.on('token:move', ({ id, x, y }) => {
-  const t = state.tokens.find(t => t.id === id);
-  if (t) { t.x = x; t.y = y; }
-  const el = document.querySelector(`.token-on-map[data-id="${id}"]`);
-  if (el) { el.style.left = x + 'px'; el.style.top = y + 'px'; }
-});
-socket.on('token:update', (updated) => {
-  const idx = state.tokens.findIndex(t => t.id === updated.id);
-  if (idx === -1) state.tokens.push(updated);
-  else state.tokens[idx] = { ...state.tokens[idx], ...updated };
-  renderMapTokens(); renderTokenTray();
-  renderNpcRoster();
-  renderDmSidebarSummary();
-  if (activeCombatTarget?.type === 'npc' && activeCombatTarget.id === updated.id) renderCombatManager();
-});
-socket.on('token:remove', ({ id }) => {
-  state.tokens = state.tokens.filter(t => t.id !== id);
-  if (activeCombatTarget?.type === 'npc' && activeCombatTarget.id === id) closeCombatManager();
-  renderMapTokens(); renderTokenTray();
-  renderNpcRoster();
-  renderDmSidebarSummary();
-  renderCharacters();
-});
-
-socket.on('npcs:update', npcs => {
-  state.npcs = npcs || {};
-  renderNpcRoster();
-  renderDmSidebarSummary();
-  renderCharacters();
-  refreshCharacterRoller();
-  if (activeCombatTarget?.type === 'npc') renderCombatManager();
-});
-socket.on('library:update', library => {
-  if (!state) return;
-  state.library = library || { folders: [], files: [], broadcast: null };
-  renderLibrary();
-  renderSharedHandout();
-});
-socket.on('library:broadcast', broadcast => {
-  if (!state) return;
-  state.library = state.library || { folders: [], files: [], broadcast: null };
-  state.library.broadcast = broadcast || null;
-  renderSharedHandout();
-  if (broadcast) showToast(`Shared “${broadcast.name}” with the table.`);
-});
-socket.on('notifications:update', notifications => {
-  if (!state || myRole !== 'dm') return;
-  const previousIds = new Set((state.notifications || []).map(notification => notification.id));
-  state.notifications = Array.isArray(notifications) ? notifications : [];
-  const hasNew = state.notifications.some(notification => !previousIds.has(notification.id));
-  if (hasNew) dmNotificationsOpen = true;
-  renderDmNotifications();
-  if (hasNew) showToast('New private table notification.');
-});
-socket.on('safety:submitted', ({ cooldown } = {}) => {
-  const button = document.getElementById('player-safety-btn');
-  if (!button) return;
-  button.disabled = true;
-  button.textContent = cooldown ? 'Break request sent' : 'Break requested';
-  clearTimeout(safetyButtonTimer);
-  safetyButtonTimer = setTimeout(() => {
-    button.disabled = false;
-    button.textContent = '⏸ Need a break';
-  }, 30000);
-  showToast('The DM has been notified privately. Please take the space you need.');
-});
-socket.on('question:submitted', () => {
-  questionSubmitting = false;
-  const button = document.getElementById('player-question-submit');
-  if (button) {
-    button.disabled = false;
-    button.textContent = 'Send question';
-  }
-  document.getElementById('player-question-input').value = '';
-  document.getElementById('player-question-anonymous').checked = false;
-  closePlayerQuestion();
-  showToast('Your question was sent privately to the DM.');
-});
-socket.on('scenes:update', scenes => { state.savedScenes = scenes || []; renderSavedScenes(); });
-socket.on('scene:active', ({ name }) => { state.activeSceneName = name || null; renderSavedScenes(); renderDmSidebarSummary(); });
-socket.on('scene:saved', ({ name }) => showToast(`Saved scene “${name}”.`));
-socket.on('scene:loaded', ({ name }) => showToast(`Loaded scene “${name}”.`));
-socket.on('scene:deleted', ({ name }) => showToast(`Deleted saved scene “${name}”.`));
-socket.on('npc:saved', ({ id, name }) => {
-  resetNpcEditor();
-  if (editingNpcSheetId === id || (editingNpcSheetId === '__new__' && state.npcs?.[id])) {
-    editingNpcSheetId = null;
-    document.getElementById('sheet-editor').classList.add('hidden');
-  }
-  showToast(`Saved ${name}.`);
-});
-socket.on('npc:deleted', ({ id, name }) => {
-  if (editingNpcId === id) resetNpcEditor();
-  if (editingNpcSheetId === id) {
-    editingNpcSheetId = null;
-    document.getElementById('sheet-editor').classList.add('hidden');
-  }
-  showToast(`Deleted ${name}.`);
-});
-
-socket.on('jukebox:update', (j) => { state.jukebox = j; renderJukebox(); });
-socket.on('character:update', (sheet) => {
-  state.characters[sheet.name] = sheet;
-  renderCharacters();
-  renderPlayerSidebar();
-  renderInitiative();
-  refreshCharacterRoller();
-  if (activeCombatTarget?.type === 'character' && activeCombatTarget.id === sheet.name) renderCombatManager();
-});
-socket.on('shop:stock:update', shopStock => {
-  if (!state) return;
-  state.shopStock = shopStock || {};
-  postShopContext();
-});
-socket.on('shop:purchase:result', result => {
-  postShopMessage({ type: 'humblewood:shop-purchase-result', ...result });
-  showToast(result.message || (result.ok ? 'Purchase complete.' : 'Purchase could not be completed.'));
-});
-socket.on('character:remove', ({ name }) => {
-  delete state.characters[name];
-  if (activeCombatTarget?.type === 'character' && activeCombatTarget.id === name) closeCombatManager();
-  renderCharacters();
-  renderPlayerSidebar();
-  renderInitiative();
-  refreshCharacterRoller();
-});
-socket.on('character:denied', ({ name }) => showToast(`You cannot edit ${name || 'that character'}.`));
-socket.on('action:denied', ({ message }) => showToast(message || 'That action is not allowed.'));
-socket.on('token:exists', token => {
-  showToast(`${token.label} is already on the map.`);
-  switchView('map');
-});
-socket.on('concentration:required', ({ name, damage, dc }) => {
-  pendingConcentrationChecks.set(name, { damage, dc });
-  showToast(`${name} must make a DC ${dc} Constitution save for concentration.`);
-  if (activeCombatTarget?.type === 'character' && activeCombatTarget.id === name) renderCombatManager();
-});
-socket.on('accounts:update', renderPlayerAccounts);
-socket.on('account:passwordReset', ({ username }) => {
-  document.getElementById('reset-account-password').value = '';
-  showToast(`Password reset for ${username}.`);
-});
-
-function renderPlayerAccounts(accounts) {
-  const list = document.getElementById('account-list');
-  list.innerHTML = '';
-  if (!accounts.length) {
-    list.innerHTML = '<p class="empty-roll-options">No player accounts have been created yet.</p>';
-    return;
-  }
-  accounts.forEach(account => {
-    const row = document.createElement('div');
-    row.className = 'account-list-item';
-    row.innerHTML = `<strong>${escapeHtml(account.displayName)}</strong><span>@${escapeHtml(account.username)}</span>`;
-    row.onclick = () => { document.getElementById('reset-account-username').value = account.username; };
-    list.appendChild(row);
+  socket.on("connect", () => {
+    socket.emit("session:resume");
   });
-}
-
-document.getElementById('refresh-accounts-btn').onclick = () => socket.emit('accounts:list');
-document.getElementById('reset-account-password-btn').onclick = () => {
-  const username = document.getElementById('reset-account-username').value.trim();
-  const password = document.getElementById('reset-account-password').value;
-  if (!username) return showToast('Choose a player account first.');
-  if (password.length < 8) return showToast('The new password needs at least 8 characters.');
-  socket.emit('account:resetPassword', { username, password });
-};
-socket.on('initiative:update', (initiative) => {
-  state.initiative = initiative;
-  renderInitiative();
-  renderMapTokens();
-});
-
-socket.on('presence', ({ role, name, connected }) => {
-  const el = document.getElementById('presence-list');
-  // lightweight ephemeral presence note
-  el.textContent = `${name} ${connected ? 'joined' : 'left'} the wood`;
-  setTimeout(() => { if (el.textContent.includes(name)) el.textContent = ''; }, 4000);
-});
-
-socket.on('presence:list', users => {
-  onlineUsers = Array.isArray(users) ? users : [];
-  renderOnlineUsers();
-});
-
-socket.on('pointer:move', renderSharedPointer);
-socket.on('pointer:hide', ({ id }) => removeSharedPointer(id));
-socket.on('pointer:ping', renderSharedPing);
-
-// ================= MAP =================
-const mapUpload = document.getElementById('map-upload');
-mapUpload.onchange = async () => {
-  const file = mapUpload.files[0];
-  if (!file) return;
-  const url = await uploadFile(file);
-  socket.emit('scene:setMap', { mapUrl: url, mapName: file.name });
-};
-
-function renderMap() {
-  const img = document.getElementById('map-image');
-  const empty = document.getElementById('empty-map');
-  const grid = document.getElementById('grid-overlay');
-  const gridSize = Math.max(10, Number(state.scene.gridSize) || 50);
-  const gridOffsetX = Number(state.scene.gridOffsetX) || 0;
-  const gridOffsetY = Number(state.scene.gridOffsetY) || 0;
-  const gridColor = /^#[0-9a-f]{6}$/i.test(String(state.scene.gridColor || ''))
-    ? state.scene.gridColor
-    : '#3a2e25';
-  grid.style.backgroundSize = `${gridSize}px ${gridSize}px`;
-  grid.style.backgroundPosition = `${gridOffsetX}px ${gridOffsetY}px`;
-  grid.style.setProperty('--grid-color', gridColor);
-  grid.classList.toggle('visible', !!state.scene.gridVisible);
-  document.getElementById('grid-toggle').checked = !!state.scene.gridVisible;
-  document.getElementById('grid-size').value = gridSize;
-  document.getElementById('grid-color').value = gridColor;
-  document.getElementById('snap-toggle').checked = state.scene.snapToGrid !== false;
-  document.getElementById('fit-token-toggle').checked = state.scene.fitTokensToGrid !== false;
-  if (!Array.isArray(state.scene.doodlePaths)) state.scene.doodlePaths = [];
-  if (!Array.isArray(state.scene.fogShapes)) state.scene.fogShapes = [];
-  updateMapPermissionControls();
-  applyMapTransform();
-  if (state.scene.mapUrl) {
-    const sizeMapStage = () => {
-      const stage = document.getElementById('map-stage');
-      stage.style.width = img.naturalWidth + 'px';
-      stage.style.height = img.naturalHeight + 'px';
-      img.style.width = img.naturalWidth + 'px';
-      img.style.height = img.naturalHeight + 'px';
-      const canvas = document.getElementById('doodle-canvas');
-      canvas.width = img.naturalWidth;
-      canvas.height = img.naturalHeight;
-      const fogCanvas = document.getElementById('fog-canvas');
-      fogCanvas.width = img.naturalWidth;
-      fogCanvas.height = img.naturalHeight;
+  socket.on("session:result", (result) => {
+    if (result.ok || !awaitingSessionResume) return;
+    awaitingSessionResume = false;
+    const joinButton = document.getElementById("join-btn");
+    joinButton.disabled = false;
+    joinButton.textContent = "Enter the Wood";
+    document.getElementById("join-error").textContent = "Your login succeeded, but the saved session could not be restored. Please try again.";
+  });
+  const router = window.HumblewoodRouter.createRouter({
+    routes: {
+      map: { path: "/map", title: "Map" },
+      characters: { path: "/characters", title: "Characters" },
+      almanac: { path: "/almanac", title: "Humble Almanac" },
+      jukebox: { path: "/jukebox", title: "Jukebox" },
+      library: { path: "/library", title: "DM Library" },
+      dice: { path: "/dice", title: "Dice" }
+    },
+    onRoute: renderRoute
+  });
+  window.HumblewoodAlmanac.mount(window.HumblewoodAlmanacData);
+  document.getElementById("topbar-roll-btn").onclick = () => switchView("dice");
+  document.getElementById("topbar-logout-btn").onclick = async () => {
+    const button = document.getElementById("topbar-logout-btn");
+    button.disabled = true;
+    button.textContent = "Logging out\u2026";
+    try {
+      await fetch("/api/auth/session", { method: "DELETE", credentials: "same-origin" });
+      window.location.reload();
+    } catch {
+      button.disabled = false;
+      button.textContent = "Log out";
+      showToast("Could not log out. Please check your connection and try again.");
+    }
+  };
+  function renderRoute(viewName, route) {
+    if (viewName === "library" && myRole !== "dm") {
+      router.navigate("map");
+      return;
+    }
+    document.querySelectorAll(".tab-btn").forEach((btn) => btn.classList.toggle("active", btn.dataset.view === viewName));
+    document.querySelectorAll(".tab-btn").forEach((btn) => {
+      if (btn.dataset.view === viewName) btn.setAttribute("aria-current", "page");
+      else btn.removeAttribute("aria-current");
+    });
+    document.querySelectorAll(".view").forEach((view) => view.classList.toggle("active", view.id === "view-" + viewName));
+    document.title = `${route.title} \xB7 The Humblewood Table`;
+    if (viewName === "dice") refreshCharacterRoller();
+  }
+  function switchView(viewName) {
+    router.navigate(viewName);
+  }
+  router.start();
+  socket.on("state:full", (s) => {
+    state = s;
+    if (shopPurchaseCharacterName && !state.characters?.[shopPurchaseCharacterName]?.canManage) {
+      shopPurchaseCharacterName = "";
+    }
+    onlineUsers = Array.isArray(s.onlineUsers) ? s.onlineUsers : [];
+    renderMap();
+    renderTokenTray();
+    renderNpcRoster();
+    renderSavedScenes();
+    renderPlayerSidebar();
+    renderDmSidebarSummary();
+    renderCharacters();
+    renderJukebox();
+    renderLibrary();
+    renderDmNotifications();
+    renderOnlineUsers();
+    renderSharedHandout();
+    renderRollLog();
+    renderInitiative();
+    refreshCharacterRoller();
+    if (activeCombatTarget) renderCombatManager();
+  });
+  socket.on("scene:update", (scene) => {
+    if (!state) return;
+    state.scene = scene;
+    renderMap();
+    renderTokenTray();
+    renderSavedScenes();
+    renderDmSidebarSummary();
+  });
+  socket.on("scene:doodle:add", (path) => {
+    if (state) {
+      state.scene.doodlePaths.push(path);
+      drawDoodlePath(path);
+    }
+  });
+  socket.on("scene:doodle:clear", () => {
+    if (state) {
+      state.scene.doodlePaths = [];
+      clearDoodleCanvas();
+    }
+  });
+  socket.on("scene:doodle:redrawAll", (paths) => {
+    if (state) {
+      state.scene.doodlePaths = paths || [];
       redrawAllDoodles();
+    }
+  });
+  socket.on("scene:fog:update", ({ enabled, shapes }) => {
+    if (!state) return;
+    state.scene.fogEnabled = !!enabled;
+    state.scene.fogShapes = Array.isArray(shapes) ? shapes : [];
+    updateMapPermissionControls();
+    renderFog();
+  });
+  socket.on("scene:dirty", ({ dirty }) => {
+    if (!state) return;
+    state.sceneDirty = !!dirty;
+    renderSavedScenes();
+  });
+  socket.on("token:add", (t) => {
+    state.tokens.push(t);
+    renderTokenTray();
+    renderMapTokens();
+    renderNpcRoster();
+    renderDmSidebarSummary();
+    renderCharacters();
+  });
+  socket.on("token:move", ({ id, x, y }) => {
+    const t = state.tokens.find((t2) => t2.id === id);
+    if (t) {
+      t.x = x;
+      t.y = y;
+    }
+    const el = document.querySelector(`.token-on-map[data-id="${id}"]`);
+    if (el) {
+      el.style.left = x + "px";
+      el.style.top = y + "px";
+    }
+  });
+  socket.on("token:update", (updated) => {
+    const idx = state.tokens.findIndex((t) => t.id === updated.id);
+    if (idx === -1) state.tokens.push(updated);
+    else state.tokens[idx] = { ...state.tokens[idx], ...updated };
+    renderMapTokens();
+    renderTokenTray();
+    renderNpcRoster();
+    renderDmSidebarSummary();
+    if (activeCombatTarget?.type === "npc" && activeCombatTarget.id === updated.id) renderCombatManager();
+  });
+  socket.on("token:remove", ({ id }) => {
+    state.tokens = state.tokens.filter((t) => t.id !== id);
+    if (activeCombatTarget?.type === "npc" && activeCombatTarget.id === id) closeCombatManager();
+    renderMapTokens();
+    renderTokenTray();
+    renderNpcRoster();
+    renderDmSidebarSummary();
+    renderCharacters();
+  });
+  socket.on("npcs:update", (npcs) => {
+    state.npcs = npcs || {};
+    renderNpcRoster();
+    renderDmSidebarSummary();
+    renderCharacters();
+    refreshCharacterRoller();
+    if (activeCombatTarget?.type === "npc") renderCombatManager();
+  });
+  socket.on("library:update", (library) => {
+    if (!state) return;
+    state.library = library || { folders: [], files: [], broadcast: null };
+    renderLibrary();
+    renderSharedHandout();
+  });
+  socket.on("library:broadcast", (broadcast) => {
+    if (!state) return;
+    state.library = state.library || { folders: [], files: [], broadcast: null };
+    state.library.broadcast = broadcast || null;
+    renderSharedHandout();
+    if (broadcast) showToast(`Shared \u201C${broadcast.name}\u201D with the table.`);
+  });
+  socket.on("notifications:update", (notifications) => {
+    if (!state || myRole !== "dm") return;
+    const previousIds = new Set((state.notifications || []).map((notification) => notification.id));
+    state.notifications = Array.isArray(notifications) ? notifications : [];
+    const hasNew = state.notifications.some((notification) => !previousIds.has(notification.id));
+    if (hasNew) dmNotificationsOpen = true;
+    renderDmNotifications();
+    if (hasNew) showToast("New private table notification.");
+  });
+  socket.on("safety:submitted", ({ cooldown } = {}) => {
+    const button = document.getElementById("player-safety-btn");
+    if (!button) return;
+    button.disabled = true;
+    button.textContent = cooldown ? "Break request sent" : "Break requested";
+    clearTimeout(safetyButtonTimer);
+    safetyButtonTimer = setTimeout(() => {
+      button.disabled = false;
+      button.textContent = "\u23F8 Need a break";
+    }, 3e4);
+    showToast("The DM has been notified privately. Please take the space you need.");
+  });
+  socket.on("question:submitted", () => {
+    questionSubmitting = false;
+    const button = document.getElementById("player-question-submit");
+    if (button) {
+      button.disabled = false;
+      button.textContent = "Send question";
+    }
+    document.getElementById("player-question-input").value = "";
+    document.getElementById("player-question-anonymous").checked = false;
+    closePlayerQuestion();
+    showToast("Your question was sent privately to the DM.");
+  });
+  socket.on("scenes:update", (scenes) => {
+    state.savedScenes = scenes || [];
+    renderSavedScenes();
+  });
+  socket.on("scene:active", ({ name }) => {
+    state.activeSceneName = name || null;
+    renderSavedScenes();
+    renderDmSidebarSummary();
+  });
+  socket.on("scene:saved", ({ name }) => showToast(`Saved scene \u201C${name}\u201D.`));
+  socket.on("scene:loaded", ({ name }) => showToast(`Loaded scene \u201C${name}\u201D.`));
+  socket.on("scene:deleted", ({ name }) => showToast(`Deleted saved scene \u201C${name}\u201D.`));
+  socket.on("npc:saved", ({ id, name }) => {
+    resetNpcEditor();
+    if (editingNpcSheetId === id || editingNpcSheetId === "__new__" && state.npcs?.[id]) {
+      editingNpcSheetId = null;
+      document.getElementById("sheet-editor").classList.add("hidden");
+    }
+    showToast(`Saved ${name}.`);
+  });
+  socket.on("npc:deleted", ({ id, name }) => {
+    if (editingNpcId === id) resetNpcEditor();
+    if (editingNpcSheetId === id) {
+      editingNpcSheetId = null;
+      document.getElementById("sheet-editor").classList.add("hidden");
+    }
+    showToast(`Deleted ${name}.`);
+  });
+  socket.on("jukebox:update", (j) => {
+    state.jukebox = j;
+    renderJukebox();
+  });
+  socket.on("character:update", (sheet) => {
+    state.characters[sheet.name] = sheet;
+    renderCharacters();
+    renderPlayerSidebar();
+    renderInitiative();
+    refreshCharacterRoller();
+    if (activeCombatTarget?.type === "character" && activeCombatTarget.id === sheet.name) renderCombatManager();
+  });
+  socket.on("shop:stock:update", (shopStock) => {
+    if (!state) return;
+    state.shopStock = shopStock || {};
+    postShopContext();
+  });
+  socket.on("shop:purchase:result", (result) => {
+    postShopMessage({ type: "humblewood:shop-purchase-result", ...result });
+    showToast(result.message || (result.ok ? "Purchase complete." : "Purchase could not be completed."));
+  });
+  socket.on("character:remove", ({ name }) => {
+    delete state.characters[name];
+    if (activeCombatTarget?.type === "character" && activeCombatTarget.id === name) closeCombatManager();
+    renderCharacters();
+    renderPlayerSidebar();
+    renderInitiative();
+    refreshCharacterRoller();
+  });
+  socket.on("character:denied", ({ name }) => showToast(`You cannot edit ${name || "that character"}.`));
+  socket.on("action:denied", ({ message }) => showToast(message || "That action is not allowed."));
+  socket.on("token:exists", (token) => {
+    showToast(`${token.label} is already on the map.`);
+    switchView("map");
+  });
+  socket.on("concentration:required", ({ name, damage, dc }) => {
+    pendingConcentrationChecks.set(name, { damage, dc });
+    showToast(`${name} must make a DC ${dc} Constitution save for concentration.`);
+    if (activeCombatTarget?.type === "character" && activeCombatTarget.id === name) renderCombatManager();
+  });
+  socket.on("accounts:update", renderPlayerAccounts);
+  socket.on("account:passwordReset", ({ username }) => {
+    document.getElementById("reset-account-password").value = "";
+    showToast(`Password reset for ${username}.`);
+  });
+  function renderPlayerAccounts(accounts) {
+    const list = document.getElementById("account-list");
+    list.innerHTML = "";
+    if (!accounts.length) {
+      list.innerHTML = '<p class="empty-roll-options">No player accounts have been created yet.</p>';
+      return;
+    }
+    accounts.forEach((account) => {
+      const row = document.createElement("div");
+      row.className = "account-list-item";
+      row.innerHTML = `<strong>${escapeHtml(account.displayName)}</strong><span>@${escapeHtml(account.username)}</span>`;
+      row.onclick = () => {
+        document.getElementById("reset-account-username").value = account.username;
+      };
+      list.appendChild(row);
+    });
+  }
+  document.getElementById("refresh-accounts-btn").onclick = () => socket.emit("accounts:list");
+  document.getElementById("reset-account-password-btn").onclick = () => {
+    const username = document.getElementById("reset-account-username").value.trim();
+    const password = document.getElementById("reset-account-password").value;
+    if (!username) return showToast("Choose a player account first.");
+    if (password.length < 8) return showToast("The new password needs at least 8 characters.");
+    socket.emit("account:resetPassword", { username, password });
+  };
+  socket.on("initiative:update", (initiative) => {
+    state.initiative = initiative;
+    renderInitiative();
+    renderMapTokens();
+  });
+  socket.on("presence", ({ role, name, connected }) => {
+    const el = document.getElementById("presence-list");
+    el.textContent = `${name} ${connected ? "joined" : "left"} the wood`;
+    setTimeout(() => {
+      if (el.textContent.includes(name)) el.textContent = "";
+    }, 4e3);
+  });
+  socket.on("presence:list", (users) => {
+    onlineUsers = Array.isArray(users) ? users : [];
+    renderOnlineUsers();
+  });
+  socket.on("pointer:move", renderSharedPointer);
+  socket.on("pointer:hide", ({ id }) => removeSharedPointer(id));
+  socket.on("pointer:ping", renderSharedPing);
+  const mapUpload = document.getElementById("map-upload");
+  mapUpload.onchange = async () => {
+    const file = mapUpload.files[0];
+    if (!file) return;
+    const url = await uploadFile(file);
+    socket.emit("scene:setMap", { mapUrl: url, mapName: file.name });
+  };
+  function renderMap() {
+    const img = document.getElementById("map-image");
+    const empty = document.getElementById("empty-map");
+    const grid = document.getElementById("grid-overlay");
+    const gridSize = Math.max(10, Number(state.scene.gridSize) || 50);
+    const gridOffsetX = Number(state.scene.gridOffsetX) || 0;
+    const gridOffsetY = Number(state.scene.gridOffsetY) || 0;
+    const gridColor = /^#[0-9a-f]{6}$/i.test(String(state.scene.gridColor || "")) ? state.scene.gridColor : "#3a2e25";
+    grid.style.backgroundSize = `${gridSize}px ${gridSize}px`;
+    grid.style.backgroundPosition = `${gridOffsetX}px ${gridOffsetY}px`;
+    grid.style.setProperty("--grid-color", gridColor);
+    grid.classList.toggle("visible", !!state.scene.gridVisible);
+    document.getElementById("grid-toggle").checked = !!state.scene.gridVisible;
+    document.getElementById("grid-size").value = gridSize;
+    document.getElementById("grid-color").value = gridColor;
+    document.getElementById("snap-toggle").checked = state.scene.snapToGrid !== false;
+    document.getElementById("fit-token-toggle").checked = state.scene.fitTokensToGrid !== false;
+    if (!Array.isArray(state.scene.doodlePaths)) state.scene.doodlePaths = [];
+    if (!Array.isArray(state.scene.fogShapes)) state.scene.fogShapes = [];
+    updateMapPermissionControls();
+    applyMapTransform();
+    if (state.scene.mapUrl) {
+      const sizeMapStage = () => {
+        const stage = document.getElementById("map-stage");
+        stage.style.width = img.naturalWidth + "px";
+        stage.style.height = img.naturalHeight + "px";
+        img.style.width = img.naturalWidth + "px";
+        img.style.height = img.naturalHeight + "px";
+        const canvas = document.getElementById("doodle-canvas");
+        canvas.width = img.naturalWidth;
+        canvas.height = img.naturalHeight;
+        const fogCanvas = document.getElementById("fog-canvas");
+        fogCanvas.width = img.naturalWidth;
+        fogCanvas.height = img.naturalHeight;
+        redrawAllDoodles();
+        renderFog();
+        renderMapTokens();
+        if (lastFittedMapUrl !== state.scene.mapUrl) {
+          lastFittedMapUrl = state.scene.mapUrl;
+          fitMapToViewport();
+        }
+      };
+      img.onload = sizeMapStage;
+      img.src = state.scene.mapUrl;
+      img.style.display = "block";
+      empty.style.display = "none";
+      if (img.complete && img.naturalWidth) sizeMapStage();
+    } else {
+      lastFittedMapUrl = null;
+      img.style.display = "none";
+      empty.style.display = "flex";
       renderFog();
       renderMapTokens();
-      if (lastFittedMapUrl !== state.scene.mapUrl) {
-        lastFittedMapUrl = state.scene.mapUrl;
-        fitMapToViewport();
-      }
-    };
-    img.onload = sizeMapStage;
-    img.src = state.scene.mapUrl;
-    img.style.display = 'block';
-    empty.style.display = 'none';
-    if (img.complete && img.naturalWidth) sizeMapStage();
-  } else {
-    lastFittedMapUrl = null;
-    img.style.display = 'none';
-    empty.style.display = 'flex';
-    renderFog();
-    renderMapTokens();
+    }
   }
-}
-
-function renderMapTokens() {
-  document.querySelectorAll('.token-on-map').forEach(el => el.remove());
-  const stage = document.getElementById('map-stage');
-  const current = currentInitiativeEntry();
-  state.tokens.forEach(t => {
-    if (myRole === 'player' && t.visibleToPlayers === false) return;
-    const el = document.createElement('div');
-    el.className = 'token-on-map kind-' + t.kind;
-    if (!t.canControl) el.classList.add('locked-token');
-    if (current && current.tokenId === t.id) el.classList.add('current-turn');
-    if (t.visibleToPlayers === false) el.classList.add('hidden-token');
-    el.dataset.id = t.id;
-    el.tabIndex = 0;
-    const displayLabel = visibleTokenLabel(t);
-    const hoverLabel = tokenHoverText(t);
-    el.title = hoverLabel;
-    el.setAttribute('aria-label', `${hoverLabel}${t.canControl ? ', your token' : ', locked token'}`);
-    el.style.left = t.x + 'px';
-    el.style.top = t.y + 'px';
-    const renderSize = tokenRenderSize(t);
-    el.style.width = renderSize + 'px';
-    el.style.height = renderSize + 'px';
-    el.style.fontSize = Math.max(12, Math.round(renderSize * 0.45)) + 'px';
-    const linkedCharacter = t.characterName ? state.characters[t.characterName] : null;
-    const canManageCombat = !!linkedCharacter?.canManage || (myRole === 'dm' && t.kind === 'npc');
-    const controls = [
-      canManageCombat ? '<button type="button" data-action="combat" title="Open combat controls">⚔</button>' : '',
-      myRole === 'dm' && !linkedCharacter && t.maxHp ? '<button type="button" data-action="damage" title="Lose 1 HP">−</button><button type="button" data-action="heal" title="Heal 1 HP">+</button>' : '',
-      myRole === 'dm' ? '<button type="button" data-action="size-down" title="Make token smaller">↙</button><button type="button" data-action="size-up" title="Make token larger">↗</button>' : '',
-      myRole === 'dm' ? '<button type="button" data-action="duplicate" title="Duplicate token">⧉</button>' : '',
-      myRole === 'dm' ? `<button type="button" data-action="visibility" title="Show or hide from players">${t.visibleToPlayers === false ? '🙈' : '👁'}</button>` : '',
-      myRole === 'dm' ? `<button type="button" data-action="remove" title="Remove ${t.kind === 'item' ? 'item token' : 'token'} from this scene">×</button>` : ''
-    ].join('');
-    el.innerHTML = `
-      ${displayLabel ? `<div class="label">${escapeHtml(displayLabel)}</div>` : ''}
+  function renderMapTokens() {
+    document.querySelectorAll(".token-on-map").forEach((el) => el.remove());
+    const stage = document.getElementById("map-stage");
+    const current = currentInitiativeEntry();
+    state.tokens.forEach((t) => {
+      if (myRole === "player" && t.visibleToPlayers === false) return;
+      const el = document.createElement("div");
+      el.className = "token-on-map kind-" + t.kind;
+      if (!t.canControl) el.classList.add("locked-token");
+      if (current && current.tokenId === t.id) el.classList.add("current-turn");
+      if (t.visibleToPlayers === false) el.classList.add("hidden-token");
+      el.dataset.id = t.id;
+      el.tabIndex = 0;
+      const displayLabel = visibleTokenLabel(t);
+      const hoverLabel = tokenHoverText(t);
+      el.title = hoverLabel;
+      el.setAttribute("aria-label", `${hoverLabel}${t.canControl ? ", your token" : ", locked token"}`);
+      el.style.left = t.x + "px";
+      el.style.top = t.y + "px";
+      const renderSize = tokenRenderSize(t);
+      el.style.width = renderSize + "px";
+      el.style.height = renderSize + "px";
+      el.style.fontSize = Math.max(12, Math.round(renderSize * 0.45)) + "px";
+      const linkedCharacter = t.characterName ? state.characters[t.characterName] : null;
+      const canManageCombat = !!linkedCharacter?.canManage || myRole === "dm" && t.kind === "npc";
+      const controls = [
+        canManageCombat ? '<button type="button" data-action="combat" title="Open combat controls">\u2694</button>' : "",
+        myRole === "dm" && !linkedCharacter && t.maxHp ? '<button type="button" data-action="damage" title="Lose 1 HP">\u2212</button><button type="button" data-action="heal" title="Heal 1 HP">+</button>' : "",
+        myRole === "dm" ? '<button type="button" data-action="size-down" title="Make token smaller">\u2199</button><button type="button" data-action="size-up" title="Make token larger">\u2197</button>' : "",
+        myRole === "dm" ? '<button type="button" data-action="duplicate" title="Duplicate token">\u29C9</button>' : "",
+        myRole === "dm" ? `<button type="button" data-action="visibility" title="Show or hide from players">${t.visibleToPlayers === false ? "\u{1F648}" : "\u{1F441}"}</button>` : "",
+        myRole === "dm" ? `<button type="button" data-action="remove" title="Remove ${t.kind === "item" ? "item token" : "token"} from this scene">\xD7</button>` : ""
+      ].join("");
+      el.innerHTML = `
+      ${displayLabel ? `<div class="label">${escapeHtml(displayLabel)}</div>` : ""}
       ${t.imageUrl ? `<img src="${escapeAttr(t.imageUrl)}" alt="">` : emojiFor(t.kind)}
-      ${t.maxHp ? `<div class="hp-bar"><div class="hp-fill" style="width:${Math.max(0, (t.hp / t.maxHp) * 100)}%"></div></div>` : ''}
+      ${t.maxHp ? `<div class="hp-bar"><div class="hp-fill" style="width:${Math.max(0, t.hp / t.maxHp * 100)}%"></div></div>` : ""}
       ${renderTokenConditionBadges(t, linkedCharacter)}
-      ${controls ? `<div class="token-controls">${controls}</div>` : ''}
+      ${controls ? `<div class="token-controls">${controls}</div>` : ""}
     `;
-    el.onmousedown = (e) => startDragToken(e, t.id);
-    el.addEventListener('touchstart', event => {
-      if (event.target.closest?.('.token-controls') || selectedTool !== 'move') return;
-      if (event.touches.length !== 1) {
-        cancelDraggedToken();
-        return;
-      }
-      const touch = event.touches[0];
-      event.preventDefault();
-      event.stopPropagation();
-      el.focus({ preventScroll: true });
-      if (startDragTokenAt(touch.clientX, touch.clientY, el, t.id)) {
-        draggingTokenTouchId = touch.identifier;
-      }
-    }, { passive: false });
-    el.onkeydown = event => {
-      if ((event.key === 'Enter' || event.key === ' ') && canManageCombat) {
+      el.onmousedown = (e) => startDragToken(e, t.id);
+      el.addEventListener("touchstart", (event) => {
+        if (event.target.closest?.(".token-controls") || selectedTool !== "move") return;
+        if (event.touches.length !== 1) {
+          cancelDraggedToken();
+          return;
+        }
+        const touch = event.touches[0];
         event.preventDefault();
-        if (linkedCharacter) openCombatManager(t.characterName);
-        else openNpcCombatManager(t.id);
-      }
-    };
-    el.querySelectorAll('.token-controls button').forEach(button => {
-      button.onmousedown = (e) => e.stopPropagation();
-      button.ontouchstart = (e) => e.stopPropagation();
-      button.onclick = (e) => {
-        e.stopPropagation();
-        const action = button.dataset.action;
-        if (action === 'combat') {
+        event.stopPropagation();
+        el.focus({ preventScroll: true });
+        if (startDragTokenAt(touch.clientX, touch.clientY, el, t.id)) {
+          draggingTokenTouchId = touch.identifier;
+        }
+      }, { passive: false });
+      el.onkeydown = (event) => {
+        if ((event.key === "Enter" || event.key === " ") && canManageCombat) {
+          event.preventDefault();
           if (linkedCharacter) openCombatManager(t.characterName);
           else openNpcCombatManager(t.id);
         }
-        if (action === 'damage') socket.emit('token:update', { id: t.id, hp: Math.max(0, Number(t.hp) - 1) });
-        if (action === 'heal') socket.emit('token:update', { id: t.id, hp: Math.min(Number(t.maxHp), Number(t.hp) + 1) });
-        if (action === 'size-down') adjustTokenScale(t, -0.15);
-        if (action === 'size-up') adjustTokenScale(t, 0.15);
-        if (action === 'duplicate') socket.emit('token:duplicate', { id: t.id });
-        if (action === 'visibility') socket.emit('token:update', { id: t.id, visibleToPlayers: t.visibleToPlayers === false });
-        if (action === 'remove') socket.emit('token:remove', { id: t.id });
       };
-    });
-    stage.appendChild(el);
-  });
-}
-
-function visibleTokenLabel(token) {
-  if (myRole === 'dm' || state.scene.showTokenLabelsToPlayers !== false || token.kind === 'pc') return token.label;
-  return '';
-}
-
-function tokenPronouns(token) {
-  const direct = String(token?.pronouns || '').trim();
-  if (direct) return direct;
-  if (token?.characterName) {
-    const character = state.characters?.[token.characterName];
-    return String(character?.pronouns || character?.fields?.pronouns || '').trim();
-  }
-  if (token?.npcId) {
-    const npc = state.npcs?.[token.npcId];
-    return String(npc?.pronouns || npc?.sheet?.pronouns || npc?.sheet?.fields?.pronouns || '').trim();
-  }
-  return '';
-}
-
-function tokenHoverText(token) {
-  const visibleName = visibleTokenLabel(token);
-  const fallback = token.kind === 'pc' ? 'Player character' : token.kind === 'npc' ? 'NPC' : 'Item';
-  const pronouns = tokenPronouns(token);
-  return [visibleName || fallback, pronouns ? `Pronouns: ${pronouns}` : ''].filter(Boolean).join(' · ');
-}
-
-function renderTokenConditionBadges(token, linkedCharacter) {
-  const combat = linkedCharacter?.combat || token.combat || token.conditionBadges || {};
-  const badges = (combat.conditions || []).slice(0, 4).map(condition => ({
-    text: condition.slice(0, 2).toUpperCase(), title: condition
-  }));
-  if (combat.concentration) badges.push({ text: '◎', title: 'Concentrating' });
-  if (Number(combat.exhaustion)) badges.push({ text: `E${Number(combat.exhaustion)}`, title: `Exhaustion ${Number(combat.exhaustion)}` });
-  if (!badges.length) return '';
-  return `<div class="token-condition-badges">${badges.map(badge => `<span title="${escapeAttr(badge.title)}">${escapeHtml(badge.text)}</span>`).join('')}</div>`;
-}
-
-function tokenRenderSize(token) {
-  const scale = Math.max(0.35, Math.min(3, Number(token.sizeScale) || 1));
-  if (state.scene.fitTokensToGrid === false) return Math.max(12, Math.min(360, Math.round((Number(token.size) || 44) * scale)));
-  const gridSize = Math.max(10, Number(state.scene.gridSize) || 50);
-  const ratio = token.kind === 'item' ? 0.62 : 0.84;
-  return Math.max(12, Math.min(360, Math.round(gridSize * ratio * scale)));
-}
-
-function adjustTokenScale(token, delta) {
-  const current = Math.max(0.35, Math.min(3, Number(token.sizeScale) || 1));
-  const next = Math.max(0.35, Math.min(3, Math.round((current + delta) * 100) / 100));
-  socket.emit('token:update', { id: token.id, sizeScale: next });
-}
-
-function emojiFor(kind) {
-  return kind === 'pc' ? '🧝' : kind === 'npc' ? '🦊' : '🌸';
-}
-
-function startDragToken(e, id) {
-  if (e.button !== 0) return;
-  if (!startDragTokenAt(e.clientX, e.clientY, e.currentTarget, id)) return;
-  e.preventDefault();
-}
-
-function startDragTokenAt(clientX, clientY, element, id) {
-  if (selectedTool !== 'move') return false;
-  const token = state.tokens.find(entry => entry.id === id);
-  if (!token?.canControl) {
-    showToast('You can only move your own character token.');
-    return false;
-  }
-  draggingToken = id;
-  const rect = element.getBoundingClientRect();
-  dragOffset.x = (clientX - (rect.left + rect.width / 2)) / mapScale;
-  dragOffset.y = (clientY - (rect.top + rect.height / 2)) / mapScale;
-  return true;
-}
-
-function moveDraggedToken(clientX, clientY) {
-  if (!draggingToken) return;
-  const stage = document.getElementById('map-stage');
-  const rect = stage.getBoundingClientRect();
-  const x = (clientX - rect.left) / mapScale - dragOffset.x;
-  const y = (clientY - rect.top) / mapScale - dragOffset.y;
-  const el = document.querySelector(`.token-on-map[data-id="${draggingToken}"]`);
-  if (el) {
-    el.style.left = x + 'px';
-    el.style.top = y + 'px';
-  }
-}
-
-function finishDraggedToken() {
-  if (!draggingToken) return;
-  const el = document.querySelector(`.token-on-map[data-id="${draggingToken}"]`);
-  if (el) {
-    let x = parseFloat(el.style.left);
-    let y = parseFloat(el.style.top);
-    if (document.getElementById('snap-toggle').checked) {
-      const size = Math.max(10, Number(state.scene.gridSize) || 50);
-      x = snapCoordinateToCell(x, size, state.scene.gridOffsetX);
-      y = snapCoordinateToCell(y, size, state.scene.gridOffsetY);
-      el.style.left = x + 'px';
-      el.style.top = y + 'px';
-    }
-    socket.emit('token:move', { id: draggingToken, x, y });
-  }
-  draggingToken = null;
-  draggingTokenTouchId = null;
-}
-
-function cancelDraggedToken() {
-  if (!draggingToken) return;
-  const token = state?.tokens?.find(entry => entry.id === draggingToken);
-  const el = document.querySelector(`.token-on-map[data-id="${draggingToken}"]`);
-  if (token && el) {
-    el.style.left = token.x + 'px';
-    el.style.top = token.y + 'px';
-  }
-  draggingToken = null;
-  draggingTokenTouchId = null;
-}
-
-document.addEventListener('mousemove', (e) => {
-  moveDraggedToken(e.clientX, e.clientY);
-});
-
-document.addEventListener('mouseup', () => finishDraggedToken());
-document.addEventListener('touchmove', event => {
-  if (!draggingToken || draggingTokenTouchId === null) return;
-  const touch = Array.from(event.touches).find(entry => entry.identifier === draggingTokenTouchId);
-  if (!touch) return;
-  event.preventDefault();
-  moveDraggedToken(touch.clientX, touch.clientY);
-}, { passive: false });
-document.addEventListener('touchend', event => {
-  if (!draggingToken || draggingTokenTouchId === null) return;
-  const ended = Array.from(event.changedTouches).some(entry => entry.identifier === draggingTokenTouchId);
-  if (!ended) return;
-  event.preventDefault();
-  finishDraggedToken();
-}, { passive: false });
-document.addEventListener('touchcancel', event => {
-  if (!draggingToken || draggingTokenTouchId === null) return;
-  const cancelled = Array.from(event.changedTouches).some(entry => entry.identifier === draggingTokenTouchId);
-  if (cancelled) cancelDraggedToken();
-}, { passive: false });
-
-// ---- Tool toggle ----
-document.getElementById('tool-move').onclick = () => setTool('move');
-document.getElementById('tool-pan').onclick = () => setTool('pan');
-document.getElementById('tool-grid-move').onclick = () => setTool('grid-move');
-document.getElementById('tool-ruler').onclick = () => setTool('ruler');
-document.getElementById('tool-ping').onclick = () => setTool('ping');
-document.getElementById('tool-doodle').onclick = () => setTool('doodle');
-document.getElementById('tool-fog-reveal').onclick = () => setTool('fog-reveal');
-document.getElementById('tool-fog-hide').onclick = () => setTool('fog-hide');
-function setTool(tool) {
-  if (tool === 'doodle' && !canDoodle()) return showToast('Player doodling is not enabled for this scene.');
-  if (tool.startsWith('fog-') && (myRole !== 'dm' || !state.scene.fogEnabled)) return showToast('Enable fog of war first.');
-  if (tool === 'grid-move' && myRole !== 'dm') return;
-  const previousTool = selectedTool;
-  selectedTool = tool;
-  if (previousTool === 'doodle' && tool !== 'doodle') cancelDoodle();
-  ['move', 'pan', 'grid-move', 'ruler', 'ping', 'doodle', 'fog-reveal', 'fog-hide'].forEach(name => {
-    document.getElementById(`tool-${name}`)?.classList.toggle('active', tool === name);
-  });
-  const stage = document.getElementById('map-stage');
-  stage.classList.toggle('doodling', tool === 'doodle');
-  stage.classList.toggle('panning', tool === 'pan');
-  stage.classList.toggle('grid-moving', tool === 'grid-move');
-  stage.classList.toggle('measuring', tool === 'ruler');
-  stage.classList.toggle('pinging', tool === 'ping');
-  stage.classList.toggle('fog-editing', tool.startsWith('fog-'));
-  if (previousTool === 'ping' && tool !== 'ping') socket.emit('pointer:hide');
-  if (tool !== 'ruler') clearRuler();
-  if (tool === 'ruler' && previousTool !== 'ruler') showToast('Drag to measure, or if you\'re on mobile, tap a start square and then an end square.');
-  clearMapAreaSelection();
-}
-
-function canDoodle() {
-  return myRole === 'dm' || !!state?.scene?.playerDoodlingEnabled;
-}
-
-function updateMapPermissionControls() {
-  if (!state) return;
-  document.getElementById('player-doodling-toggle').checked = !!state.scene.playerDoodlingEnabled;
-  document.getElementById('token-labels-toggle').checked = state.scene.showTokenLabelsToPlayers !== false;
-  document.getElementById('fog-enabled-toggle').checked = !!state.scene.fogEnabled;
-  document.querySelectorAll('.doodle-control').forEach(element => element.classList.toggle('hidden', !canDoodle()));
-  document.querySelectorAll('.fog-tool').forEach(element => element.classList.toggle('hidden', myRole !== 'dm' || !state.scene.fogEnabled));
-  if (selectedTool === 'doodle' && !canDoodle()) setTool('move');
-  if (selectedTool.startsWith('fog-') && !state.scene.fogEnabled) setTool('move');
-}
-
-document.getElementById('clear-doodles-btn').onclick = () => socket.emit('scene:doodle:clear');
-document.getElementById('undo-doodle-btn').onclick = () => socket.emit('scene:doodle:undo');
-document.getElementById('player-doodling-toggle').onchange = event => socket.emit('scene:setPlayerDoodling', { enabled: event.target.checked });
-document.getElementById('token-labels-toggle').onchange = event => socket.emit('scene:setTokenLabels', { visible: event.target.checked });
-document.getElementById('fog-enabled-toggle').onchange = event => socket.emit('scene:setFog', { enabled: event.target.checked });
-document.getElementById('undo-fog-btn').onclick = () => socket.emit('scene:fog:undo');
-document.getElementById('reset-fog-btn').onclick = () => {
-  if (confirm('Reset fog to fully covered?')) socket.emit('scene:fog:reset');
-};
-
-const mapStageWrap = document.getElementById('map-stage-wrap');
-mapStageWrap.addEventListener('mousedown', (e) => {
-  const canStartPan = (selectedTool === 'pan' && e.button === 0) || e.button === 1 || (spacePanPressed && e.button === 0);
-  if (selectedTool === 'grid-move' && e.button === 0 && myRole === 'dm' && isMapGestureTarget(e.target)) {
-    e.preventDefault();
-    gridMoveStart = {
-      clientX: e.clientX, clientY: e.clientY,
-      offsetX: Number(state.scene.gridOffsetX) || 0,
-      offsetY: Number(state.scene.gridOffsetY) || 0
-    };
-    return;
-  }
-  if (!canStartPan || !isMapGestureTarget(e.target)) return;
-  e.preventDefault();
-  panStart = { clientX: e.clientX, clientY: e.clientY, x: mapPan.x, y: mapPan.y };
-  mapStageWrap.classList.add('is-panning');
-});
-document.addEventListener('mousemove', (e) => {
-  if (gridMoveStart) {
-    const grid = document.getElementById('grid-overlay');
-    const gridSize = Math.max(10, Number(state.scene.gridSize) || 50);
-    const dx = (e.clientX - gridMoveStart.clientX) / mapScale;
-    const dy = (e.clientY - gridMoveStart.clientY) / mapScale;
-    const previewX = (((gridMoveStart.offsetX + dx) % gridSize) + gridSize) % gridSize;
-    const previewY = (((gridMoveStart.offsetY + dy) % gridSize) + gridSize) % gridSize;
-    grid.style.backgroundPosition = `${previewX}px ${previewY}px`;
-    gridMoveStart.currentX = previewX;
-    gridMoveStart.currentY = previewY;
-    return;
-  }
-  if (!panStart) return;
-  mapPan.x = panStart.x + e.clientX - panStart.clientX;
-  mapPan.y = panStart.y + e.clientY - panStart.clientY;
-  applyMapTransform();
-});
-document.addEventListener('mouseup', () => {
-  if (gridMoveStart) {
-    if (gridMoveStart.currentX !== undefined) {
-      socket.emit('scene:setGrid', {
-        gridSize: Number(document.getElementById('grid-size').value) || 50,
-        gridVisible: document.getElementById('grid-toggle').checked,
-        gridColor: document.getElementById('grid-color').value,
-        snapToGrid: document.getElementById('snap-toggle').checked,
-        fitTokensToGrid: document.getElementById('fit-token-toggle').checked,
-        gridOffsetX: gridMoveStart.currentX,
-        gridOffsetY: gridMoveStart.currentY
+      el.querySelectorAll(".token-controls button").forEach((button) => {
+        button.onmousedown = (e) => e.stopPropagation();
+        button.ontouchstart = (e) => e.stopPropagation();
+        button.onclick = (e) => {
+          e.stopPropagation();
+          const action = button.dataset.action;
+          if (action === "combat") {
+            if (linkedCharacter) openCombatManager(t.characterName);
+            else openNpcCombatManager(t.id);
+          }
+          if (action === "damage") socket.emit("token:update", { id: t.id, hp: Math.max(0, Number(t.hp) - 1) });
+          if (action === "heal") socket.emit("token:update", { id: t.id, hp: Math.min(Number(t.maxHp), Number(t.hp) + 1) });
+          if (action === "size-down") adjustTokenScale(t, -0.15);
+          if (action === "size-up") adjustTokenScale(t, 0.15);
+          if (action === "duplicate") socket.emit("token:duplicate", { id: t.id });
+          if (action === "visibility") socket.emit("token:update", { id: t.id, visibleToPlayers: t.visibleToPlayers === false });
+          if (action === "remove") socket.emit("token:remove", { id: t.id });
+        };
       });
+      stage.appendChild(el);
+    });
+  }
+  function visibleTokenLabel(token) {
+    if (myRole === "dm" || state.scene.showTokenLabelsToPlayers !== false || token.kind === "pc") return token.label;
+    return "";
+  }
+  function tokenPronouns(token) {
+    const direct = String(token?.pronouns || "").trim();
+    if (direct) return direct;
+    if (token?.characterName) {
+      const character = state.characters?.[token.characterName];
+      return String(character?.pronouns || character?.fields?.pronouns || "").trim();
     }
-    gridMoveStart = null;
+    if (token?.npcId) {
+      const npc = state.npcs?.[token.npcId];
+      return String(npc?.pronouns || npc?.sheet?.pronouns || npc?.sheet?.fields?.pronouns || "").trim();
+    }
+    return "";
   }
-  panStart = null;
-  mapStageWrap.classList.remove('is-panning');
-});
-
-document.addEventListener('keydown', event => {
-  const typing = ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName);
-  if (event.code !== 'Space' || typing) return;
-  spacePanPressed = true;
-  mapStageWrap.classList.add('space-pan-ready');
-  if (document.getElementById('view-map').classList.contains('active')) event.preventDefault();
-});
-document.addEventListener('keyup', event => {
-  if (event.code !== 'Space') return;
-  spacePanPressed = false;
-  mapStageWrap.classList.remove('space-pan-ready');
-});
-
-mapStageWrap.addEventListener('wheel', event => {
-  if (!isMapGestureTarget(event.target)) return;
-  event.preventDefault();
-  const sensitivity = event.ctrlKey ? 0.006 : 0.0015;
-  const nextScale = mapScale * Math.exp(-event.deltaY * sensitivity);
-  setMapZoom(nextScale, { clientX: event.clientX, clientY: event.clientY });
-}, { passive: false });
-
-mapStageWrap.addEventListener('touchstart', event => {
-  if (!isMapGestureTarget(event.target)) return;
-  if (event.touches.length >= 2) {
-    event.preventDefault();
-    cancelDraggedToken();
-    cancelDoodle();
-    if (touchGesture?.type === 'ruler' || rulerAnchorPoint) clearRuler();
-    touchGesture = createPinchGesture(event.touches);
-  } else if (event.touches.length === 1 && selectedTool === 'ruler') {
-    event.preventDefault();
-    const touch = event.touches[0];
-    const point = getCanvasPos(touch);
-    const completingTap = !!rulerAnchorPoint;
-    touchGesture = {
-      type: 'ruler',
-      start: completingTap ? rulerAnchorPoint : point,
-      startClientX: touch.clientX,
-      startClientY: touch.clientY,
-      moved: false,
-      completingTap
-    };
-    updateRuler(touchGesture.start, point);
-  } else if (event.touches.length === 1 && selectedTool === 'pan') {
-    event.preventDefault();
-    const touch = event.touches[0];
-    touchGesture = {
-      type: 'pan',
-      clientX: touch.clientX,
-      clientY: touch.clientY,
-      pan: { ...mapPan }
-    };
-    mapStageWrap.classList.add('is-panning');
+  function tokenHoverText(token) {
+    const visibleName = visibleTokenLabel(token);
+    const fallback = token.kind === "pc" ? "Player character" : token.kind === "npc" ? "NPC" : "Item";
+    const pronouns = tokenPronouns(token);
+    return [visibleName || fallback, pronouns ? `Pronouns: ${pronouns}` : ""].filter(Boolean).join(" \xB7 ");
   }
-}, { passive: false });
-
-mapStageWrap.addEventListener('touchmove', event => {
-  if (event.touches.length >= 2) {
+  function renderTokenConditionBadges(token, linkedCharacter) {
+    const combat = linkedCharacter?.combat || token.combat || token.conditionBadges || {};
+    const badges = (combat.conditions || []).slice(0, 4).map((condition) => ({
+      text: condition.slice(0, 2).toUpperCase(),
+      title: condition
+    }));
+    if (combat.concentration) badges.push({ text: "\u25CE", title: "Concentrating" });
+    if (Number(combat.exhaustion)) badges.push({ text: `E${Number(combat.exhaustion)}`, title: `Exhaustion ${Number(combat.exhaustion)}` });
+    if (!badges.length) return "";
+    return `<div class="token-condition-badges">${badges.map((badge) => `<span title="${escapeAttr(badge.title)}">${escapeHtml(badge.text)}</span>`).join("")}</div>`;
+  }
+  function tokenRenderSize(token) {
+    const scale = Math.max(0.35, Math.min(3, Number(token.sizeScale) || 1));
+    if (state.scene.fitTokensToGrid === false) return Math.max(12, Math.min(360, Math.round((Number(token.size) || 44) * scale)));
+    const gridSize = Math.max(10, Number(state.scene.gridSize) || 50);
+    const ratio = token.kind === "item" ? 0.62 : 0.84;
+    return Math.max(12, Math.min(360, Math.round(gridSize * ratio * scale)));
+  }
+  function adjustTokenScale(token, delta) {
+    const current = Math.max(0.35, Math.min(3, Number(token.sizeScale) || 1));
+    const next = Math.max(0.35, Math.min(3, Math.round((current + delta) * 100) / 100));
+    socket.emit("token:update", { id: token.id, sizeScale: next });
+  }
+  function emojiFor(kind) {
+    return kind === "pc" ? "\u{1F9DD}" : kind === "npc" ? "\u{1F98A}" : "\u{1F338}";
+  }
+  function startDragToken(e, id) {
+    if (e.button !== 0) return;
+    if (!startDragTokenAt(e.clientX, e.clientY, e.currentTarget, id)) return;
+    e.preventDefault();
+  }
+  function startDragTokenAt(clientX, clientY, element, id) {
+    if (selectedTool !== "move") return false;
+    const token = state.tokens.find((entry) => entry.id === id);
+    if (!token?.canControl) {
+      showToast("You can only move your own character token.");
+      return false;
+    }
+    draggingToken = id;
+    const rect = element.getBoundingClientRect();
+    dragOffset.x = (clientX - (rect.left + rect.width / 2)) / mapScale;
+    dragOffset.y = (clientY - (rect.top + rect.height / 2)) / mapScale;
+    return true;
+  }
+  function moveDraggedToken(clientX, clientY) {
+    if (!draggingToken) return;
+    const stage = document.getElementById("map-stage");
+    const rect = stage.getBoundingClientRect();
+    const x = (clientX - rect.left) / mapScale - dragOffset.x;
+    const y = (clientY - rect.top) / mapScale - dragOffset.y;
+    const el = document.querySelector(`.token-on-map[data-id="${draggingToken}"]`);
+    if (el) {
+      el.style.left = x + "px";
+      el.style.top = y + "px";
+    }
+  }
+  function finishDraggedToken() {
+    if (!draggingToken) return;
+    const el = document.querySelector(`.token-on-map[data-id="${draggingToken}"]`);
+    if (el) {
+      let x = parseFloat(el.style.left);
+      let y = parseFloat(el.style.top);
+      if (document.getElementById("snap-toggle").checked) {
+        const size = Math.max(10, Number(state.scene.gridSize) || 50);
+        x = snapCoordinateToCell(x, size, state.scene.gridOffsetX);
+        y = snapCoordinateToCell(y, size, state.scene.gridOffsetY);
+        el.style.left = x + "px";
+        el.style.top = y + "px";
+      }
+      socket.emit("token:move", { id: draggingToken, x, y });
+    }
+    draggingToken = null;
+    draggingTokenTouchId = null;
+  }
+  function cancelDraggedToken() {
+    if (!draggingToken) return;
+    const token = state?.tokens?.find((entry) => entry.id === draggingToken);
+    const el = document.querySelector(`.token-on-map[data-id="${draggingToken}"]`);
+    if (token && el) {
+      el.style.left = token.x + "px";
+      el.style.top = token.y + "px";
+    }
+    draggingToken = null;
+    draggingTokenTouchId = null;
+  }
+  document.addEventListener("mousemove", (e) => {
+    moveDraggedToken(e.clientX, e.clientY);
+  });
+  document.addEventListener("mouseup", () => finishDraggedToken());
+  document.addEventListener("touchmove", (event) => {
+    if (!draggingToken || draggingTokenTouchId === null) return;
+    const touch = Array.from(event.touches).find((entry) => entry.identifier === draggingTokenTouchId);
+    if (!touch) return;
     event.preventDefault();
-    cancelDraggedToken();
-    cancelDoodle();
-    if (touchGesture?.type === 'ruler' || rulerAnchorPoint) clearRuler();
-    if (touchGesture?.type !== 'pinch') touchGesture = createPinchGesture(event.touches);
-    const current = touchMetrics(event.touches);
+    moveDraggedToken(touch.clientX, touch.clientY);
+  }, { passive: false });
+  document.addEventListener("touchend", (event) => {
+    if (!draggingToken || draggingTokenTouchId === null) return;
+    const ended = Array.from(event.changedTouches).some((entry) => entry.identifier === draggingTokenTouchId);
+    if (!ended) return;
+    event.preventDefault();
+    finishDraggedToken();
+  }, { passive: false });
+  document.addEventListener("touchcancel", (event) => {
+    if (!draggingToken || draggingTokenTouchId === null) return;
+    const cancelled = Array.from(event.changedTouches).some((entry) => entry.identifier === draggingTokenTouchId);
+    if (cancelled) cancelDraggedToken();
+  }, { passive: false });
+  document.getElementById("tool-move").onclick = () => setTool("move");
+  document.getElementById("tool-pan").onclick = () => setTool("pan");
+  document.getElementById("tool-grid-move").onclick = () => setTool("grid-move");
+  document.getElementById("tool-ruler").onclick = () => setTool("ruler");
+  document.getElementById("tool-ping").onclick = () => setTool("ping");
+  document.getElementById("tool-doodle").onclick = () => setTool("doodle");
+  document.getElementById("tool-fog-reveal").onclick = () => setTool("fog-reveal");
+  document.getElementById("tool-fog-hide").onclick = () => setTool("fog-hide");
+  function setTool(tool) {
+    if (tool === "doodle" && !canDoodle()) return showToast("Player doodling is not enabled for this scene.");
+    if (tool.startsWith("fog-") && (myRole !== "dm" || !state.scene.fogEnabled)) return showToast("Enable fog of war first.");
+    if (tool === "grid-move" && myRole !== "dm") return;
+    const previousTool = selectedTool;
+    selectedTool = tool;
+    if (previousTool === "doodle" && tool !== "doodle") cancelDoodle();
+    ["move", "pan", "grid-move", "ruler", "ping", "doodle", "fog-reveal", "fog-hide"].forEach((name) => {
+      document.getElementById(`tool-${name}`)?.classList.toggle("active", tool === name);
+    });
+    const stage = document.getElementById("map-stage");
+    stage.classList.toggle("doodling", tool === "doodle");
+    stage.classList.toggle("panning", tool === "pan");
+    stage.classList.toggle("grid-moving", tool === "grid-move");
+    stage.classList.toggle("measuring", tool === "ruler");
+    stage.classList.toggle("pinging", tool === "ping");
+    stage.classList.toggle("fog-editing", tool.startsWith("fog-"));
+    if (previousTool === "ping" && tool !== "ping") socket.emit("pointer:hide");
+    if (tool !== "ruler") clearRuler();
+    if (tool === "ruler" && previousTool !== "ruler") showToast("Drag to measure, or if you're on mobile, tap a start square and then an end square.");
+    clearMapAreaSelection();
+  }
+  function canDoodle() {
+    return myRole === "dm" || !!state?.scene?.playerDoodlingEnabled;
+  }
+  function updateMapPermissionControls() {
+    if (!state) return;
+    document.getElementById("player-doodling-toggle").checked = !!state.scene.playerDoodlingEnabled;
+    document.getElementById("token-labels-toggle").checked = state.scene.showTokenLabelsToPlayers !== false;
+    document.getElementById("fog-enabled-toggle").checked = !!state.scene.fogEnabled;
+    document.querySelectorAll(".doodle-control").forEach((element) => element.classList.toggle("hidden", !canDoodle()));
+    document.querySelectorAll(".fog-tool").forEach((element) => element.classList.toggle("hidden", myRole !== "dm" || !state.scene.fogEnabled));
+    if (selectedTool === "doodle" && !canDoodle()) setTool("move");
+    if (selectedTool.startsWith("fog-") && !state.scene.fogEnabled) setTool("move");
+  }
+  document.getElementById("clear-doodles-btn").onclick = () => socket.emit("scene:doodle:clear");
+  document.getElementById("undo-doodle-btn").onclick = () => socket.emit("scene:doodle:undo");
+  document.getElementById("player-doodling-toggle").onchange = (event) => socket.emit("scene:setPlayerDoodling", { enabled: event.target.checked });
+  document.getElementById("token-labels-toggle").onchange = (event) => socket.emit("scene:setTokenLabels", { visible: event.target.checked });
+  document.getElementById("fog-enabled-toggle").onchange = (event) => socket.emit("scene:setFog", { enabled: event.target.checked });
+  document.getElementById("undo-fog-btn").onclick = () => socket.emit("scene:fog:undo");
+  document.getElementById("reset-fog-btn").onclick = () => {
+    if (confirm("Reset fog to fully covered?")) socket.emit("scene:fog:reset");
+  };
+  const mapStageWrap = document.getElementById("map-stage-wrap");
+  mapStageWrap.addEventListener("mousedown", (e) => {
+    const canStartPan = selectedTool === "pan" && e.button === 0 || e.button === 1 || spacePanPressed && e.button === 0;
+    if (selectedTool === "grid-move" && e.button === 0 && myRole === "dm" && isMapGestureTarget(e.target)) {
+      e.preventDefault();
+      gridMoveStart = {
+        clientX: e.clientX,
+        clientY: e.clientY,
+        offsetX: Number(state.scene.gridOffsetX) || 0,
+        offsetY: Number(state.scene.gridOffsetY) || 0
+      };
+      return;
+    }
+    if (!canStartPan || !isMapGestureTarget(e.target)) return;
+    e.preventDefault();
+    panStart = { clientX: e.clientX, clientY: e.clientY, x: mapPan.x, y: mapPan.y };
+    mapStageWrap.classList.add("is-panning");
+  });
+  document.addEventListener("mousemove", (e) => {
+    if (gridMoveStart) {
+      const grid = document.getElementById("grid-overlay");
+      const gridSize = Math.max(10, Number(state.scene.gridSize) || 50);
+      const dx = (e.clientX - gridMoveStart.clientX) / mapScale;
+      const dy = (e.clientY - gridMoveStart.clientY) / mapScale;
+      const previewX = ((gridMoveStart.offsetX + dx) % gridSize + gridSize) % gridSize;
+      const previewY = ((gridMoveStart.offsetY + dy) % gridSize + gridSize) % gridSize;
+      grid.style.backgroundPosition = `${previewX}px ${previewY}px`;
+      gridMoveStart.currentX = previewX;
+      gridMoveStart.currentY = previewY;
+      return;
+    }
+    if (!panStart) return;
+    mapPan.x = panStart.x + e.clientX - panStart.clientX;
+    mapPan.y = panStart.y + e.clientY - panStart.clientY;
+    applyMapTransform();
+  });
+  document.addEventListener("mouseup", () => {
+    if (gridMoveStart) {
+      if (gridMoveStart.currentX !== void 0) {
+        socket.emit("scene:setGrid", {
+          gridSize: Number(document.getElementById("grid-size").value) || 50,
+          gridVisible: document.getElementById("grid-toggle").checked,
+          gridColor: document.getElementById("grid-color").value,
+          snapToGrid: document.getElementById("snap-toggle").checked,
+          fitTokensToGrid: document.getElementById("fit-token-toggle").checked,
+          gridOffsetX: gridMoveStart.currentX,
+          gridOffsetY: gridMoveStart.currentY
+        });
+      }
+      gridMoveStart = null;
+    }
+    panStart = null;
+    mapStageWrap.classList.remove("is-panning");
+  });
+  document.addEventListener("keydown", (event) => {
+    const typing = ["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement?.tagName);
+    if (event.code !== "Space" || typing) return;
+    spacePanPressed = true;
+    mapStageWrap.classList.add("space-pan-ready");
+    if (document.getElementById("view-map").classList.contains("active")) event.preventDefault();
+  });
+  document.addEventListener("keyup", (event) => {
+    if (event.code !== "Space") return;
+    spacePanPressed = false;
+    mapStageWrap.classList.remove("space-pan-ready");
+  });
+  mapStageWrap.addEventListener("wheel", (event) => {
+    if (!isMapGestureTarget(event.target)) return;
+    event.preventDefault();
+    const sensitivity = event.ctrlKey ? 6e-3 : 15e-4;
+    const nextScale = mapScale * Math.exp(-event.deltaY * sensitivity);
+    setMapZoom(nextScale, { clientX: event.clientX, clientY: event.clientY });
+  }, { passive: false });
+  mapStageWrap.addEventListener("touchstart", (event) => {
+    if (!isMapGestureTarget(event.target)) return;
+    if (event.touches.length >= 2) {
+      event.preventDefault();
+      cancelDraggedToken();
+      cancelDoodle();
+      if (touchGesture?.type === "ruler" || rulerAnchorPoint) clearRuler();
+      touchGesture = createPinchGesture(event.touches);
+    } else if (event.touches.length === 1 && selectedTool === "ruler") {
+      event.preventDefault();
+      const touch = event.touches[0];
+      const point = getCanvasPos(touch);
+      const completingTap = !!rulerAnchorPoint;
+      touchGesture = {
+        type: "ruler",
+        start: completingTap ? rulerAnchorPoint : point,
+        startClientX: touch.clientX,
+        startClientY: touch.clientY,
+        moved: false,
+        completingTap
+      };
+      updateRuler(touchGesture.start, point);
+    } else if (event.touches.length === 1 && selectedTool === "pan") {
+      event.preventDefault();
+      const touch = event.touches[0];
+      touchGesture = {
+        type: "pan",
+        clientX: touch.clientX,
+        clientY: touch.clientY,
+        pan: { ...mapPan }
+      };
+      mapStageWrap.classList.add("is-panning");
+    }
+  }, { passive: false });
+  mapStageWrap.addEventListener("touchmove", (event) => {
+    if (event.touches.length >= 2) {
+      event.preventDefault();
+      cancelDraggedToken();
+      cancelDoodle();
+      if (touchGesture?.type === "ruler" || rulerAnchorPoint) clearRuler();
+      if (touchGesture?.type !== "pinch") touchGesture = createPinchGesture(event.touches);
+      const current = touchMetrics(event.touches);
+      const wrapperRect = mapStageWrap.getBoundingClientRect();
+      const anchor = {
+        x: current.center.x - wrapperRect.left,
+        y: current.center.y - wrapperRect.top
+      };
+      const next = positionStagePoint({
+        stagePoint: touchGesture.stagePoint,
+        anchor,
+        nextScale: touchGesture.scale * (current.distance / Math.max(1, touchGesture.distance))
+      });
+      mapScale = next.scale;
+      mapPan = next.pan;
+      applyMapTransform();
+    } else if (event.touches.length === 1 && touchGesture?.type === "ruler") {
+      event.preventDefault();
+      const touch = event.touches[0];
+      if (Math.hypot(touch.clientX - touchGesture.startClientX, touch.clientY - touchGesture.startClientY) >= 8) {
+        touchGesture.moved = true;
+      }
+      updateRuler(touchGesture.start, getCanvasPos(touch));
+    } else if (event.touches.length === 1 && touchGesture?.type === "pan") {
+      event.preventDefault();
+      const touch = event.touches[0];
+      mapPan.x = touchGesture.pan.x + touch.clientX - touchGesture.clientX;
+      mapPan.y = touchGesture.pan.y + touch.clientY - touchGesture.clientY;
+      applyMapTransform();
+    }
+  }, { passive: false });
+  mapStageWrap.addEventListener("touchend", (event) => {
+    if (touchGesture?.type === "ruler") {
+      event.preventDefault();
+      const touch = event.changedTouches[0];
+      const end = touch ? getCanvasPos(touch) : touchGesture.start;
+      if (!touchGesture.moved && !touchGesture.completingTap) {
+        rulerAnchorPoint = touchGesture.start;
+        updateRuler(rulerAnchorPoint, rulerAnchorPoint);
+        showToast("Start placed. Tap the ending square.");
+      } else {
+        updateRuler(touchGesture.start, end);
+        rulerAnchorPoint = null;
+      }
+      touchGesture = null;
+    } else if (event.touches.length === 1 && selectedTool === "pan") {
+      const touch = event.touches[0];
+      touchGesture = {
+        type: "pan",
+        clientX: touch.clientX,
+        clientY: touch.clientY,
+        pan: { ...mapPan }
+      };
+    } else if (event.touches.length < 2) {
+      touchGesture = null;
+      mapStageWrap.classList.remove("is-panning");
+    }
+  }, { passive: false });
+  mapStageWrap.addEventListener("touchcancel", () => {
+    if (touchGesture?.type === "ruler") {
+      if (rulerAnchorPoint) updateRuler(rulerAnchorPoint, rulerAnchorPoint);
+      else clearRuler();
+    }
+    touchGesture = null;
+    mapStageWrap.classList.remove("is-panning");
+  });
+  function isMapGestureTarget(target) {
+    return !!target.closest?.("#map-stage, #empty-map") && !target.closest("button, input, select, textarea, label");
+  }
+  function touchMetrics(touches) {
+    const first = touches[0];
+    const second = touches[1];
+    return {
+      center: {
+        x: (first.clientX + second.clientX) / 2,
+        y: (first.clientY + second.clientY) / 2
+      },
+      distance: Math.hypot(second.clientX - first.clientX, second.clientY - first.clientY)
+    };
+  }
+  function createPinchGesture(touches) {
+    const metrics = touchMetrics(touches);
     const wrapperRect = mapStageWrap.getBoundingClientRect();
     const anchor = {
-      x: current.center.x - wrapperRect.left,
-      y: current.center.y - wrapperRect.top
+      x: metrics.center.x - wrapperRect.left,
+      y: metrics.center.y - wrapperRect.top
     };
-    const next = positionStagePoint({
-      stagePoint: touchGesture.stagePoint,
-      anchor,
-      nextScale: touchGesture.scale * (current.distance / Math.max(1, touchGesture.distance))
+    mapStageWrap.classList.add("is-panning");
+    return {
+      type: "pinch",
+      distance: metrics.distance,
+      scale: mapScale,
+      stagePoint: {
+        x: (anchor.x - mapPan.x) / mapScale,
+        y: (anchor.y - mapPan.y) / mapScale
+      }
+    };
+  }
+  const mapStage = document.getElementById("map-stage");
+  mapStage.addEventListener("mousedown", (event) => {
+    if (event.button !== 0) return;
+    const point = getCanvasPos(event);
+    if (selectedTool === "ruler") {
+      event.preventDefault();
+      rulerAnchorPoint = null;
+      rulerStartPoint = point;
+      updateRuler(point, point);
+    } else if (selectedTool === "ping") {
+      event.preventDefault();
+      socket.emit("pointer:ping", point);
+    } else if (selectedTool === "fog-reveal" || selectedTool === "fog-hide") {
+      event.preventDefault();
+      mapAreaDrag = { start: point, current: point, mode: selectedTool === "fog-reveal" ? "reveal" : "hide" };
+      updateMapAreaSelection(mapAreaDrag);
+    }
+  });
+  mapStage.addEventListener("mousemove", (event) => {
+    if (selectedTool !== "ping") return;
+    const now = Date.now();
+    if (now - lastPointerSentAt < 45) return;
+    lastPointerSentAt = now;
+    socket.emit("pointer:move", getCanvasPos(event));
+  });
+  mapStage.addEventListener("mouseleave", () => {
+    if (selectedTool === "ping") socket.emit("pointer:hide");
+  });
+  document.addEventListener("mousemove", (event) => {
+    if (rulerStartPoint) updateRuler(rulerStartPoint, getCanvasPos(event));
+    if (mapAreaDrag) {
+      mapAreaDrag.current = getCanvasPos(event);
+      updateMapAreaSelection(mapAreaDrag);
+    }
+  });
+  document.addEventListener("mouseup", (event) => {
+    if (rulerStartPoint) {
+      updateRuler(rulerStartPoint, getCanvasPos(event));
+      rulerStartPoint = null;
+    }
+    if (mapAreaDrag) {
+      const current = getCanvasPos(event);
+      const x = Math.min(mapAreaDrag.start.x, current.x);
+      const y = Math.min(mapAreaDrag.start.y, current.y);
+      const width = Math.abs(current.x - mapAreaDrag.start.x);
+      const height = Math.abs(current.y - mapAreaDrag.start.y);
+      if (width >= 3 && height >= 3) socket.emit("scene:fog:add", { mode: mapAreaDrag.mode, x, y, width, height });
+      mapAreaDrag = null;
+      clearMapAreaSelection();
+    }
+  });
+  function updateRuler(start, end) {
+    const overlay = document.getElementById("ruler-overlay");
+    const line = document.getElementById("ruler-line");
+    const startDot = document.getElementById("ruler-start");
+    const endDot = document.getElementById("ruler-end");
+    const label = document.getElementById("ruler-label");
+    const gridSize = Math.max(10, Number(state.scene.gridSize) || 50);
+    const measurement = gridMeasurement(
+      start,
+      end,
+      gridSize,
+      state.scene.gridOffsetX,
+      state.scene.gridOffsetY
+    );
+    overlay.classList.add("visible");
+    line.setAttribute("x1", measurement.start.x);
+    line.setAttribute("y1", measurement.start.y);
+    line.setAttribute("x2", measurement.end.x);
+    line.setAttribute("y2", measurement.end.y);
+    startDot.setAttribute("cx", measurement.start.x);
+    startDot.setAttribute("cy", measurement.start.y);
+    endDot.setAttribute("cx", measurement.end.x);
+    endDot.setAttribute("cy", measurement.end.y);
+    label.setAttribute("x", (measurement.start.x + measurement.end.x) / 2);
+    label.setAttribute("y", (measurement.start.y + measurement.end.y) / 2 - 10);
+    const squareLabel = measurement.squares === 1 ? "square" : "squares";
+    label.textContent = `${measurement.squares} ${squareLabel} \xB7 ${measurement.feet} ft`;
+  }
+  function clearRuler() {
+    rulerStartPoint = null;
+    rulerAnchorPoint = null;
+    document.getElementById("ruler-overlay").classList.remove("visible");
+  }
+  function updateMapAreaSelection(drag) {
+    const selection = document.getElementById("map-area-selection");
+    const x = Math.min(drag.start.x, drag.current.x);
+    const y = Math.min(drag.start.y, drag.current.y);
+    selection.style.left = `${x}px`;
+    selection.style.top = `${y}px`;
+    selection.style.width = `${Math.abs(drag.current.x - drag.start.x)}px`;
+    selection.style.height = `${Math.abs(drag.current.y - drag.start.y)}px`;
+    selection.className = `visible ${drag.mode}`;
+  }
+  function clearMapAreaSelection() {
+    mapAreaDrag = null;
+    const selection = document.getElementById("map-area-selection");
+    selection.className = "";
+    selection.style.width = "0";
+    selection.style.height = "0";
+  }
+  document.getElementById("grid-toggle").onchange = () => {
+    socket.emit("scene:setGrid", {
+      gridSize: Number(document.getElementById("grid-size").value) || 50,
+      gridVisible: document.getElementById("grid-toggle").checked,
+      gridColor: document.getElementById("grid-color").value,
+      snapToGrid: document.getElementById("snap-toggle").checked,
+      fitTokensToGrid: document.getElementById("fit-token-toggle").checked
+    });
+  };
+  document.getElementById("grid-size").onchange = () => {
+    socket.emit("scene:setGrid", {
+      gridSize: Number(document.getElementById("grid-size").value) || 50,
+      gridVisible: document.getElementById("grid-toggle").checked,
+      gridColor: document.getElementById("grid-color").value,
+      snapToGrid: document.getElementById("snap-toggle").checked,
+      fitTokensToGrid: document.getElementById("fit-token-toggle").checked
+    });
+  };
+  document.getElementById("grid-color").oninput = (event) => {
+    document.getElementById("grid-overlay").style.setProperty("--grid-color", event.target.value);
+  };
+  document.getElementById("grid-color").onchange = () => {
+    socket.emit("scene:setGrid", {
+      gridSize: Number(document.getElementById("grid-size").value) || 50,
+      gridVisible: document.getElementById("grid-toggle").checked,
+      gridColor: document.getElementById("grid-color").value,
+      snapToGrid: document.getElementById("snap-toggle").checked,
+      fitTokensToGrid: document.getElementById("fit-token-toggle").checked
+    });
+  };
+  document.getElementById("snap-toggle").onchange = () => {
+    socket.emit("scene:setGrid", {
+      gridSize: Number(document.getElementById("grid-size").value) || 50,
+      gridVisible: document.getElementById("grid-toggle").checked,
+      gridColor: document.getElementById("grid-color").value,
+      snapToGrid: document.getElementById("snap-toggle").checked,
+      fitTokensToGrid: document.getElementById("fit-token-toggle").checked
+    });
+  };
+  document.getElementById("fit-token-toggle").onchange = () => {
+    socket.emit("scene:setGrid", {
+      gridSize: Number(document.getElementById("grid-size").value) || 50,
+      gridVisible: document.getElementById("grid-toggle").checked,
+      gridColor: document.getElementById("grid-color").value,
+      snapToGrid: document.getElementById("snap-toggle").checked,
+      fitTokensToGrid: document.getElementById("fit-token-toggle").checked
+    });
+  };
+  document.getElementById("grid-offset-reset").onclick = () => {
+    socket.emit("scene:setGrid", {
+      gridSize: Number(document.getElementById("grid-size").value) || 50,
+      gridVisible: document.getElementById("grid-toggle").checked,
+      gridColor: document.getElementById("grid-color").value,
+      snapToGrid: document.getElementById("snap-toggle").checked,
+      fitTokensToGrid: document.getElementById("fit-token-toggle").checked,
+      gridOffsetX: 0,
+      gridOffsetY: 0
+    });
+  };
+  document.getElementById("zoom-in").onclick = () => setMapZoom(mapScale * 1.2, viewportCenter());
+  document.getElementById("zoom-out").onclick = () => setMapZoom(mapScale / 1.2, viewportCenter());
+  document.getElementById("zoom-reset").onclick = () => {
+    mapScale = 1;
+    mapPan = { x: 0, y: 0 };
+    applyMapTransform();
+  };
+  document.getElementById("zoom-fit").onclick = fitMapToViewport;
+  document.getElementById("toggle-initiative-btn").onclick = () => {
+    const mapView = document.getElementById("view-map");
+    const collapsed = mapView.classList.toggle("initiative-collapsed");
+    document.getElementById("toggle-initiative-btn").setAttribute("aria-expanded", String(!collapsed));
+  };
+  function setMapZoom(value, clientPoint = viewportCenter()) {
+    const wrapperRect = mapStageWrap.getBoundingClientRect();
+    const anchor = {
+      x: clientPoint.clientX - wrapperRect.left,
+      y: clientPoint.clientY - wrapperRect.top
+    };
+    const next = zoomAroundPoint({
+      pan: mapPan,
+      scale: mapScale,
+      nextScale: clampScale(Math.round(value * 1e3) / 1e3),
+      anchor
     });
     mapScale = next.scale;
     mapPan = next.pan;
     applyMapTransform();
-  } else if (event.touches.length === 1 && touchGesture?.type === 'ruler') {
-    event.preventDefault();
-    const touch = event.touches[0];
-    if (Math.hypot(touch.clientX - touchGesture.startClientX, touch.clientY - touchGesture.startClientY) >= 8) {
-      touchGesture.moved = true;
-    }
-    updateRuler(touchGesture.start, getCanvasPos(touch));
-  } else if (event.touches.length === 1 && touchGesture?.type === 'pan') {
-    event.preventDefault();
-    const touch = event.touches[0];
-    mapPan.x = touchGesture.pan.x + touch.clientX - touchGesture.clientX;
-    mapPan.y = touchGesture.pan.y + touch.clientY - touchGesture.clientY;
+  }
+  function viewportCenter() {
+    const rect = mapStageWrap.getBoundingClientRect();
+    return { clientX: rect.left + rect.width / 2, clientY: rect.top + rect.height / 2 };
+  }
+  function fitMapToViewport() {
+    const stage = document.getElementById("map-stage");
+    const stageWidth = stage.offsetWidth;
+    const stageHeight = stage.offsetHeight;
+    if (!stageWidth || !stageHeight) return;
+    const fitted = fitStageInViewport({
+      stageWidth,
+      stageHeight,
+      viewportWidth: mapStageWrap.clientWidth,
+      viewportHeight: mapStageWrap.clientHeight,
+      padding: 24
+    });
+    mapScale = fitted.scale;
+    mapPan = fitted.pan;
     applyMapTransform();
   }
-}, { passive: false });
-
-mapStageWrap.addEventListener('touchend', event => {
-  if (touchGesture?.type === 'ruler') {
-    event.preventDefault();
-    const touch = event.changedTouches[0];
-    const end = touch ? getCanvasPos(touch) : touchGesture.start;
-    if (!touchGesture.moved && !touchGesture.completingTap) {
-      rulerAnchorPoint = touchGesture.start;
-      updateRuler(rulerAnchorPoint, rulerAnchorPoint);
-      showToast('Start placed. Tap the ending square.');
-    } else {
-      updateRuler(touchGesture.start, end);
-      rulerAnchorPoint = null;
+  function applyMapTransform() {
+    const stage = document.getElementById("map-stage");
+    if (!stage) return;
+    stage.style.transform = `translate(${mapPan.x}px, ${mapPan.y}px) scale(${mapScale})`;
+    document.getElementById("zoom-level").textContent = Math.round(mapScale * 100) + "%";
+  }
+  let isDrawing = false;
+  let currentPath = null;
+  let doodleTouchId = null;
+  const doodleCanvas = document.getElementById("doodle-canvas");
+  const doodleCtx = doodleCanvas.getContext("2d");
+  doodleCanvas.onmousedown = (e) => {
+    if (e.button !== 0) return;
+    startDoodle(getCanvasPos(e));
+  };
+  doodleCanvas.onmousemove = (e) => {
+    continueDoodle(getCanvasPos(e));
+  };
+  document.addEventListener("mouseup", () => finishDoodle());
+  doodleCanvas.addEventListener("touchstart", (event) => {
+    if (selectedTool !== "doodle") return;
+    if (event.touches.length !== 1) {
+      cancelDoodle();
+      return;
     }
-    touchGesture = null;
-  } else if (event.touches.length === 1 && selectedTool === 'pan') {
     const touch = event.touches[0];
-    touchGesture = {
-      type: 'pan',
-      clientX: touch.clientX,
-      clientY: touch.clientY,
-      pan: { ...mapPan }
+    event.preventDefault();
+    if (startDoodle(getCanvasPos(touch))) doodleTouchId = touch.identifier;
+  }, { passive: false });
+  doodleCanvas.addEventListener("touchmove", (event) => {
+    if (!isDrawing || doodleTouchId === null) return;
+    if (event.touches.length !== 1) {
+      cancelDoodle();
+      return;
+    }
+    const touch = Array.from(event.touches).find((entry) => entry.identifier === doodleTouchId);
+    if (!touch) return;
+    event.preventDefault();
+    continueDoodle(getCanvasPos(touch));
+  }, { passive: false });
+  doodleCanvas.addEventListener("touchend", (event) => {
+    if (!isDrawing || doodleTouchId === null) return;
+    const touch = Array.from(event.changedTouches).find((entry) => entry.identifier === doodleTouchId);
+    if (!touch) return;
+    event.preventDefault();
+    continueDoodle(getCanvasPos(touch));
+    finishDoodle();
+  }, { passive: false });
+  doodleCanvas.addEventListener("touchcancel", (event) => {
+    if (doodleTouchId === null) return;
+    const cancelled = Array.from(event.changedTouches).some((entry) => entry.identifier === doodleTouchId);
+    if (cancelled) cancelDoodle();
+  }, { passive: false });
+  function startDoodle(point) {
+    if (selectedTool !== "doodle" || !canDoodle()) return false;
+    isDrawing = true;
+    currentPath = {
+      id: "d" + Date.now(),
+      color: document.getElementById("doodle-color").value,
+      width: 3,
+      points: [point]
     };
-  } else if (event.touches.length < 2) {
-    touchGesture = null;
-    mapStageWrap.classList.remove('is-panning');
+    return true;
   }
-}, { passive: false });
-mapStageWrap.addEventListener('touchcancel', () => {
-  if (touchGesture?.type === 'ruler') {
-    if (rulerAnchorPoint) updateRuler(rulerAnchorPoint, rulerAnchorPoint);
-    else clearRuler();
+  function continueDoodle(point) {
+    if (!isDrawing || !currentPath) return;
+    const previous = currentPath.points[currentPath.points.length - 1];
+    if (previous && Math.hypot(point.x - previous.x, point.y - previous.y) < 0.25) return;
+    currentPath.points.push(point);
+    drawDoodlePath(currentPath, true);
   }
-  touchGesture = null;
-  mapStageWrap.classList.remove('is-panning');
-});
-
-function isMapGestureTarget(target) {
-  return !!target.closest?.('#map-stage, #empty-map') && !target.closest('button, input, select, textarea, label');
-}
-
-function touchMetrics(touches) {
-  const first = touches[0];
-  const second = touches[1];
-  return {
-    center: {
-      x: (first.clientX + second.clientX) / 2,
-      y: (first.clientY + second.clientY) / 2
-    },
-    distance: Math.hypot(second.clientX - first.clientX, second.clientY - first.clientY)
-  };
-}
-
-function createPinchGesture(touches) {
-  const metrics = touchMetrics(touches);
-  const wrapperRect = mapStageWrap.getBoundingClientRect();
-  const anchor = {
-    x: metrics.center.x - wrapperRect.left,
-    y: metrics.center.y - wrapperRect.top
-  };
-  mapStageWrap.classList.add('is-panning');
-  return {
-    type: 'pinch',
-    distance: metrics.distance,
-    scale: mapScale,
-    stagePoint: {
-      x: (anchor.x - mapPan.x) / mapScale,
-      y: (anchor.y - mapPan.y) / mapScale
+  function finishDoodle() {
+    if (isDrawing && currentPath && currentPath.points.length > 1) {
+      socket.emit("scene:doodle:add", currentPath);
     }
-  };
-}
-
-const mapStage = document.getElementById('map-stage');
-mapStage.addEventListener('mousedown', event => {
-  if (event.button !== 0) return;
-  const point = getCanvasPos(event);
-  if (selectedTool === 'ruler') {
-    event.preventDefault();
-    rulerAnchorPoint = null;
-    rulerStartPoint = point;
-    updateRuler(point, point);
-  } else if (selectedTool === 'ping') {
-    event.preventDefault();
-    socket.emit('pointer:ping', point);
-  } else if (selectedTool === 'fog-reveal' || selectedTool === 'fog-hide') {
-    event.preventDefault();
-    mapAreaDrag = { start: point, current: point, mode: selectedTool === 'fog-reveal' ? 'reveal' : 'hide' };
-    updateMapAreaSelection(mapAreaDrag);
+    isDrawing = false;
+    currentPath = null;
+    doodleTouchId = null;
   }
-});
-
-mapStage.addEventListener('mousemove', event => {
-  if (selectedTool !== 'ping') return;
-  const now = Date.now();
-  if (now - lastPointerSentAt < 45) return;
-  lastPointerSentAt = now;
-  socket.emit('pointer:move', getCanvasPos(event));
-});
-
-mapStage.addEventListener('mouseleave', () => {
-  if (selectedTool === 'ping') socket.emit('pointer:hide');
-});
-
-document.addEventListener('mousemove', event => {
-  if (rulerStartPoint) updateRuler(rulerStartPoint, getCanvasPos(event));
-  if (mapAreaDrag) {
-    mapAreaDrag.current = getCanvasPos(event);
-    updateMapAreaSelection(mapAreaDrag);
+  function cancelDoodle() {
+    if (!isDrawing && doodleTouchId === null) return;
+    isDrawing = false;
+    currentPath = null;
+    doodleTouchId = null;
+    if (state?.scene) redrawAllDoodles();
   }
-});
-
-document.addEventListener('mouseup', event => {
-  if (rulerStartPoint) {
-    updateRuler(rulerStartPoint, getCanvasPos(event));
-    rulerStartPoint = null;
+  function getCanvasPos(e) {
+    const rect = doodleCanvas.getBoundingClientRect();
+    return { x: (e.clientX - rect.left) / mapScale, y: (e.clientY - rect.top) / mapScale };
   }
-  if (mapAreaDrag) {
-    const current = getCanvasPos(event);
-    const x = Math.min(mapAreaDrag.start.x, current.x);
-    const y = Math.min(mapAreaDrag.start.y, current.y);
-    const width = Math.abs(current.x - mapAreaDrag.start.x);
-    const height = Math.abs(current.y - mapAreaDrag.start.y);
-    if (width >= 3 && height >= 3) socket.emit('scene:fog:add', { mode: mapAreaDrag.mode, x, y, width, height });
-    mapAreaDrag = null;
-    clearMapAreaSelection();
+  function drawDoodlePath(path, liveOnly = false) {
+    doodleCtx.strokeStyle = path.color;
+    doodleCtx.lineWidth = path.width;
+    doodleCtx.lineCap = "round";
+    doodleCtx.lineJoin = "round";
+    doodleCtx.beginPath();
+    path.points.forEach((p, i) => {
+      if (i === 0) doodleCtx.moveTo(p.x, p.y);
+      else doodleCtx.lineTo(p.x, p.y);
+    });
+    doodleCtx.stroke();
   }
-});
-
-function updateRuler(start, end) {
-  const overlay = document.getElementById('ruler-overlay');
-  const line = document.getElementById('ruler-line');
-  const startDot = document.getElementById('ruler-start');
-  const endDot = document.getElementById('ruler-end');
-  const label = document.getElementById('ruler-label');
-  const gridSize = Math.max(10, Number(state.scene.gridSize) || 50);
-  const measurement = gridMeasurement(
-    start,
-    end,
-    gridSize,
-    state.scene.gridOffsetX,
-    state.scene.gridOffsetY
-  );
-  overlay.classList.add('visible');
-  line.setAttribute('x1', measurement.start.x); line.setAttribute('y1', measurement.start.y);
-  line.setAttribute('x2', measurement.end.x); line.setAttribute('y2', measurement.end.y);
-  startDot.setAttribute('cx', measurement.start.x); startDot.setAttribute('cy', measurement.start.y);
-  endDot.setAttribute('cx', measurement.end.x); endDot.setAttribute('cy', measurement.end.y);
-  label.setAttribute('x', (measurement.start.x + measurement.end.x) / 2);
-  label.setAttribute('y', (measurement.start.y + measurement.end.y) / 2 - 10);
-  const squareLabel = measurement.squares === 1 ? 'square' : 'squares';
-  label.textContent = `${measurement.squares} ${squareLabel} · ${measurement.feet} ft`;
-}
-
-function clearRuler() {
-  rulerStartPoint = null;
-  rulerAnchorPoint = null;
-  document.getElementById('ruler-overlay').classList.remove('visible');
-}
-
-function updateMapAreaSelection(drag) {
-  const selection = document.getElementById('map-area-selection');
-  const x = Math.min(drag.start.x, drag.current.x);
-  const y = Math.min(drag.start.y, drag.current.y);
-  selection.style.left = `${x}px`;
-  selection.style.top = `${y}px`;
-  selection.style.width = `${Math.abs(drag.current.x - drag.start.x)}px`;
-  selection.style.height = `${Math.abs(drag.current.y - drag.start.y)}px`;
-  selection.className = `visible ${drag.mode}`;
-}
-
-function clearMapAreaSelection() {
-  mapAreaDrag = null;
-  const selection = document.getElementById('map-area-selection');
-  selection.className = '';
-  selection.style.width = '0';
-  selection.style.height = '0';
-}
-
-document.getElementById('grid-toggle').onchange = () => {
-  socket.emit('scene:setGrid', {
-    gridSize: Number(document.getElementById('grid-size').value) || 50,
-    gridVisible: document.getElementById('grid-toggle').checked,
-    gridColor: document.getElementById('grid-color').value,
-    snapToGrid: document.getElementById('snap-toggle').checked,
-    fitTokensToGrid: document.getElementById('fit-token-toggle').checked
-  });
-};
-document.getElementById('grid-size').onchange = () => {
-  socket.emit('scene:setGrid', {
-    gridSize: Number(document.getElementById('grid-size').value) || 50,
-    gridVisible: document.getElementById('grid-toggle').checked,
-    gridColor: document.getElementById('grid-color').value,
-    snapToGrid: document.getElementById('snap-toggle').checked,
-    fitTokensToGrid: document.getElementById('fit-token-toggle').checked
-  });
-};
-document.getElementById('grid-color').oninput = event => {
-  document.getElementById('grid-overlay').style.setProperty('--grid-color', event.target.value);
-};
-document.getElementById('grid-color').onchange = () => {
-  socket.emit('scene:setGrid', {
-    gridSize: Number(document.getElementById('grid-size').value) || 50,
-    gridVisible: document.getElementById('grid-toggle').checked,
-    gridColor: document.getElementById('grid-color').value,
-    snapToGrid: document.getElementById('snap-toggle').checked,
-    fitTokensToGrid: document.getElementById('fit-token-toggle').checked
-  });
-};
-document.getElementById('snap-toggle').onchange = () => {
-  socket.emit('scene:setGrid', {
-    gridSize: Number(document.getElementById('grid-size').value) || 50,
-    gridVisible: document.getElementById('grid-toggle').checked,
-    gridColor: document.getElementById('grid-color').value,
-    snapToGrid: document.getElementById('snap-toggle').checked,
-    fitTokensToGrid: document.getElementById('fit-token-toggle').checked
-  });
-};
-document.getElementById('fit-token-toggle').onchange = () => {
-  socket.emit('scene:setGrid', {
-    gridSize: Number(document.getElementById('grid-size').value) || 50,
-    gridVisible: document.getElementById('grid-toggle').checked,
-    gridColor: document.getElementById('grid-color').value,
-    snapToGrid: document.getElementById('snap-toggle').checked,
-    fitTokensToGrid: document.getElementById('fit-token-toggle').checked
-  });
-};
-document.getElementById('grid-offset-reset').onclick = () => {
-  socket.emit('scene:setGrid', {
-    gridSize: Number(document.getElementById('grid-size').value) || 50,
-    gridVisible: document.getElementById('grid-toggle').checked,
-    gridColor: document.getElementById('grid-color').value,
-    snapToGrid: document.getElementById('snap-toggle').checked,
-    fitTokensToGrid: document.getElementById('fit-token-toggle').checked,
-    gridOffsetX: 0,
-    gridOffsetY: 0
-  });
-};
-
-document.getElementById('zoom-in').onclick = () => setMapZoom(mapScale * 1.2, viewportCenter());
-document.getElementById('zoom-out').onclick = () => setMapZoom(mapScale / 1.2, viewportCenter());
-document.getElementById('zoom-reset').onclick = () => {
-  mapScale = 1;
-  mapPan = { x: 0, y: 0 };
-  applyMapTransform();
-};
-document.getElementById('zoom-fit').onclick = fitMapToViewport;
-
-document.getElementById('toggle-initiative-btn').onclick = () => {
-  const mapView = document.getElementById('view-map');
-  const collapsed = mapView.classList.toggle('initiative-collapsed');
-  document.getElementById('toggle-initiative-btn').setAttribute('aria-expanded', String(!collapsed));
-};
-
-function setMapZoom(value, clientPoint = viewportCenter()) {
-  const wrapperRect = mapStageWrap.getBoundingClientRect();
-  const anchor = {
-    x: clientPoint.clientX - wrapperRect.left,
-    y: clientPoint.clientY - wrapperRect.top
-  };
-  const next = zoomAroundPoint({
-    pan: mapPan,
-    scale: mapScale,
-    nextScale: clampScale(Math.round(value * 1000) / 1000),
-    anchor
-  });
-  mapScale = next.scale;
-  mapPan = next.pan;
-  applyMapTransform();
-}
-
-function viewportCenter() {
-  const rect = mapStageWrap.getBoundingClientRect();
-  return { clientX: rect.left + rect.width / 2, clientY: rect.top + rect.height / 2 };
-}
-
-function fitMapToViewport() {
-  const stage = document.getElementById('map-stage');
-  const stageWidth = stage.offsetWidth;
-  const stageHeight = stage.offsetHeight;
-  if (!stageWidth || !stageHeight) return;
-  const fitted = fitStageInViewport({
-    stageWidth,
-    stageHeight,
-    viewportWidth: mapStageWrap.clientWidth,
-    viewportHeight: mapStageWrap.clientHeight,
-    padding: 24
-  });
-  mapScale = fitted.scale;
-  mapPan = fitted.pan;
-  applyMapTransform();
-}
-
-function applyMapTransform() {
-  const stage = document.getElementById('map-stage');
-  if (!stage) return;
-  stage.style.transform = `translate(${mapPan.x}px, ${mapPan.y}px) scale(${mapScale})`;
-  document.getElementById('zoom-level').textContent = Math.round(mapScale * 100) + '%';
-}
-
-// ---- Doodling ----
-let isDrawing = false;
-let currentPath = null;
-let doodleTouchId = null;
-const doodleCanvas = document.getElementById('doodle-canvas');
-const doodleCtx = doodleCanvas.getContext('2d');
-
-doodleCanvas.onmousedown = (e) => {
-  if (e.button !== 0) return;
-  startDoodle(getCanvasPos(e));
-};
-doodleCanvas.onmousemove = (e) => {
-  continueDoodle(getCanvasPos(e));
-};
-document.addEventListener('mouseup', () => finishDoodle());
-
-doodleCanvas.addEventListener('touchstart', event => {
-  if (selectedTool !== 'doodle') return;
-  if (event.touches.length !== 1) {
-    cancelDoodle();
-    return;
+  function clearDoodleCanvas() {
+    doodleCtx.clearRect(0, 0, doodleCanvas.width, doodleCanvas.height);
   }
-  const touch = event.touches[0];
-  event.preventDefault();
-  if (startDoodle(getCanvasPos(touch))) doodleTouchId = touch.identifier;
-}, { passive: false });
-doodleCanvas.addEventListener('touchmove', event => {
-  if (!isDrawing || doodleTouchId === null) return;
-  if (event.touches.length !== 1) {
-    cancelDoodle();
-    return;
+  function redrawAllDoodles() {
+    clearDoodleCanvas();
+    state.scene.doodlePaths.forEach((p) => drawDoodlePath(p));
   }
-  const touch = Array.from(event.touches).find(entry => entry.identifier === doodleTouchId);
-  if (!touch) return;
-  event.preventDefault();
-  continueDoodle(getCanvasPos(touch));
-}, { passive: false });
-doodleCanvas.addEventListener('touchend', event => {
-  if (!isDrawing || doodleTouchId === null) return;
-  const touch = Array.from(event.changedTouches).find(entry => entry.identifier === doodleTouchId);
-  if (!touch) return;
-  event.preventDefault();
-  continueDoodle(getCanvasPos(touch));
-  finishDoodle();
-}, { passive: false });
-doodleCanvas.addEventListener('touchcancel', event => {
-  if (doodleTouchId === null) return;
-  const cancelled = Array.from(event.changedTouches).some(entry => entry.identifier === doodleTouchId);
-  if (cancelled) cancelDoodle();
-}, { passive: false });
-
-function startDoodle(point) {
-  if (selectedTool !== 'doodle' || !canDoodle()) return false;
-  isDrawing = true;
-  currentPath = {
-    id: 'd' + Date.now(),
-    color: document.getElementById('doodle-color').value,
-    width: 3,
-    points: [point]
-  };
-  return true;
-}
-
-function continueDoodle(point) {
-  if (!isDrawing || !currentPath) return;
-  const previous = currentPath.points[currentPath.points.length - 1];
-  if (previous && Math.hypot(point.x - previous.x, point.y - previous.y) < 0.25) return;
-  currentPath.points.push(point);
-  drawDoodlePath(currentPath, true);
-}
-
-function finishDoodle() {
-  if (isDrawing && currentPath && currentPath.points.length > 1) {
-    socket.emit('scene:doodle:add', currentPath);
+  function renderFog() {
+    const canvas = document.getElementById("fog-canvas");
+    if (!canvas || !state) return;
+    const ctx = canvas.getContext("2d");
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    canvas.classList.toggle("active", !!state.scene.fogEnabled);
+    if (!state.scene.fogEnabled || !canvas.width || !canvas.height) return;
+    const fogColor = myRole === "dm" ? "rgba(25, 32, 25, .52)" : "rgb(18, 23, 19)";
+    ctx.globalCompositeOperation = "source-over";
+    ctx.fillStyle = fogColor;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    (state.scene.fogShapes || []).forEach((shape) => {
+      if (shape.mode === "reveal") {
+        ctx.globalCompositeOperation = "destination-out";
+        ctx.fillStyle = "rgba(0,0,0,1)";
+      } else {
+        ctx.globalCompositeOperation = "source-over";
+        ctx.fillStyle = fogColor;
+      }
+      ctx.fillRect(Number(shape.x) || 0, Number(shape.y) || 0, Number(shape.width) || 0, Number(shape.height) || 0);
+    });
+    ctx.globalCompositeOperation = "source-over";
   }
-  isDrawing = false;
-  currentPath = null;
-  doodleTouchId = null;
-}
-
-function cancelDoodle() {
-  if (!isDrawing && doodleTouchId === null) return;
-  isDrawing = false;
-  currentPath = null;
-  doodleTouchId = null;
-  if (state?.scene) redrawAllDoodles();
-}
-
-function getCanvasPos(e) {
-  const rect = doodleCanvas.getBoundingClientRect();
-  return { x: (e.clientX - rect.left) / mapScale, y: (e.clientY - rect.top) / mapScale };
-}
-
-function drawDoodlePath(path, liveOnly) {
-  doodleCtx.strokeStyle = path.color;
-  doodleCtx.lineWidth = path.width;
-  doodleCtx.lineCap = 'round';
-  doodleCtx.lineJoin = 'round';
-  doodleCtx.beginPath();
-  path.points.forEach((p, i) => {
-    if (i === 0) doodleCtx.moveTo(p.x, p.y); else doodleCtx.lineTo(p.x, p.y);
-  });
-  doodleCtx.stroke();
-}
-
-function clearDoodleCanvas() {
-  doodleCtx.clearRect(0, 0, doodleCanvas.width, doodleCanvas.height);
-}
-function redrawAllDoodles() {
-  clearDoodleCanvas();
-  state.scene.doodlePaths.forEach(p => drawDoodlePath(p));
-}
-
-function renderFog() {
-  const canvas = document.getElementById('fog-canvas');
-  if (!canvas || !state) return;
-  const ctx = canvas.getContext('2d');
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  canvas.classList.toggle('active', !!state.scene.fogEnabled);
-  if (!state.scene.fogEnabled || !canvas.width || !canvas.height) return;
-  const fogColor = myRole === 'dm' ? 'rgba(25, 32, 25, .52)' : 'rgb(18, 23, 19)';
-  ctx.globalCompositeOperation = 'source-over';
-  ctx.fillStyle = fogColor;
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-  (state.scene.fogShapes || []).forEach(shape => {
-    if (shape.mode === 'reveal') {
-      ctx.globalCompositeOperation = 'destination-out';
-      ctx.fillStyle = 'rgba(0,0,0,1)';
-    } else {
-      ctx.globalCompositeOperation = 'source-over';
-      ctx.fillStyle = fogColor;
+  function renderSharedPointer({ id, name, color, x, y } = {}) {
+    if (!id || !Number.isFinite(Number(x)) || !Number.isFinite(Number(y))) return;
+    let pointer = findSharedPointer(id);
+    if (!pointer) {
+      pointer = document.createElement("div");
+      pointer.className = "shared-pointer";
+      pointer.dataset.pointerId = id;
+      const dot = document.createElement("span");
+      dot.className = "shared-pointer-dot";
+      const label = document.createElement("span");
+      label.className = "shared-pointer-label";
+      pointer.append(dot, label);
+      document.getElementById("map-stage").appendChild(pointer);
     }
-    ctx.fillRect(Number(shape.x) || 0, Number(shape.y) || 0, Number(shape.width) || 0, Number(shape.height) || 0);
-  });
-  ctx.globalCompositeOperation = 'source-over';
-}
-
-function renderSharedPointer({ id, name, color, x, y } = {}) {
-  if (!id || !Number.isFinite(Number(x)) || !Number.isFinite(Number(y))) return;
-  let pointer = findSharedPointer(id);
-  if (!pointer) {
-    pointer = document.createElement('div');
-    pointer.className = 'shared-pointer';
-    pointer.dataset.pointerId = id;
-    const dot = document.createElement('span');
-    dot.className = 'shared-pointer-dot';
-    const label = document.createElement('span');
-    label.className = 'shared-pointer-label';
-    pointer.append(dot, label);
-    document.getElementById('map-stage').appendChild(pointer);
+    pointer.style.left = `${Number(x)}px`;
+    pointer.style.top = `${Number(y)}px`;
+    pointer.style.setProperty("--pointer-color", color || "#d98a9e");
+    pointer.querySelector(".shared-pointer-label").textContent = name || "Player";
+    pointer.classList.remove("fading");
+    clearTimeout(pointerFadeTimers.get(id));
+    pointerFadeTimers.set(id, setTimeout(() => pointer.classList.add("fading"), 1200));
   }
-  pointer.style.left = `${Number(x)}px`;
-  pointer.style.top = `${Number(y)}px`;
-  pointer.style.setProperty('--pointer-color', color || '#d98a9e');
-  pointer.querySelector('.shared-pointer-label').textContent = name || 'Player';
-  pointer.classList.remove('fading');
-  clearTimeout(pointerFadeTimers.get(id));
-  pointerFadeTimers.set(id, setTimeout(() => pointer.classList.add('fading'), 1200));
-}
-
-function removeSharedPointer(id) {
-  if (!id) return;
-  const pointer = findSharedPointer(id);
-  if (pointer) pointer.remove();
-  clearTimeout(pointerFadeTimers.get(id));
-  pointerFadeTimers.delete(id);
-}
-
-function findSharedPointer(id) {
-  return [...document.querySelectorAll('.shared-pointer')]
-    .find(pointer => pointer.dataset.pointerId === String(id));
-}
-
-function renderSharedPing({ name, color, x, y } = {}) {
-  if (!Number.isFinite(Number(x)) || !Number.isFinite(Number(y))) return;
-  const ping = document.createElement('div');
-  ping.className = 'shared-ping';
-  ping.style.left = `${Number(x)}px`;
-  ping.style.top = `${Number(y)}px`;
-  ping.style.setProperty('--pointer-color', color || '#d98a9e');
-  const label = document.createElement('span');
-  label.textContent = name || 'Player';
-  ping.appendChild(label);
-  document.getElementById('map-stage').appendChild(ping);
-  setTimeout(() => ping.remove(), 1500);
-}
-
-// ---- Named scene library ----
-function savedSceneList() {
-  return Array.isArray(state?.savedScenes) ? state.savedScenes : [];
-}
-
-function renderSavedScenes() {
-  if (!state) return;
-  document.getElementById('current-scene-name').textContent = state.activeSceneName || 'Unsaved scene';
-  const dirtyIndicator = document.getElementById('scene-dirty-indicator');
-  dirtyIndicator.classList.toggle('hidden', !state.sceneDirty);
-  dirtyIndicator.textContent = state.activeSceneName ? 'Unsaved changes' : 'Not saved yet';
-  const select = document.getElementById('saved-scene-select');
-  const previous = select.value;
-  select.innerHTML = '<option value="">Choose a saved scene…</option>';
-  savedSceneList().forEach(scene => {
-    const option = document.createElement('option');
-    option.value = scene.name;
-    option.textContent = `${scene.name} · ${scene.tokenCount} token${scene.tokenCount === 1 ? '' : 's'}`;
-    select.appendChild(option);
-  });
-  if (savedSceneList().some(scene => scene.name === previous)) select.value = previous;
-  updateSelectedSceneSummary();
-}
-
-function updateSelectedSceneSummary() {
-  const selected = savedSceneList().find(scene => scene.name === document.getElementById('saved-scene-select').value);
-  const summary = document.getElementById('scene-summary');
-  if (!selected) {
-    summary.textContent = 'Maps, drawings, tokens and initiative are saved together.';
-    return;
+  function removeSharedPointer(id) {
+    if (!id) return;
+    const pointer = findSharedPointer(id);
+    if (pointer) pointer.remove();
+    clearTimeout(pointerFadeTimers.get(id));
+    pointerFadeTimers.delete(id);
   }
-  summary.textContent = `${selected.mapName} · ${selected.tokenCount} token${selected.tokenCount === 1 ? '' : 's'} · saved ${new Date(selected.savedAt).toLocaleString()}`;
-}
-
-document.getElementById('saved-scene-select').onchange = () => {
-  const selected = document.getElementById('saved-scene-select').value;
-  if (selected) document.getElementById('scene-name-input').value = selected;
-  updateSelectedSceneSummary();
-};
-document.getElementById('save-scene-btn').onclick = () => {
-  const name = document.getElementById('scene-name-input').value.trim();
-  if (!name) return showToast('Give the scene a name first.');
-  const exists = savedSceneList().some(scene => scene.name.toLowerCase() === name.toLowerCase());
-  if (exists && !confirm(`Overwrite the saved scene “${name}” with the current setup?`)) return;
-  socket.emit('scene:save', { name });
-};
-document.getElementById('load-scene-btn').onclick = () => {
-  const name = document.getElementById('saved-scene-select').value;
-  if (!name) return showToast('Choose a saved scene first.');
-  if (confirm(`Load “${name}”? Unsaved changes to the current scene will be replaced.`)) socket.emit('scene:load', { name });
-};
-document.getElementById('delete-scene-btn').onclick = () => {
-  const name = document.getElementById('saved-scene-select').value;
-  if (!name) return showToast('Choose a saved scene first.');
-  if (confirm(`Delete the saved scene “${name}”?`)) socket.emit('scene:delete', { name });
-};
-
-// ---- DM library and shared handouts ----
-function libraryData() {
-  const library = state?.library || {};
-  return {
-    folders: Array.isArray(library.folders) ? library.folders : [],
-    files: Array.isArray(library.files) ? library.files : [],
-    broadcast: library.broadcast || null
+  function findSharedPointer(id) {
+    return [...document.querySelectorAll(".shared-pointer")].find((pointer) => pointer.dataset.pointerId === String(id));
+  }
+  function renderSharedPing({ name, color, x, y } = {}) {
+    if (!Number.isFinite(Number(x)) || !Number.isFinite(Number(y))) return;
+    const ping = document.createElement("div");
+    ping.className = "shared-ping";
+    ping.style.left = `${Number(x)}px`;
+    ping.style.top = `${Number(y)}px`;
+    ping.style.setProperty("--pointer-color", color || "#d98a9e");
+    const label = document.createElement("span");
+    label.textContent = name || "Player";
+    ping.appendChild(label);
+    document.getElementById("map-stage").appendChild(ping);
+    setTimeout(() => ping.remove(), 1500);
+  }
+  function savedSceneList() {
+    return Array.isArray(state?.savedScenes) ? state.savedScenes : [];
+  }
+  function renderSavedScenes() {
+    if (!state) return;
+    document.getElementById("current-scene-name").textContent = state.activeSceneName || "Unsaved scene";
+    const dirtyIndicator = document.getElementById("scene-dirty-indicator");
+    dirtyIndicator.classList.toggle("hidden", !state.sceneDirty);
+    dirtyIndicator.textContent = state.activeSceneName ? "Unsaved changes" : "Not saved yet";
+    const select = document.getElementById("saved-scene-select");
+    const previous = select.value;
+    select.innerHTML = '<option value="">Choose a saved scene\u2026</option>';
+    savedSceneList().forEach((scene) => {
+      const option = document.createElement("option");
+      option.value = scene.name;
+      option.textContent = `${scene.name} \xB7 ${scene.tokenCount} token${scene.tokenCount === 1 ? "" : "s"}`;
+      select.appendChild(option);
+    });
+    if (savedSceneList().some((scene) => scene.name === previous)) select.value = previous;
+    updateSelectedSceneSummary();
+  }
+  function updateSelectedSceneSummary() {
+    const selected = savedSceneList().find((scene) => scene.name === document.getElementById("saved-scene-select").value);
+    const summary = document.getElementById("scene-summary");
+    if (!selected) {
+      summary.textContent = "Maps, drawings, tokens and initiative are saved together.";
+      return;
+    }
+    summary.textContent = `${selected.mapName} \xB7 ${selected.tokenCount} token${selected.tokenCount === 1 ? "" : "s"} \xB7 saved ${new Date(selected.savedAt).toLocaleString()}`;
+  }
+  document.getElementById("saved-scene-select").onchange = () => {
+    const selected = document.getElementById("saved-scene-select").value;
+    if (selected) document.getElementById("scene-name-input").value = selected;
+    updateSelectedSceneSummary();
   };
-}
-
-function libraryFolderName(folderId, folders) {
-  return folders.find(folder => folder.id === folderId)?.name || 'Unfiled';
-}
-
-function orderedLibraryFolders(folders) {
-  const ordered = [];
-  const visit = (parentId, depth, visited) => {
-    folders
-      .filter(folder => (folder.parentId || null) === parentId)
-      .sort((a, b) => a.name.localeCompare(b.name))
-      .forEach(folder => {
+  document.getElementById("save-scene-btn").onclick = () => {
+    const name = document.getElementById("scene-name-input").value.trim();
+    if (!name) return showToast("Give the scene a name first.");
+    const exists = savedSceneList().some((scene) => scene.name.toLowerCase() === name.toLowerCase());
+    if (exists && !confirm(`Overwrite the saved scene \u201C${name}\u201D with the current setup?`)) return;
+    socket.emit("scene:save", { name });
+  };
+  document.getElementById("load-scene-btn").onclick = () => {
+    const name = document.getElementById("saved-scene-select").value;
+    if (!name) return showToast("Choose a saved scene first.");
+    if (confirm(`Load \u201C${name}\u201D? Unsaved changes to the current scene will be replaced.`)) socket.emit("scene:load", { name });
+  };
+  document.getElementById("delete-scene-btn").onclick = () => {
+    const name = document.getElementById("saved-scene-select").value;
+    if (!name) return showToast("Choose a saved scene first.");
+    if (confirm(`Delete the saved scene \u201C${name}\u201D?`)) socket.emit("scene:delete", { name });
+  };
+  function libraryData() {
+    const library = state?.library || {};
+    return {
+      folders: Array.isArray(library.folders) ? library.folders : [],
+      files: Array.isArray(library.files) ? library.files : [],
+      broadcast: library.broadcast || null
+    };
+  }
+  function libraryFolderName(folderId, folders) {
+    return folders.find((folder) => folder.id === folderId)?.name || "Unfiled";
+  }
+  function orderedLibraryFolders(folders) {
+    const ordered = [];
+    const visit = (parentId, depth, visited) => {
+      folders.filter((folder) => (folder.parentId || null) === parentId).sort((a, b) => a.name.localeCompare(b.name)).forEach((folder) => {
         if (visited.has(folder.id)) return;
         const nextVisited = new Set(visited).add(folder.id);
         ordered.push({ folder, depth });
         visit(folder.id, depth + 1, nextVisited);
       });
-  };
-  visit(null, 0, new Set());
-  return ordered;
-}
-
-function libraryFileIcon(file) {
-  return file.kind === 'image' ? '🖼️' : file.kind === 'pdf' ? '📕' : file.kind === 'html' ? '✨' : file.kind === 'text' ? '📝' : '📎';
-}
-
-function libraryFileSize(size) {
-  const bytes = Number(size) || 0;
-  if (!bytes) return 'Size unknown';
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(bytes >= 10 * 1024 * 1024 ? 0 : 1)} MB`;
-}
-
-function renderLibrary() {
-  if (myRole !== 'dm') return;
-  const library = libraryData();
-  const currentFolder = libraryCurrentFolderId !== 'all' && libraryCurrentFolderId !== 'unfiled'
-    ? library.folders.find(folder => folder.id === libraryCurrentFolderId)
-    : null;
-  if (libraryCurrentFolderId !== 'all' && libraryCurrentFolderId !== 'unfiled' && !currentFolder) {
-    libraryCurrentFolderId = 'all';
-  }
-
-  const folderList = document.getElementById('library-folder-list');
-  const folderCount = document.getElementById('library-folder-count');
-  folderList.innerHTML = '';
-  folderCount.textContent = `${library.folders.length} folder${library.folders.length === 1 ? '' : 's'}`;
-
-  const appendFolderButton = (label, id, depth = 0, icon = '') => {
-    const row = document.createElement('div');
-    row.className = 'library-folder-row';
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.className = 'library-folder-btn' + (libraryCurrentFolderId === id ? ' active' : '');
-    button.style.paddingLeft = `${10 + depth * 16}px`;
-    button.textContent = `${icon}${icon ? ' ' : ''}${label}`;
-    button.onclick = () => {
-      libraryCurrentFolderId = id;
-      renderLibrary();
     };
-    row.appendChild(button);
-    if (id !== 'all' && id !== 'unfiled') {
-      const folder = library.folders.find(entry => entry.id === id);
-      const actions = document.createElement('span');
-      actions.className = 'library-folder-actions';
-      const rename = document.createElement('button');
-      rename.type = 'button';
-      rename.className = 'library-inline-action';
-      rename.title = 'Rename folder';
-      rename.textContent = '✎';
-      rename.onclick = event => {
-        event.stopPropagation();
-        const name = prompt('Folder name', folder?.name || '');
-        if (name?.trim()) socket.emit('library:folder:rename', { id, name: name.trim() });
-      };
-      const remove = document.createElement('button');
-      remove.type = 'button';
-      remove.className = 'library-inline-action danger';
-      remove.title = 'Delete folder';
-      remove.textContent = '×';
-      remove.onclick = event => {
-        event.stopPropagation();
-        if (confirm(`Delete “${folder?.name || 'this folder'}”? Its files will be moved to the parent folder.`)) {
-          socket.emit('library:folder:delete', { id });
-        }
-      };
-      actions.append(rename, remove);
-      row.appendChild(actions);
-    }
-    folderList.appendChild(row);
-  };
-
-  appendFolderButton('All files', 'all', 0, '📚');
-  appendFolderButton('Unfiled', 'unfiled', 0, '🗂️');
-  orderedLibraryFolders(library.folders).forEach(({ folder, depth }) => appendFolderButton(folder.name, folder.id, depth + 1, '📁'));
-
-  const files = libraryCurrentFolderId === 'all'
-    ? library.files
-    : library.files.filter(file => libraryCurrentFolderId === 'unfiled'
-      ? !file.folderId
-      : file.folderId === libraryCurrentFolderId);
-  const currentFolderLabel = libraryCurrentFolderId === 'all'
-    ? 'All files'
-    : libraryCurrentFolderId === 'unfiled' ? 'Unfiled' : currentFolder?.name || 'All files';
-  document.getElementById('library-current-folder').textContent = currentFolderLabel;
-  document.getElementById('library-file-summary').textContent = `${files.length} file${files.length === 1 ? '' : 's'} here`;
-
-  const fileList = document.getElementById('library-file-list');
-  fileList.innerHTML = '';
-  if (!files.length) {
-    fileList.innerHTML = '<div class="library-empty"><span>🍂</span><strong>No files here yet</strong><p>Upload a handout, clue, map or puzzle file to begin.</p></div>';
-    return;
+    visit(null, 0, /* @__PURE__ */ new Set());
+    return ordered;
   }
-
-  const folderOptions = orderedLibraryFolders(library.folders);
-  files
-    .slice()
-    .sort((a, b) => a.name.localeCompare(b.name))
-    .forEach(file => {
-      const card = document.createElement('article');
-      card.className = 'library-file-card';
+  function libraryFileIcon(file) {
+    return file.kind === "image" ? "\u{1F5BC}\uFE0F" : file.kind === "pdf" ? "\u{1F4D5}" : file.kind === "html" ? "\u2728" : file.kind === "text" ? "\u{1F4DD}" : "\u{1F4CE}";
+  }
+  function libraryFileSize(size) {
+    const bytes = Number(size) || 0;
+    if (!bytes) return "Size unknown";
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(bytes >= 10 * 1024 * 1024 ? 0 : 1)} MB`;
+  }
+  function renderLibrary() {
+    if (myRole !== "dm") return;
+    const library = libraryData();
+    const currentFolder = libraryCurrentFolderId !== "all" && libraryCurrentFolderId !== "unfiled" ? library.folders.find((folder) => folder.id === libraryCurrentFolderId) : null;
+    if (libraryCurrentFolderId !== "all" && libraryCurrentFolderId !== "unfiled" && !currentFolder) {
+      libraryCurrentFolderId = "all";
+    }
+    const folderList = document.getElementById("library-folder-list");
+    const folderCount = document.getElementById("library-folder-count");
+    folderList.innerHTML = "";
+    folderCount.textContent = `${library.folders.length} folder${library.folders.length === 1 ? "" : "s"}`;
+    const appendFolderButton = (label, id, depth = 0, icon = "") => {
+      const row = document.createElement("div");
+      row.className = "library-folder-row";
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "library-folder-btn" + (libraryCurrentFolderId === id ? " active" : "");
+      button.style.paddingLeft = `${10 + depth * 16}px`;
+      button.textContent = `${icon}${icon ? " " : ""}${label}`;
+      button.onclick = () => {
+        libraryCurrentFolderId = id;
+        renderLibrary();
+      };
+      row.appendChild(button);
+      if (id !== "all" && id !== "unfiled") {
+        const folder = library.folders.find((entry) => entry.id === id);
+        const actions = document.createElement("span");
+        actions.className = "library-folder-actions";
+        const rename = document.createElement("button");
+        rename.type = "button";
+        rename.className = "library-inline-action";
+        rename.title = "Rename folder";
+        rename.textContent = "\u270E";
+        rename.onclick = (event) => {
+          event.stopPropagation();
+          const name = prompt("Folder name", folder?.name || "");
+          if (name?.trim()) socket.emit("library:folder:rename", { id, name: name.trim() });
+        };
+        const remove = document.createElement("button");
+        remove.type = "button";
+        remove.className = "library-inline-action danger";
+        remove.title = "Delete folder";
+        remove.textContent = "\xD7";
+        remove.onclick = (event) => {
+          event.stopPropagation();
+          if (confirm(`Delete \u201C${folder?.name || "this folder"}\u201D? Its files will be moved to the parent folder.`)) {
+            socket.emit("library:folder:delete", { id });
+          }
+        };
+        actions.append(rename, remove);
+        row.appendChild(actions);
+      }
+      folderList.appendChild(row);
+    };
+    appendFolderButton("All files", "all", 0, "\u{1F4DA}");
+    appendFolderButton("Unfiled", "unfiled", 0, "\u{1F5C2}\uFE0F");
+    orderedLibraryFolders(library.folders).forEach(({ folder, depth }) => appendFolderButton(folder.name, folder.id, depth + 1, "\u{1F4C1}"));
+    const files = libraryCurrentFolderId === "all" ? library.files : library.files.filter((file) => libraryCurrentFolderId === "unfiled" ? !file.folderId : file.folderId === libraryCurrentFolderId);
+    const currentFolderLabel = libraryCurrentFolderId === "all" ? "All files" : libraryCurrentFolderId === "unfiled" ? "Unfiled" : currentFolder?.name || "All files";
+    document.getElementById("library-current-folder").textContent = currentFolderLabel;
+    document.getElementById("library-file-summary").textContent = `${files.length} file${files.length === 1 ? "" : "s"} here`;
+    const fileList = document.getElementById("library-file-list");
+    fileList.innerHTML = "";
+    if (!files.length) {
+      fileList.innerHTML = '<div class="library-empty"><span>\u{1F342}</span><strong>No files here yet</strong><p>Upload a handout, clue, map or puzzle file to begin.</p></div>';
+      return;
+    }
+    const folderOptions = orderedLibraryFolders(library.folders);
+    files.slice().sort((a, b) => a.name.localeCompare(b.name)).forEach((file) => {
+      const card = document.createElement("article");
+      card.className = "library-file-card";
       card.innerHTML = `
         <div class="library-file-info">
           <span class="library-file-icon" aria-hidden="true">${libraryFileIcon(file)}</span>
@@ -1703,2432 +1653,2391 @@ function renderLibrary() {
           <button class="btn-ghost library-rename-btn" type="button">Rename</button>
           <button class="btn-danger-soft library-delete-btn" type="button">Delete</button>
         </div>`;
-      card.querySelector('.library-file-name').textContent = file.name;
-      card.querySelector('.library-file-meta').textContent = `${String(file.kind || 'file').toUpperCase()} · ${libraryFileSize(file.size)} · ${libraryFolderName(file.folderId, library.folders)}`;
-      const folderSelect = card.querySelector('.library-file-folder');
+      card.querySelector(".library-file-name").textContent = file.name;
+      card.querySelector(".library-file-meta").textContent = `${String(file.kind || "file").toUpperCase()} \xB7 ${libraryFileSize(file.size)} \xB7 ${libraryFolderName(file.folderId, library.folders)}`;
+      const folderSelect = card.querySelector(".library-file-folder");
       folderSelect.innerHTML = '<option value="">Unfiled</option>';
       folderOptions.forEach(({ folder, depth }) => {
-        const option = document.createElement('option');
+        const option = document.createElement("option");
         option.value = folder.id;
-        option.textContent = `${'— '.repeat(depth)}${folder.name}`;
+        option.textContent = `${"\u2014 ".repeat(depth)}${folder.name}`;
         folderSelect.appendChild(option);
       });
-      folderSelect.value = file.folderId || '';
-      folderSelect.onchange = () => socket.emit('library:file:move', { id: file.id, folderId: folderSelect.value });
-      card.querySelector('.library-share-btn').onclick = () => {
-        const duration = Number(document.getElementById('library-broadcast-duration').value) || 0;
-        socket.emit('library:broadcast', { fileId: file.id, duration });
+      folderSelect.value = file.folderId || "";
+      folderSelect.onchange = () => socket.emit("library:file:move", { id: file.id, folderId: folderSelect.value });
+      card.querySelector(".library-share-btn").onclick = () => {
+        const duration = Number(document.getElementById("library-broadcast-duration").value) || 0;
+        socket.emit("library:broadcast", { fileId: file.id, duration });
       };
-      card.querySelector('.library-rename-btn').onclick = () => {
-        const name = prompt('File name', file.name);
-        if (name?.trim()) socket.emit('library:file:rename', { id: file.id, name: name.trim() });
+      card.querySelector(".library-rename-btn").onclick = () => {
+        const name = prompt("File name", file.name);
+        if (name?.trim()) socket.emit("library:file:rename", { id: file.id, name: name.trim() });
       };
-      card.querySelector('.library-delete-btn').onclick = () => {
-        if (confirm(`Delete “${file.name}” from the library?`)) socket.emit('library:file:delete', { id: file.id });
+      card.querySelector(".library-delete-btn").onclick = () => {
+        if (confirm(`Delete \u201C${file.name}\u201D from the library?`)) socket.emit("library:file:delete", { id: file.id });
       };
       fileList.appendChild(card);
     });
-}
-
-function notificationTimestamp(createdAt) {
-  const time = Number(createdAt);
-  if (!time) return '';
-  return new Intl.DateTimeFormat(undefined, { dateStyle: 'short', timeStyle: 'short' }).format(new Date(time));
-}
-
-function renderDmNotifications() {
-  const panel = document.getElementById('dm-notifications-panel');
-  const list = document.getElementById('dm-notifications-list');
-  const count = document.getElementById('dm-notification-count');
-  const toggle = document.getElementById('dm-notifications-btn');
-  if (!panel || !list || !count || !toggle) return;
-  const notifications = myRole === 'dm' && Array.isArray(state?.notifications) ? state.notifications : [];
-  const unreadCount = notifications.filter(notification => !notification.read).length;
-  count.textContent = unreadCount > 99 ? '99+' : String(unreadCount);
-  count.classList.toggle('hidden', unreadCount === 0);
-  toggle.setAttribute('aria-expanded', String(dmNotificationsOpen));
-  panel.classList.toggle('hidden', myRole !== 'dm' || !dmNotificationsOpen);
-
-  list.innerHTML = '';
-  if (!notifications.length) {
-    const empty = document.createElement('div');
-    empty.className = 'dm-notifications-empty';
-    empty.innerHTML = '<span aria-hidden="true">🌿</span><strong>Nothing waiting</strong><p>Player questions and private safety requests will appear here.</p>';
-    list.appendChild(empty);
-  } else {
-    notifications.forEach(notification => {
-      const item = document.createElement('article');
-      item.className = `dm-notification-item ${notification.type} ${notification.read ? 'read' : 'unread'}`;
-      const heading = document.createElement('div');
-      heading.className = 'dm-notification-heading';
-      const title = document.createElement('strong');
-      title.textContent = notification.type === 'safety'
-        ? '15-minute break requested'
-        : `Question from ${notification.anonymous ? 'Anonymous player' : (notification.senderName || 'Player')}`;
-      const time = document.createElement('time');
-      time.dateTime = new Date(Number(notification.createdAt) || Date.now()).toISOString();
-      time.textContent = notificationTimestamp(notification.createdAt);
-      heading.append(title, time);
-      const body = document.createElement('p');
-      body.textContent = notification.type === 'safety'
-        ? 'An anonymous player needs a pause. Please stop play for 15 minutes and check in privately.'
-        : notification.question;
-      const actions = document.createElement('div');
-      actions.className = 'dm-notification-actions';
-      if (!notification.read) {
-        const markRead = document.createElement('button');
-        markRead.type = 'button';
-        markRead.className = 'btn-ghost';
-        markRead.textContent = 'Mark read';
-        markRead.onclick = () => socket.emit('notifications:markRead', { id: notification.id });
-        actions.appendChild(markRead);
-      }
-      const dismiss = document.createElement('button');
-      dismiss.type = 'button';
-      dismiss.className = 'btn-danger-soft';
-      dismiss.textContent = 'Dismiss';
-      dismiss.onclick = () => socket.emit('notifications:clear', { id: notification.id });
-      actions.appendChild(dismiss);
-      item.append(heading, body, actions);
-      list.appendChild(item);
-    });
   }
-  const markAll = document.getElementById('dm-notifications-mark-all');
-  const clearAll = document.getElementById('dm-notifications-clear-all');
-  if (markAll) markAll.disabled = unreadCount === 0;
-  if (clearAll) clearAll.disabled = notifications.length === 0;
-}
-
-function closePlayerQuestion() {
-  const overlay = document.getElementById('player-question-overlay');
-  if (!overlay) return;
-  overlay.classList.add('hidden');
-  overlay.setAttribute('aria-hidden', 'true');
-}
-
-document.getElementById('player-safety-btn').onclick = () => {
-  if (myRole !== 'player') return;
-  socket.emit('safety:request');
-};
-document.getElementById('player-question-btn').onclick = () => {
-  if (myRole !== 'player') return;
-  const overlay = document.getElementById('player-question-overlay');
-  overlay.classList.remove('hidden');
-  overlay.setAttribute('aria-hidden', 'false');
-  document.getElementById('player-question-input').focus();
-};
-document.getElementById('player-question-close').onclick = closePlayerQuestion;
-document.getElementById('player-question-cancel').onclick = closePlayerQuestion;
-document.getElementById('player-question-overlay').onclick = event => {
-  if (event.target.id === 'player-question-overlay') closePlayerQuestion();
-};
-document.getElementById('player-question-form').onsubmit = event => {
-  event.preventDefault();
-  if (questionSubmitting) return;
-  const input = document.getElementById('player-question-input');
-  const question = input.value.trim();
-  if (!question) return showToast('Write a question before sending it.');
-  questionSubmitting = true;
-  const button = document.getElementById('player-question-submit');
-  button.disabled = true;
-  button.textContent = 'Sending…';
-  socket.emit('question:submit', {
-    question,
-    anonymous: document.getElementById('player-question-anonymous').checked
-  });
-  window.setTimeout(() => {
-    if (!questionSubmitting) return;
-    questionSubmitting = false;
-    button.disabled = false;
-    button.textContent = 'Send question';
-  }, 5000);
-};
-
-document.getElementById('dm-notifications-btn').onclick = event => {
-  event.stopPropagation();
-  if (myRole !== 'dm') return;
-  dmNotificationsOpen = !dmNotificationsOpen;
-  renderDmNotifications();
-};
-document.getElementById('dm-notifications-close').onclick = () => {
-  dmNotificationsOpen = false;
-  renderDmNotifications();
-};
-document.getElementById('dm-notifications-mark-all').onclick = () => socket.emit('notifications:markAllRead');
-document.getElementById('dm-notifications-clear-all').onclick = () => {
-  if (state?.notifications?.length && confirm('Clear all DM notifications?')) socket.emit('notifications:clearAll');
-};
-document.addEventListener('click', event => {
-  const panel = document.getElementById('dm-notifications-panel');
-  const toggle = document.getElementById('dm-notifications-btn');
-  if (dmNotificationsOpen && panel && !panel.contains(event.target) && !toggle.contains(event.target)) {
+  function notificationTimestamp(createdAt) {
+    const time = Number(createdAt);
+    if (!time) return "";
+    return new Intl.DateTimeFormat(void 0, { dateStyle: "short", timeStyle: "short" }).format(new Date(time));
+  }
+  function renderDmNotifications() {
+    const panel = document.getElementById("dm-notifications-panel");
+    const list = document.getElementById("dm-notifications-list");
+    const count = document.getElementById("dm-notification-count");
+    const toggle = document.getElementById("dm-notifications-btn");
+    if (!panel || !list || !count || !toggle) return;
+    const notifications = myRole === "dm" && Array.isArray(state?.notifications) ? state.notifications : [];
+    const unreadCount = notifications.filter((notification) => !notification.read).length;
+    count.textContent = unreadCount > 99 ? "99+" : String(unreadCount);
+    count.classList.toggle("hidden", unreadCount === 0);
+    toggle.setAttribute("aria-expanded", String(dmNotificationsOpen));
+    panel.classList.toggle("hidden", myRole !== "dm" || !dmNotificationsOpen);
+    list.innerHTML = "";
+    if (!notifications.length) {
+      const empty = document.createElement("div");
+      empty.className = "dm-notifications-empty";
+      empty.innerHTML = '<span aria-hidden="true">\u{1F33F}</span><strong>Nothing waiting</strong><p>Player questions and private safety requests will appear here.</p>';
+      list.appendChild(empty);
+    } else {
+      notifications.forEach((notification) => {
+        const item = document.createElement("article");
+        item.className = `dm-notification-item ${notification.type} ${notification.read ? "read" : "unread"}`;
+        const heading = document.createElement("div");
+        heading.className = "dm-notification-heading";
+        const title = document.createElement("strong");
+        title.textContent = notification.type === "safety" ? "15-minute break requested" : `Question from ${notification.anonymous ? "Anonymous player" : notification.senderName || "Player"}`;
+        const time = document.createElement("time");
+        time.dateTime = new Date(Number(notification.createdAt) || Date.now()).toISOString();
+        time.textContent = notificationTimestamp(notification.createdAt);
+        heading.append(title, time);
+        const body = document.createElement("p");
+        body.textContent = notification.type === "safety" ? "An anonymous player needs a pause. Please stop play for 15 minutes and check in privately." : notification.question;
+        const actions = document.createElement("div");
+        actions.className = "dm-notification-actions";
+        if (!notification.read) {
+          const markRead = document.createElement("button");
+          markRead.type = "button";
+          markRead.className = "btn-ghost";
+          markRead.textContent = "Mark read";
+          markRead.onclick = () => socket.emit("notifications:markRead", { id: notification.id });
+          actions.appendChild(markRead);
+        }
+        const dismiss = document.createElement("button");
+        dismiss.type = "button";
+        dismiss.className = "btn-danger-soft";
+        dismiss.textContent = "Dismiss";
+        dismiss.onclick = () => socket.emit("notifications:clear", { id: notification.id });
+        actions.appendChild(dismiss);
+        item.append(heading, body, actions);
+        list.appendChild(item);
+      });
+    }
+    const markAll = document.getElementById("dm-notifications-mark-all");
+    const clearAll = document.getElementById("dm-notifications-clear-all");
+    if (markAll) markAll.disabled = unreadCount === 0;
+    if (clearAll) clearAll.disabled = notifications.length === 0;
+  }
+  function closePlayerQuestion() {
+    const overlay = document.getElementById("player-question-overlay");
+    if (!overlay) return;
+    overlay.classList.add("hidden");
+    overlay.setAttribute("aria-hidden", "true");
+  }
+  document.getElementById("player-safety-btn").onclick = () => {
+    if (myRole !== "player") return;
+    socket.emit("safety:request");
+  };
+  document.getElementById("player-question-btn").onclick = () => {
+    if (myRole !== "player") return;
+    const overlay = document.getElementById("player-question-overlay");
+    overlay.classList.remove("hidden");
+    overlay.setAttribute("aria-hidden", "false");
+    document.getElementById("player-question-input").focus();
+  };
+  document.getElementById("player-question-close").onclick = closePlayerQuestion;
+  document.getElementById("player-question-cancel").onclick = closePlayerQuestion;
+  document.getElementById("player-question-overlay").onclick = (event) => {
+    if (event.target.id === "player-question-overlay") closePlayerQuestion();
+  };
+  document.getElementById("player-question-form").onsubmit = (event) => {
+    event.preventDefault();
+    if (questionSubmitting) return;
+    const input = document.getElementById("player-question-input");
+    const question = input.value.trim();
+    if (!question) return showToast("Write a question before sending it.");
+    questionSubmitting = true;
+    const button = document.getElementById("player-question-submit");
+    button.disabled = true;
+    button.textContent = "Sending\u2026";
+    socket.emit("question:submit", {
+      question,
+      anonymous: document.getElementById("player-question-anonymous").checked
+    });
+    window.setTimeout(() => {
+      if (!questionSubmitting) return;
+      questionSubmitting = false;
+      button.disabled = false;
+      button.textContent = "Send question";
+    }, 5e3);
+  };
+  document.getElementById("dm-notifications-btn").onclick = (event) => {
+    event.stopPropagation();
+    if (myRole !== "dm") return;
+    dmNotificationsOpen = !dmNotificationsOpen;
+    renderDmNotifications();
+  };
+  document.getElementById("dm-notifications-close").onclick = () => {
     dmNotificationsOpen = false;
     renderDmNotifications();
-  }
-});
-
-function activeShopFrame() {
-  return document.querySelector('#shared-handout-content iframe[data-shop-handout="true"]');
-}
-
-function postShopMessage(message, frame = activeShopFrame()) {
-  if (frame?.contentWindow) frame.contentWindow.postMessage(message, '*');
-}
-
-function postShopContext(frame = activeShopFrame()) {
-  postShopMessage({
-    type: 'humblewood:shop-context',
-    role: myRole,
-    stock: state?.shopStock || {}
-  }, frame);
-}
-
-function rejectShopRequest(request, message) {
-  postShopMessage({
-    type: 'humblewood:shop-purchase-result',
-    requestId: request.requestId,
-    itemId: request.itemId,
-    ok: false,
-    message
+  };
+  document.getElementById("dm-notifications-mark-all").onclick = () => socket.emit("notifications:markAllRead");
+  document.getElementById("dm-notifications-clear-all").onclick = () => {
+    if (state?.notifications?.length && confirm("Clear all DM notifications?")) socket.emit("notifications:clearAll");
+  };
+  document.addEventListener("click", (event) => {
+    const panel = document.getElementById("dm-notifications-panel");
+    const toggle = document.getElementById("dm-notifications-btn");
+    if (dmNotificationsOpen && panel && !panel.contains(event.target) && !toggle.contains(event.target)) {
+      dmNotificationsOpen = false;
+      renderDmNotifications();
+    }
   });
-  if (message) showToast(message);
-}
-
-function choosePurchaseCharacter() {
-  const characters = Object.values(state?.characters || {}).filter(character => character.canManage);
-  if (characters.length === 1) return characters[0];
-  if (!characters.length) return null;
-  const choices = characters.map((character, index) => `${index + 1}. ${character.name}`).join('\n');
-  const preferredIndex = characters.findIndex(character => character.name === shopPurchaseCharacterName);
-  const answer = prompt(
-    `Which character is buying this item?\n\n${choices}`,
-    preferredIndex >= 0 ? String(preferredIndex + 1) : '1'
-  );
-  if (answer === null) return null;
-  const number = Number(answer.trim());
-  if (Number.isInteger(number) && characters[number - 1]) return characters[number - 1];
-  return characters.find(character => character.name.toLowerCase() === answer.trim().toLowerCase()) || null;
-}
-
-window.addEventListener('message', event => {
-  const frame = activeShopFrame();
-  if (!frame || event.source !== frame.contentWindow || !event.data || typeof event.data !== 'object') return;
-  const request = event.data;
-  if (request.type === 'humblewood:shop-ready') {
-    postShopContext(frame);
-    return;
+  function activeShopFrame() {
+    return document.querySelector('#shared-handout-content iframe[data-shop-handout="true"]');
   }
-  if (request.type !== 'humblewood:shop-purchase-request') return;
-  if (myRole !== 'player') return rejectShopRequest(request, 'Only players can purchase items.');
+  function postShopMessage(message, frame = activeShopFrame()) {
+    if (frame?.contentWindow) frame.contentWindow.postMessage(message, "*");
+  }
+  function postShopContext(frame = activeShopFrame()) {
+    postShopMessage({
+      type: "humblewood:shop-context",
+      role: myRole,
+      stock: state?.shopStock || {}
+    }, frame);
+  }
+  function rejectShopRequest(request, message) {
+    postShopMessage({
+      type: "humblewood:shop-purchase-result",
+      requestId: request.requestId,
+      itemId: request.itemId,
+      ok: false,
+      message
+    });
+    if (message) showToast(message);
+  }
+  function choosePurchaseCharacter() {
+    const characters = Object.values(state?.characters || {}).filter((character) => character.canManage);
+    if (characters.length === 1) return characters[0];
+    if (!characters.length) return null;
+    const choices = characters.map((character, index) => `${index + 1}. ${character.name}`).join("\n");
+    const preferredIndex = characters.findIndex((character) => character.name === shopPurchaseCharacterName);
+    const answer = prompt(
+      `Which character is buying this item?
 
-  const catalogItem = state?.shopCatalog?.[String(request.itemId || '')];
-  if (!catalogItem) return rejectShopRequest(request, 'That item is not available for purchase.');
-
-  const character = choosePurchaseCharacter();
-  if (!character) return rejectShopRequest(request, 'No character was selected for this purchase.');
-  shopPurchaseCharacterName = character.name;
-
-  const confirmed = confirm(
-    `Are you sure ${character.name} wants to purchase ${catalogItem.name} for ${catalogItem.priceLabel}?`
-  );
-  if (!confirmed) return rejectShopRequest(request, 'Purchase cancelled.');
-
-  socket.emit('shop:purchase', {
-    requestId: String(request.requestId || '').slice(0, 100),
-    itemId: String(request.itemId || '').slice(0, 180),
-    characterName: character.name
+${choices}`,
+      preferredIndex >= 0 ? String(preferredIndex + 1) : "1"
+    );
+    if (answer === null) return null;
+    const number = Number(answer.trim());
+    if (Number.isInteger(number) && characters[number - 1]) return characters[number - 1];
+    return characters.find((character) => character.name.toLowerCase() === answer.trim().toLowerCase()) || null;
+  }
+  window.addEventListener("message", (event) => {
+    const frame = activeShopFrame();
+    if (!frame || event.source !== frame.contentWindow || !event.data || typeof event.data !== "object") return;
+    const request = event.data;
+    if (request.type === "humblewood:shop-ready") {
+      postShopContext(frame);
+      return;
+    }
+    if (request.type !== "humblewood:shop-purchase-request") return;
+    if (myRole !== "player") return rejectShopRequest(request, "Only players can purchase items.");
+    const catalogItem = state?.shopCatalog?.[String(request.itemId || "")];
+    if (!catalogItem) return rejectShopRequest(request, "That item is not available for purchase.");
+    const character = choosePurchaseCharacter();
+    if (!character) return rejectShopRequest(request, "No character was selected for this purchase.");
+    shopPurchaseCharacterName = character.name;
+    const confirmed = confirm(
+      `Are you sure ${character.name} wants to purchase ${catalogItem.name} for ${catalogItem.priceLabel}?`
+    );
+    if (!confirmed) return rejectShopRequest(request, "Purchase cancelled.");
+    socket.emit("shop:purchase", {
+      requestId: String(request.requestId || "").slice(0, 100),
+      itemId: String(request.itemId || "").slice(0, 180),
+      characterName: character.name
+    });
   });
-});
-
-function formatSharedHandoutTimer(expiresAt) {
-  const seconds = Math.max(0, Math.ceil((Number(expiresAt) - Date.now()) / 1000));
-  if (seconds < 60) return `${seconds}s remaining`;
-  const minutes = Math.floor(seconds / 60);
-  const remainder = seconds % 60;
-  return `${minutes}m${remainder ? ` ${remainder}s` : ''} remaining`;
-}
-
-function renderSharedHandoutContent(broadcast) {
-  const content = document.getElementById('shared-handout-content');
-  content.innerHTML = '';
-  if (broadcast.kind === 'image') {
-    const image = document.createElement('img');
-    image.src = broadcast.url;
-    image.alt = broadcast.name;
-    content.appendChild(image);
-    return;
+  function formatSharedHandoutTimer(expiresAt) {
+    const seconds = Math.max(0, Math.ceil((Number(expiresAt) - Date.now()) / 1e3));
+    if (seconds < 60) return `${seconds}s remaining`;
+    const minutes = Math.floor(seconds / 60);
+    const remainder = seconds % 60;
+    return `${minutes}m${remainder ? ` ${remainder}s` : ""} remaining`;
   }
-  if (broadcast.kind === 'pdf') {
-    const frame = document.createElement('iframe');
-    frame.src = broadcast.url;
-    frame.title = broadcast.name;
-    content.appendChild(frame);
-    return;
-  }
-  if (broadcast.kind === 'html') {
-    const frame = document.createElement('iframe');
-    frame.src = broadcast.url;
-    frame.title = broadcast.name;
-    frame.dataset.shopHandout = 'true';
-    frame.setAttribute('sandbox', 'allow-scripts');
-    frame.addEventListener('load', () => postShopContext(frame));
-    content.appendChild(frame);
-    return;
-  }
-  if (broadcast.kind === 'text') {
-    const pre = document.createElement('pre');
-    pre.textContent = 'Loading handout…';
-    content.appendChild(pre);
-    const requestId = ++sharedHandoutContentRequest;
-    fetch(broadcast.url)
-      .then(response => {
-        if (!response.ok) throw new Error('Could not load the handout.');
+  function renderSharedHandoutContent(broadcast) {
+    const content = document.getElementById("shared-handout-content");
+    content.innerHTML = "";
+    if (broadcast.kind === "image") {
+      const image = document.createElement("img");
+      image.src = broadcast.url;
+      image.alt = broadcast.name;
+      content.appendChild(image);
+      return;
+    }
+    if (broadcast.kind === "pdf") {
+      const frame = document.createElement("iframe");
+      frame.src = broadcast.url;
+      frame.title = broadcast.name;
+      content.appendChild(frame);
+      return;
+    }
+    if (broadcast.kind === "html") {
+      const frame = document.createElement("iframe");
+      frame.src = broadcast.url;
+      frame.title = broadcast.name;
+      frame.dataset.shopHandout = "true";
+      frame.setAttribute("sandbox", "allow-scripts");
+      frame.addEventListener("load", () => postShopContext(frame));
+      content.appendChild(frame);
+      return;
+    }
+    if (broadcast.kind === "text") {
+      const pre = document.createElement("pre");
+      pre.textContent = "Loading handout\u2026";
+      content.appendChild(pre);
+      const requestId = ++sharedHandoutContentRequest;
+      fetch(broadcast.url).then((response) => {
+        if (!response.ok) throw new Error("Could not load the handout.");
         return response.text();
-      })
-      .then(text => {
+      }).then((text) => {
         if (requestId === sharedHandoutContentRequest) pre.textContent = text;
-      })
-      .catch(() => {
-        if (requestId === sharedHandoutContentRequest) pre.textContent = 'This handout could not be loaded.';
+      }).catch(() => {
+        if (requestId === sharedHandoutContentRequest) pre.textContent = "This handout could not be loaded.";
       });
-    return;
+      return;
+    }
+    const message = document.createElement("p");
+    message.textContent = "This file type cannot be previewed in the handout overlay.";
+    const link = document.createElement("a");
+    link.href = broadcast.url;
+    link.target = "_blank";
+    link.rel = "noopener";
+    link.textContent = "Open or download the file";
+    message.append(" ", link);
+    content.appendChild(message);
   }
-  const message = document.createElement('p');
-  message.textContent = 'This file type cannot be previewed in the handout overlay.';
-  const link = document.createElement('a');
-  link.href = broadcast.url;
-  link.target = '_blank';
-  link.rel = 'noopener';
-  link.textContent = 'Open or download the file';
-  message.append(' ', link);
-  content.appendChild(message);
-}
-
-function updateSharedHandoutTimer() {
-  const broadcast = state?.library?.broadcast;
-  const overlay = document.getElementById('shared-handout-overlay');
-  if (!broadcast) return;
-  if (broadcast.expiresAt && Number(broadcast.expiresAt) <= Date.now()) {
-    overlay.classList.add('hidden');
-    overlay.setAttribute('aria-hidden', 'true');
+  function updateSharedHandoutTimer() {
+    const broadcast = state?.library?.broadcast;
+    const overlay = document.getElementById("shared-handout-overlay");
+    if (!broadcast) return;
+    if (broadcast.expiresAt && Number(broadcast.expiresAt) <= Date.now()) {
+      overlay.classList.add("hidden");
+      overlay.setAttribute("aria-hidden", "true");
+      clearInterval(sharedHandoutTimer);
+      sharedHandoutTimer = null;
+      return;
+    }
+    document.getElementById("shared-handout-timer").textContent = broadcast.expiresAt ? formatSharedHandoutTimer(broadcast.expiresAt) : "Shown until stopped";
+  }
+  function renderSharedHandout() {
+    const overlay = document.getElementById("shared-handout-overlay");
+    const broadcast = state?.library?.broadcast;
     clearInterval(sharedHandoutTimer);
     sharedHandoutTimer = null;
-    return;
+    if (!broadcast || broadcast.expiresAt && Number(broadcast.expiresAt) <= Date.now()) {
+      overlay.classList.add("hidden");
+      overlay.setAttribute("aria-hidden", "true");
+      sharedHandoutRenderKey = "";
+      return;
+    }
+    overlay.classList.remove("hidden");
+    overlay.setAttribute("aria-hidden", "false");
+    document.getElementById("shared-handout-title").textContent = broadcast.name || "Shared handout";
+    updateSharedHandoutTimer();
+    const renderKey = `${broadcast.fileId}:${broadcast.url}:${broadcast.kind}`;
+    if (sharedHandoutRenderKey !== renderKey) {
+      sharedHandoutRenderKey = renderKey;
+      renderSharedHandoutContent(broadcast);
+    }
+    if (broadcast.expiresAt) sharedHandoutTimer = setInterval(updateSharedHandoutTimer, 250);
   }
-  document.getElementById('shared-handout-timer').textContent = broadcast.expiresAt
-    ? formatSharedHandoutTimer(broadcast.expiresAt)
-    : 'Shown until stopped';
-}
-
-function renderSharedHandout() {
-  const overlay = document.getElementById('shared-handout-overlay');
-  const broadcast = state?.library?.broadcast;
-  clearInterval(sharedHandoutTimer);
-  sharedHandoutTimer = null;
-  if (!broadcast || (broadcast.expiresAt && Number(broadcast.expiresAt) <= Date.now())) {
-    overlay.classList.add('hidden');
-    overlay.setAttribute('aria-hidden', 'true');
-    sharedHandoutRenderKey = '';
-    return;
-  }
-  overlay.classList.remove('hidden');
-  overlay.setAttribute('aria-hidden', 'false');
-  document.getElementById('shared-handout-title').textContent = broadcast.name || 'Shared handout';
-  updateSharedHandoutTimer();
-  const renderKey = `${broadcast.fileId}:${broadcast.url}:${broadcast.kind}`;
-  if (sharedHandoutRenderKey !== renderKey) {
-    sharedHandoutRenderKey = renderKey;
-    renderSharedHandoutContent(broadcast);
-  }
-  if (broadcast.expiresAt) sharedHandoutTimer = setInterval(updateSharedHandoutTimer, 250);
-}
-
-document.getElementById('library-new-folder-btn').onclick = () => {
-  const name = prompt('Folder name');
-  if (name?.trim()) {
-    const parentId = libraryCurrentFolderId !== 'all' && libraryCurrentFolderId !== 'unfiled' ? libraryCurrentFolderId : null;
-    socket.emit('library:folder:create', { name: name.trim(), parentId });
-  }
-};
-document.getElementById('library-add-session0-btn').onclick = () => {
-  const library = libraryData();
-  if (library.files.some(file => file.url === '/handouts/session-0.html')) {
-    return showToast('The Session 0 handout is already in your library.');
-  }
-  const folderId = libraryCurrentFolderId !== 'all' && libraryCurrentFolderId !== 'unfiled' ? libraryCurrentFolderId : null;
-  socket.emit('library:file:add', {
-    name: 'Session 0 · Welcome & table safety',
-    url: '/handouts/session-0.html',
-    mimeType: 'text/html',
-    size: 0,
-    folderId
-  });
-};
-document.getElementById('library-upload-btn').onclick = () => document.getElementById('library-file-input').click();
-document.getElementById('library-file-input').onchange = async event => {
-  const file = event.target.files[0];
-  event.target.value = '';
-  if (!file) return;
-  const folderId = libraryCurrentFolderId !== 'all' && libraryCurrentFolderId !== 'unfiled' ? libraryCurrentFolderId : null;
-  const button = document.getElementById('library-upload-btn');
-  button.disabled = true;
-  try {
-    const uploaded = await uploadLibraryFile(file);
-    socket.emit('library:file:add', {
-      name: uploaded.name || file.name,
-      url: uploaded.url,
-      mimeType: uploaded.mimeType || file.type,
-      size: uploaded.size || file.size,
+  document.getElementById("library-new-folder-btn").onclick = () => {
+    const name = prompt("Folder name");
+    if (name?.trim()) {
+      const parentId = libraryCurrentFolderId !== "all" && libraryCurrentFolderId !== "unfiled" ? libraryCurrentFolderId : null;
+      socket.emit("library:folder:create", { name: name.trim(), parentId });
+    }
+  };
+  document.getElementById("library-add-session0-btn").onclick = () => {
+    const library = libraryData();
+    if (library.files.some((file) => file.url === "/handouts/session-0.html")) {
+      return showToast("The Session 0 handout is already in your library.");
+    }
+    const folderId = libraryCurrentFolderId !== "all" && libraryCurrentFolderId !== "unfiled" ? libraryCurrentFolderId : null;
+    socket.emit("library:file:add", {
+      name: "Session 0 \xB7 Welcome & table safety",
+      url: "/handouts/session-0.html",
+      mimeType: "text/html",
+      size: 0,
       folderId
     });
-  } catch (error) {
-    showToast(error.message || 'The file could not be uploaded.');
-  } finally {
-    button.disabled = false;
+  };
+  document.getElementById("library-upload-btn").onclick = () => document.getElementById("library-file-input").click();
+  document.getElementById("library-file-input").onchange = async (event) => {
+    const file = event.target.files[0];
+    event.target.value = "";
+    if (!file) return;
+    const folderId = libraryCurrentFolderId !== "all" && libraryCurrentFolderId !== "unfiled" ? libraryCurrentFolderId : null;
+    const button = document.getElementById("library-upload-btn");
+    button.disabled = true;
+    try {
+      const uploaded = await uploadLibraryFile(file);
+      socket.emit("library:file:add", {
+        name: uploaded.name || file.name,
+        url: uploaded.url,
+        mimeType: uploaded.mimeType || file.type,
+        size: uploaded.size || file.size,
+        folderId
+      });
+    } catch (error) {
+      showToast(error.message || "The file could not be uploaded.");
+    } finally {
+      button.disabled = false;
+    }
+  };
+  document.getElementById("shared-handout-stop-btn").onclick = () => socket.emit("library:broadcast:clear");
+  document.getElementById("token-kind").onchange = updateTokenCreateForm;
+  document.getElementById("cancel-npc-edit-btn").onclick = resetNpcEditor;
+  function updateTokenCreateForm() {
+    const kind = document.getElementById("token-kind").value;
+    document.getElementById("npc-create-fields").classList.toggle("hidden", kind !== "npc");
+    document.getElementById("token-pronouns").classList.toggle("hidden", kind === "item");
+    if (!editingNpcId) document.getElementById("add-token-btn").textContent = kind === "npc" ? "Create NPC & place" : "Add to map";
   }
-};
-document.getElementById('shared-handout-stop-btn').onclick = () => socket.emit('library:broadcast:clear');
-
-// ---- Token and NPC creation ----
-document.getElementById('token-kind').onchange = updateTokenCreateForm;
-document.getElementById('cancel-npc-edit-btn').onclick = resetNpcEditor;
-
-function updateTokenCreateForm() {
-  const kind = document.getElementById('token-kind').value;
-  document.getElementById('npc-create-fields').classList.toggle('hidden', kind !== 'npc');
-  document.getElementById('token-pronouns').classList.toggle('hidden', kind === 'item');
-  if (!editingNpcId) document.getElementById('add-token-btn').textContent = kind === 'npc' ? 'Create NPC & place' : 'Add to map';
-}
-
-function parseNpcAttacks(text) {
-  return String(text || '').split('\n').map(line => line.trim()).filter(Boolean).map(line => {
-    const [name = '', bonus = '', damage = ''] = line.split('|').map(part => part.trim());
-    return { name, bonus, damage };
-  }).filter(attack => attack.name);
-}
-
-function npcAttacksText(attacks) {
-  return (attacks || []).map(attack => [attack.name, attack.bonus, attack.damage].join(' | ')).join('\n');
-}
-
-document.getElementById('add-token-btn').onclick = async () => {
-  const name = document.getElementById('token-name').value.trim();
-  if (!name) return showToast('Give the token a name first.');
-  const kind = document.getElementById('token-kind').value;
-  const file = document.getElementById('token-image').files[0];
-  let imageUrl;
-  if (file) imageUrl = await uploadFile(file);
-
-  if (editingNpcId) {
-    socket.emit('npc:update', {
-      id: editingNpcId,
-      name,
-      ...(imageUrl !== undefined ? { imageUrl } : {}),
-      hp: Number(document.getElementById('npc-hp').value) || 1,
-      maxHp: Number(document.getElementById('npc-hp').value) || 1,
-      ac: Number(document.getElementById('npc-ac').value) || 0,
-      initiativeModifier: Number(document.getElementById('npc-initiative').value) || 0,
-      pronouns: document.getElementById('token-pronouns').value.trim(),
-      attacks: parseNpcAttacks(document.getElementById('npc-attacks').value),
-      notes: document.getElementById('npc-notes').value.trim()
+  function parseNpcAttacks(text) {
+    return String(text || "").split("\n").map((line) => line.trim()).filter(Boolean).map((line) => {
+      const [name = "", bonus = "", damage = ""] = line.split("|").map((part) => part.trim());
+      return { name, bonus, damage };
+    }).filter((attack) => attack.name);
+  }
+  function npcAttacksText(attacks) {
+    return (attacks || []).map((attack) => [attack.name, attack.bonus, attack.damage].join(" | ")).join("\n");
+  }
+  document.getElementById("add-token-btn").onclick = async () => {
+    const name = document.getElementById("token-name").value.trim();
+    if (!name) return showToast("Give the token a name first.");
+    const kind = document.getElementById("token-kind").value;
+    const file = document.getElementById("token-image").files[0];
+    let imageUrl;
+    if (file) imageUrl = await uploadFile(file);
+    if (editingNpcId) {
+      socket.emit("npc:update", {
+        id: editingNpcId,
+        name,
+        ...imageUrl !== void 0 ? { imageUrl } : {},
+        hp: Number(document.getElementById("npc-hp").value) || 1,
+        maxHp: Number(document.getElementById("npc-hp").value) || 1,
+        ac: Number(document.getElementById("npc-ac").value) || 0,
+        initiativeModifier: Number(document.getElementById("npc-initiative").value) || 0,
+        pronouns: document.getElementById("token-pronouns").value.trim(),
+        attacks: parseNpcAttacks(document.getElementById("npc-attacks").value),
+        notes: document.getElementById("npc-notes").value.trim()
+      });
+      return;
+    }
+    socket.emit("token:add", {
+      label: name,
+      kind,
+      imageUrl: imageUrl || null,
+      hp: kind === "npc" ? Number(document.getElementById("npc-hp").value) || 1 : void 0,
+      maxHp: kind === "npc" ? Number(document.getElementById("npc-hp").value) || 1 : void 0,
+      ac: Number(document.getElementById("npc-ac").value) || 0,
+      initiativeModifier: Number(document.getElementById("npc-initiative").value) || 0,
+      pronouns: kind === "item" ? "" : document.getElementById("token-pronouns").value.trim(),
+      attacks: parseNpcAttacks(document.getElementById("npc-attacks").value),
+      notes: document.getElementById("npc-notes").value.trim()
     });
-    return;
+    resetNpcEditor();
+  };
+  function editNpc(npcId) {
+    const npc = state.npcs?.[npcId];
+    if (!npc) return;
+    editingNpcId = npcId;
+    document.getElementById("token-kind").value = "npc";
+    document.getElementById("token-kind").disabled = true;
+    document.getElementById("token-name").value = npc.name;
+    document.getElementById("npc-hp").value = Number(npc.maxHp) || 1;
+    document.getElementById("npc-ac").value = Number(npc.ac) || 0;
+    document.getElementById("npc-initiative").value = Number(npc.initiativeModifier) || 0;
+    document.getElementById("token-pronouns").value = npc.pronouns || npc.sheet?.pronouns || npc.sheet?.fields?.pronouns || "";
+    document.getElementById("npc-attacks").value = npcAttacksText(npc.attacks);
+    document.getElementById("npc-notes").value = npc.notes || "";
+    document.getElementById("add-token-btn").textContent = "Save NPC changes";
+    document.getElementById("cancel-npc-edit-btn").classList.remove("hidden");
+    updateTokenCreateForm();
+    document.getElementById("token-name").focus();
   }
-
-  socket.emit('token:add', {
-    label: name,
-    kind,
-    imageUrl: imageUrl || null,
-    hp: kind === 'npc' ? Number(document.getElementById('npc-hp').value) || 1 : undefined,
-    maxHp: kind === 'npc' ? Number(document.getElementById('npc-hp').value) || 1 : undefined,
-    ac: Number(document.getElementById('npc-ac').value) || 0,
-    initiativeModifier: Number(document.getElementById('npc-initiative').value) || 0,
-    pronouns: kind === 'item' ? '' : document.getElementById('token-pronouns').value.trim(),
-    attacks: parseNpcAttacks(document.getElementById('npc-attacks').value),
-    notes: document.getElementById('npc-notes').value.trim()
-  });
-  resetNpcEditor();
-};
-
-function editNpc(npcId) {
-  const npc = state.npcs?.[npcId];
-  if (!npc) return;
-  editingNpcId = npcId;
-  document.getElementById('token-kind').value = 'npc';
-  document.getElementById('token-kind').disabled = true;
-  document.getElementById('token-name').value = npc.name;
-  document.getElementById('npc-hp').value = Number(npc.maxHp) || 1;
-  document.getElementById('npc-ac').value = Number(npc.ac) || 0;
-  document.getElementById('npc-initiative').value = Number(npc.initiativeModifier) || 0;
-  document.getElementById('token-pronouns').value = npc.pronouns || npc.sheet?.pronouns || npc.sheet?.fields?.pronouns || '';
-  document.getElementById('npc-attacks').value = npcAttacksText(npc.attacks);
-  document.getElementById('npc-notes').value = npc.notes || '';
-  document.getElementById('add-token-btn').textContent = 'Save NPC changes';
-  document.getElementById('cancel-npc-edit-btn').classList.remove('hidden');
-  updateTokenCreateForm();
-  document.getElementById('token-name').focus();
-}
-
-function resetNpcEditor() {
-  editingNpcId = null;
-  document.getElementById('token-kind').disabled = false;
-  document.getElementById('token-name').value = '';
-  document.getElementById('token-image').value = '';
-  document.getElementById('npc-hp').value = 10;
-  document.getElementById('npc-ac').value = 10;
-  document.getElementById('npc-initiative').value = 0;
-  document.getElementById('token-pronouns').value = '';
-  document.getElementById('npc-attacks').value = '';
-  document.getElementById('npc-notes').value = '';
-  document.getElementById('cancel-npc-edit-btn').classList.add('hidden');
-  updateTokenCreateForm();
-}
-
-function renderTokenTray() {
-  const list = document.getElementById('token-list');
-  list.innerHTML = '';
-  state.tokens.forEach(t => {
-    if (myRole === 'player' && t.visibleToPlayers === false) return;
-    const entry = document.createElement('article');
-    entry.className = 'token-list-entry';
-    const chip = document.createElement('div');
-    chip.className = 'token-chip kind-' + t.kind;
-    if (!t.canControl) chip.classList.add('locked-token');
-    const displayLabel = visibleTokenLabel(t) || `${t.kind} token`;
-    const hoverLabel = tokenHoverText(t);
-    const controlHint = t.canControl
-      ? 'click to nudge on the map'
-      : (t.kind === 'pc' ? 'controlled by another player' : '');
-    chip.title = [hoverLabel, controlHint].filter(Boolean).join(' · ');
-    chip.setAttribute('aria-label', hoverLabel);
-    if (t.visibleToPlayers === false) chip.classList.add('hidden-token');
-    chip.innerHTML = (t.imageUrl ? `<img src="${escapeAttr(t.imageUrl)}" alt="${escapeAttr(displayLabel)}">` : emojiFor(t.kind)) +
-      (t.canControl ? '<span class="del" title="Remove from map">×</span>' : '');
-    const remove = chip.querySelector('.del');
-    if (remove) remove.onclick = (e) => {
+  function resetNpcEditor() {
+    editingNpcId = null;
+    document.getElementById("token-kind").disabled = false;
+    document.getElementById("token-name").value = "";
+    document.getElementById("token-image").value = "";
+    document.getElementById("npc-hp").value = 10;
+    document.getElementById("npc-ac").value = 10;
+    document.getElementById("npc-initiative").value = 0;
+    document.getElementById("token-pronouns").value = "";
+    document.getElementById("npc-attacks").value = "";
+    document.getElementById("npc-notes").value = "";
+    document.getElementById("cancel-npc-edit-btn").classList.add("hidden");
+    updateTokenCreateForm();
+  }
+  function renderTokenTray() {
+    const list = document.getElementById("token-list");
+    list.innerHTML = "";
+    state.tokens.forEach((t) => {
+      if (myRole === "player" && t.visibleToPlayers === false) return;
+      const entry = document.createElement("article");
+      entry.className = "token-list-entry";
+      const chip = document.createElement("div");
+      chip.className = "token-chip kind-" + t.kind;
+      if (!t.canControl) chip.classList.add("locked-token");
+      const displayLabel = visibleTokenLabel(t) || `${t.kind} token`;
+      const hoverLabel = tokenHoverText(t);
+      const controlHint = t.canControl ? "click to nudge on the map" : t.kind === "pc" ? "controlled by another player" : "";
+      chip.title = [hoverLabel, controlHint].filter(Boolean).join(" \xB7 ");
+      chip.setAttribute("aria-label", hoverLabel);
+      if (t.visibleToPlayers === false) chip.classList.add("hidden-token");
+      chip.innerHTML = (t.imageUrl ? `<img src="${escapeAttr(t.imageUrl)}" alt="${escapeAttr(displayLabel)}">` : emojiFor(t.kind)) + (t.canControl ? '<span class="del" title="Remove from map">\xD7</span>' : "");
+      const remove = chip.querySelector(".del");
+      if (remove) remove.onclick = (e) => {
         e.stopPropagation();
-        socket.emit('token:remove', { id: t.id });
+        socket.emit("token:remove", { id: t.id });
       };
-    chip.onclick = () => {
-      if (!t.canControl) return showToast('You can only move your own character token.');
-      socket.emit('token:move', { id: t.id, x: t.x + 10, y: t.y + 10 });
-    };
-    const details = document.createElement('div');
-    details.className = 'token-list-details dm-only';
-    const scalePercent = Math.round((Number(t.sizeScale) || 1) * 100);
-    details.innerHTML = `
-      <div class="token-list-heading"><strong>${escapeHtml(t.label)}</strong><span>${escapeHtml([t.kind, tokenPronouns(t)].filter(Boolean).join(' · '))}</span></div>
+      chip.onclick = () => {
+        if (!t.canControl) return showToast("You can only move your own character token.");
+        socket.emit("token:move", { id: t.id, x: t.x + 10, y: t.y + 10 });
+      };
+      const details = document.createElement("div");
+      details.className = "token-list-details dm-only";
+      const scalePercent = Math.round((Number(t.sizeScale) || 1) * 100);
+      details.innerHTML = `
+      <div class="token-list-heading"><strong>${escapeHtml(t.label)}</strong><span>${escapeHtml([t.kind, tokenPronouns(t)].filter(Boolean).join(" \xB7 "))}</span></div>
       <label class="token-size-control">Size <input type="range" min="35" max="300" step="5" value="${scalePercent}"><output>${scalePercent}%</output></label>
       <div class="token-list-actions">
         <button class="btn-ghost token-reset-size" type="button">Reset size</button>
-        <button class="btn-ghost token-visibility" type="button">${t.visibleToPlayers === false ? 'Show' : 'Hide'}</button>
+        <button class="btn-ghost token-visibility" type="button">${t.visibleToPlayers === false ? "Show" : "Hide"}</button>
         <button class="btn-ghost token-duplicate" type="button">Duplicate</button>
         <button class="btn-danger-soft token-remove" type="button">Remove</button>
       </div>
     `;
-    const sizeInput = details.querySelector('input[type="range"]');
-    const sizeOutput = details.querySelector('output');
-    sizeInput.oninput = () => { sizeOutput.textContent = `${sizeInput.value}%`; };
-    sizeInput.onchange = () => socket.emit('token:update', { id: t.id, sizeScale: Number(sizeInput.value) / 100 });
-    details.querySelector('.token-reset-size').onclick = () => socket.emit('token:update', { id: t.id, sizeScale: 1 });
-    details.querySelector('.token-visibility').onclick = () => socket.emit('token:update', { id: t.id, visibleToPlayers: t.visibleToPlayers === false });
-    details.querySelector('.token-duplicate').onclick = () => socket.emit('token:duplicate', { id: t.id });
-    details.querySelector('.token-remove').onclick = () => socket.emit('token:remove', { id: t.id });
-    entry.append(chip, details);
-    list.appendChild(entry);
-  });
-  renderDmSidebarSummary();
-}
-
-document.getElementById('toggle-dm-sidebar-btn').onclick = () => {
-  const sidebar = document.getElementById('map-sidebar');
-  const expanded = sidebar.classList.toggle('dm-detailed');
-  const button = document.getElementById('toggle-dm-sidebar-btn');
-  button.textContent = expanded ? 'Compact' : 'Details';
-  button.setAttribute('aria-expanded', String(expanded));
-};
-
-// ---- Sidebar accordion state (remembered per-browser) ----
-document.querySelectorAll('.sidebar-accordion').forEach(details => {
-  const key = `humblewood:accordion:${details.id}`;
-  const saved = localStorage.getItem(key);
-  if (saved !== null) details.open = saved === '1';
-  details.addEventListener('toggle', () => {
-    localStorage.setItem(key, details.open ? '1' : '0');
-  });
-});
-
-function renderDmSidebarSummary() {
-  const summary = document.getElementById('dm-sidebar-summary');
-  if (!summary || !state) return;
-  const tokens = state.tokens || [];
-  const counts = { pc: 0, npc: 0, item: 0 };
-  tokens.forEach(token => { if (counts[token.kind] !== undefined) counts[token.kind] += 1; });
-  if (!tokens.length) {
-    summary.textContent = 'No tokens on the map.';
-    return;
+      const sizeInput = details.querySelector('input[type="range"]');
+      const sizeOutput = details.querySelector("output");
+      sizeInput.oninput = () => {
+        sizeOutput.textContent = `${sizeInput.value}%`;
+      };
+      sizeInput.onchange = () => socket.emit("token:update", { id: t.id, sizeScale: Number(sizeInput.value) / 100 });
+      details.querySelector(".token-reset-size").onclick = () => socket.emit("token:update", { id: t.id, sizeScale: 1 });
+      details.querySelector(".token-visibility").onclick = () => socket.emit("token:update", { id: t.id, visibleToPlayers: t.visibleToPlayers === false });
+      details.querySelector(".token-duplicate").onclick = () => socket.emit("token:duplicate", { id: t.id });
+      details.querySelector(".token-remove").onclick = () => socket.emit("token:remove", { id: t.id });
+      entry.append(chip, details);
+      list.appendChild(entry);
+    });
+    renderDmSidebarSummary();
   }
-  const parts = [
-    counts.pc ? `${counts.pc} player${counts.pc === 1 ? '' : 's'}` : '',
-    counts.npc ? `${counts.npc} NPC${counts.npc === 1 ? '' : 's'}` : '',
-    counts.item ? `${counts.item} item${counts.item === 1 ? '' : 's'}` : ''
-  ].filter(Boolean);
-  summary.textContent = parts.join(' · ');
-}
-
-function npcDirectoryDetails(npc) {
-  const fields = npc?.sheet?.fields || {};
-  const sheet = npc?.sheet || {};
-  const race = String(
-    npc?.race || npc?.species || sheet.race || sheet.species || fields.race || fields.species || ''
-  ).trim();
-  const subrace = String(npc?.subrace || sheet.subrace || fields.subrace || '').trim();
-  const className = String(
-    npc?.charClass || npc?.className || sheet.charClass || fields.class || fields.charClass || npc?.spellcasting?.className || ''
-  ).trim();
-  const background = String(fields.background || sheet.background || '').trim();
-  const raceLabel = race || 'Unspecified';
-  const classLabel = className || 'Unspecified';
-  const searchText = [npc?.name, npc?.pronouns, race, subrace, className, background, sheet.challenge, npc?.notes]
-    .filter(Boolean).join(' ').toLowerCase();
-  return {
-    race: raceLabel,
-    raceKey: raceLabel.toLowerCase(),
-    subrace,
-    className: classLabel,
-    classKey: classLabel.toLowerCase(),
-    background,
-    searchText
+  document.getElementById("toggle-dm-sidebar-btn").onclick = () => {
+    const sidebar = document.getElementById("map-sidebar");
+    const expanded = sidebar.classList.toggle("dm-detailed");
+    const button = document.getElementById("toggle-dm-sidebar-btn");
+    button.textContent = expanded ? "Compact" : "Details";
+    button.setAttribute("aria-expanded", String(expanded));
   };
-}
-
-function npcDirectoryMatches(npc) {
-  const details = npcDirectoryDetails(npc);
-  const query = npcSearchQuery.trim().toLowerCase();
-  if (query && !details.searchText.includes(query)) return false;
-  if (npcRaceFilter !== 'all' && details.raceKey !== npcRaceFilter) return false;
-  if (npcClassFilter !== 'all' && details.classKey !== npcClassFilter) return false;
-  return true;
-}
-
-function filteredNpcDirectory(npcs = Object.values(state?.npcs || {})) {
-  return npcs.filter(npcDirectoryMatches);
-}
-
-function npcFilterValues(npcs, property, keyProperty) {
-  const values = new Map();
-  npcs.forEach(npc => {
-    const details = npcDirectoryDetails(npc);
-    const key = details[keyProperty];
-    if (!values.has(key)) values.set(key, details[property]);
+  document.querySelectorAll(".sidebar-accordion").forEach((details) => {
+    const key = `humblewood:accordion:${details.id}`;
+    const saved = localStorage.getItem(key);
+    if (saved !== null) details.open = saved === "1";
+    details.addEventListener("toggle", () => {
+      localStorage.setItem(key, details.open ? "1" : "0");
+    });
   });
-  return [...values.entries()]
-    .map(([key, label]) => ({ key, label }))
-    .sort((a, b) => a.label.localeCompare(b.label));
-}
-
-function refreshNpcViewsAfterFilter(event) {
-  const focusedId = event?.target?.id || '';
-  const selectionStart = typeof event?.target?.selectionStart === 'number' ? event.target.selectionStart : null;
-  renderNpcRoster();
-  renderCharacters();
-  if (!focusedId) return;
-  const focused = document.getElementById(focusedId);
-  if (!focused) return;
-  focused.focus();
-  if (selectionStart !== null && typeof focused.setSelectionRange === 'function') {
-    const position = Math.min(selectionStart, focused.value.length);
-    focused.setSelectionRange(position, position);
+  function renderDmSidebarSummary() {
+    const summary = document.getElementById("dm-sidebar-summary");
+    if (!summary || !state) return;
+    const tokens = state.tokens || [];
+    const counts = { pc: 0, npc: 0, item: 0 };
+    tokens.forEach((token) => {
+      if (counts[token.kind] !== void 0) counts[token.kind] += 1;
+    });
+    if (!tokens.length) {
+      summary.textContent = "No tokens on the map.";
+      return;
+    }
+    const parts = [
+      counts.pc ? `${counts.pc} player${counts.pc === 1 ? "" : "s"}` : "",
+      counts.npc ? `${counts.npc} NPC${counts.npc === 1 ? "" : "s"}` : "",
+      counts.item ? `${counts.item} item${counts.item === 1 ? "" : "s"}` : ""
+    ].filter(Boolean);
+    summary.textContent = parts.join(" \xB7 ");
   }
-}
-
-function renderNpcFilterControls() {
-  if (!state) return;
-  const allNpcs = Object.values(state.npcs || {});
-  const races = npcFilterValues(allNpcs, 'race', 'raceKey');
-  const classes = npcFilterValues(allNpcs, 'className', 'classKey');
-  if (npcRaceFilter !== 'all' && !races.some(value => value.key === npcRaceFilter)) npcRaceFilter = 'all';
-  if (npcClassFilter !== 'all' && !classes.some(value => value.key === npcClassFilter)) npcClassFilter = 'all';
-
-  [
-    { prefix: 'npc-roster', summaryId: null },
-    { prefix: 'npc-directory', summaryId: 'npc-directory-filter-summary' }
-  ].forEach(({ prefix, summaryId }) => {
-    const tools = document.getElementById(`${prefix}-filter-tools`);
-    if (!tools) return;
-    const search = document.getElementById(`${prefix}-search`);
-    const raceFilters = document.getElementById(`${prefix}-race-filters`);
-    const classFilter = document.getElementById(`${prefix}-class-filter`);
-    const clear = document.getElementById(`${prefix}-clear-filters`);
-    if (!search || !raceFilters || !classFilter || !clear) return;
-
-    search.value = npcSearchQuery;
-    search.oninput = event => {
-      npcSearchQuery = event.target.value;
-      refreshNpcViewsAfterFilter(event);
+  function npcDirectoryDetails(npc) {
+    const fields = npc?.sheet?.fields || {};
+    const sheet = npc?.sheet || {};
+    const race = String(
+      npc?.race || npc?.species || sheet.race || sheet.species || fields.race || fields.species || ""
+    ).trim();
+    const subrace = String(npc?.subrace || sheet.subrace || fields.subrace || "").trim();
+    const className = String(
+      npc?.charClass || npc?.className || sheet.charClass || fields.class || fields.charClass || npc?.spellcasting?.className || ""
+    ).trim();
+    const background = String(fields.background || sheet.background || "").trim();
+    const raceLabel = race || "Unspecified";
+    const classLabel = className || "Unspecified";
+    const searchText = [npc?.name, npc?.pronouns, race, subrace, className, background, sheet.challenge, npc?.notes].filter(Boolean).join(" ").toLowerCase();
+    return {
+      race: raceLabel,
+      raceKey: raceLabel.toLowerCase(),
+      subrace,
+      className: classLabel,
+      classKey: classLabel.toLowerCase(),
+      background,
+      searchText
     };
-
-    raceFilters.innerHTML = '';
-    const raceOptions = [{ key: 'all', label: 'All races' }, ...races];
-    raceOptions.forEach(optionValue => {
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.className = 'npc-filter-chip' + (npcRaceFilter === optionValue.key ? ' active' : '');
-      button.dataset.value = optionValue.key;
-      button.textContent = optionValue.label;
-      button.setAttribute('aria-pressed', String(npcRaceFilter === optionValue.key));
-      button.onclick = event => {
-        npcRaceFilter = optionValue.key;
+  }
+  function npcDirectoryMatches(npc) {
+    const details = npcDirectoryDetails(npc);
+    const query = npcSearchQuery.trim().toLowerCase();
+    if (query && !details.searchText.includes(query)) return false;
+    if (npcRaceFilter !== "all" && details.raceKey !== npcRaceFilter) return false;
+    if (npcClassFilter !== "all" && details.classKey !== npcClassFilter) return false;
+    return true;
+  }
+  function filteredNpcDirectory(npcs = Object.values(state?.npcs || {})) {
+    return npcs.filter(npcDirectoryMatches);
+  }
+  function npcFilterValues(npcs, property, keyProperty) {
+    const values = /* @__PURE__ */ new Map();
+    npcs.forEach((npc) => {
+      const details = npcDirectoryDetails(npc);
+      const key = details[keyProperty];
+      if (!values.has(key)) values.set(key, details[property]);
+    });
+    return [...values.entries()].map(([key, label]) => ({ key, label })).sort((a, b) => a.label.localeCompare(b.label));
+  }
+  function refreshNpcViewsAfterFilter(event) {
+    const focusedId = event?.target?.id || "";
+    const selectionStart = typeof event?.target?.selectionStart === "number" ? event.target.selectionStart : null;
+    renderNpcRoster();
+    renderCharacters();
+    if (!focusedId) return;
+    const focused = document.getElementById(focusedId);
+    if (!focused) return;
+    focused.focus();
+    if (selectionStart !== null && typeof focused.setSelectionRange === "function") {
+      const position = Math.min(selectionStart, focused.value.length);
+      focused.setSelectionRange(position, position);
+    }
+  }
+  function renderNpcFilterControls() {
+    if (!state) return;
+    const allNpcs = Object.values(state.npcs || {});
+    const races = npcFilterValues(allNpcs, "race", "raceKey");
+    const classes = npcFilterValues(allNpcs, "className", "classKey");
+    if (npcRaceFilter !== "all" && !races.some((value) => value.key === npcRaceFilter)) npcRaceFilter = "all";
+    if (npcClassFilter !== "all" && !classes.some((value) => value.key === npcClassFilter)) npcClassFilter = "all";
+    [
+      { prefix: "npc-roster", summaryId: null },
+      { prefix: "npc-directory", summaryId: "npc-directory-filter-summary" }
+    ].forEach(({ prefix, summaryId }) => {
+      const tools = document.getElementById(`${prefix}-filter-tools`);
+      if (!tools) return;
+      const search = document.getElementById(`${prefix}-search`);
+      const raceFilters = document.getElementById(`${prefix}-race-filters`);
+      const classFilter = document.getElementById(`${prefix}-class-filter`);
+      const clear = document.getElementById(`${prefix}-clear-filters`);
+      if (!search || !raceFilters || !classFilter || !clear) return;
+      search.value = npcSearchQuery;
+      search.oninput = (event) => {
+        npcSearchQuery = event.target.value;
         refreshNpcViewsAfterFilter(event);
       };
-      raceFilters.appendChild(button);
+      raceFilters.innerHTML = "";
+      const raceOptions = [{ key: "all", label: "All races" }, ...races];
+      raceOptions.forEach((optionValue) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "npc-filter-chip" + (npcRaceFilter === optionValue.key ? " active" : "");
+        button.dataset.value = optionValue.key;
+        button.textContent = optionValue.label;
+        button.setAttribute("aria-pressed", String(npcRaceFilter === optionValue.key));
+        button.onclick = (event) => {
+          npcRaceFilter = optionValue.key;
+          refreshNpcViewsAfterFilter(event);
+        };
+        raceFilters.appendChild(button);
+      });
+      classFilter.innerHTML = "";
+      const allClassesOption = document.createElement("option");
+      allClassesOption.value = "all";
+      allClassesOption.textContent = "All classes";
+      classFilter.appendChild(allClassesOption);
+      classes.forEach((optionValue) => {
+        const option = document.createElement("option");
+        option.value = optionValue.key;
+        option.textContent = optionValue.label;
+        classFilter.appendChild(option);
+      });
+      classFilter.value = npcClassFilter;
+      classFilter.onchange = (event) => {
+        npcClassFilter = event.target.value;
+        refreshNpcViewsAfterFilter(event);
+      };
+      const hasFilters = !!npcSearchQuery.trim() || npcRaceFilter !== "all" || npcClassFilter !== "all";
+      clear.disabled = !hasFilters;
+      clear.onclick = (event) => {
+        npcSearchQuery = "";
+        npcRaceFilter = "all";
+        npcClassFilter = "all";
+        refreshNpcViewsAfterFilter(event);
+      };
+      if (summaryId) {
+        const summary = document.getElementById(summaryId);
+        const visibleCount = filteredNpcDirectory(allNpcs).length;
+        if (summary) summary.textContent = hasFilters ? `Showing ${visibleCount} of ${allNpcs.length} NPCs` : `${allNpcs.length} NPC${allNpcs.length === 1 ? "" : "s"}`;
+      }
     });
-
-    classFilter.innerHTML = '';
-    const allClassesOption = document.createElement('option');
-    allClassesOption.value = 'all';
-    allClassesOption.textContent = 'All classes';
-    classFilter.appendChild(allClassesOption);
-    classes.forEach(optionValue => {
-      const option = document.createElement('option');
-      option.value = optionValue.key;
-      option.textContent = optionValue.label;
-      classFilter.appendChild(option);
-    });
-    classFilter.value = npcClassFilter;
-    classFilter.onchange = event => {
-      npcClassFilter = event.target.value;
-      refreshNpcViewsAfterFilter(event);
-    };
-
-    const hasFilters = !!npcSearchQuery.trim() || npcRaceFilter !== 'all' || npcClassFilter !== 'all';
-    clear.disabled = !hasFilters;
-    clear.onclick = event => {
-      npcSearchQuery = '';
-      npcRaceFilter = 'all';
-      npcClassFilter = 'all';
-      refreshNpcViewsAfterFilter(event);
-    };
-    if (summaryId) {
-      const summary = document.getElementById(summaryId);
-      const visibleCount = filteredNpcDirectory(allNpcs).length;
-      if (summary) summary.textContent = hasFilters ? `Showing ${visibleCount} of ${allNpcs.length} NPCs` : `${allNpcs.length} NPC${allNpcs.length === 1 ? '' : 's'}`;
-    }
-  });
-}
-
-function renderNpcRoster() {
-  const roster = document.getElementById('npc-roster');
-  if (!roster || !state) return;
-  renderNpcFilterControls();
-  roster.innerHTML = '';
-  const allNpcs = Object.values(state.npcs || {});
-  const npcs = filteredNpcDirectory(allNpcs).sort((a, b) => a.name.localeCompare(b.name));
-  if (!npcs.length) {
-    roster.innerHTML = `<p class="player-sidebar-empty">${allNpcs.length ? 'No NPCs match these filters.' : 'No NPCs created yet.'}</p>`;
-    return;
   }
-  npcs.forEach(npc => {
-    const token = state.tokens.find(entry => entry.npcId === npc.id);
-    const details = npcDirectoryDetails(npc);
-    const card = document.createElement('article');
-    card.className = 'npc-roster-card';
-    card.innerHTML = `
+  function renderNpcRoster() {
+    const roster = document.getElementById("npc-roster");
+    if (!roster || !state) return;
+    renderNpcFilterControls();
+    roster.innerHTML = "";
+    const allNpcs = Object.values(state.npcs || {});
+    const npcs = filteredNpcDirectory(allNpcs).sort((a, b) => a.name.localeCompare(b.name));
+    if (!npcs.length) {
+      roster.innerHTML = `<p class="player-sidebar-empty">${allNpcs.length ? "No NPCs match these filters." : "No NPCs created yet."}</p>`;
+      return;
+    }
+    npcs.forEach((npc) => {
+      const token = state.tokens.find((entry) => entry.npcId === npc.id);
+      const details = npcDirectoryDetails(npc);
+      const card = document.createElement("article");
+      card.className = "npc-roster-card";
+      card.innerHTML = `
       <div class="npc-roster-top">
-        <span class="npc-roster-name">${escapeHtml(npc.name)}${npc.pronouns ? ` · ${escapeHtml(npc.pronouns)}` : ''}</span>
-        <span class="npc-map-status ${token ? 'on-map' : ''}">${token ? 'On map' : 'Off map'}</span>
+        <span class="npc-roster-name">${escapeHtml(npc.name)}${npc.pronouns ? ` \xB7 ${escapeHtml(npc.pronouns)}` : ""}</span>
+        <span class="npc-map-status ${token ? "on-map" : ""}">${token ? "On map" : "Off map"}</span>
       </div>
-      <div class="npc-roster-meta">${escapeHtml([details.race, details.className].filter(value => value !== 'Unspecified').join(' · ') || 'No race or class listed')}</div>
-      <div class="npc-roster-stats">HP ${Number(token?.hp ?? npc.hp) || 0}/${Number(npc.maxHp) || 0} · AC ${Number(npc.ac) || 0} · Init ${signed(npc.initiativeModifier)}</div>
+      <div class="npc-roster-meta">${escapeHtml([details.race, details.className].filter((value) => value !== "Unspecified").join(" \xB7 ") || "No race or class listed")}</div>
+      <div class="npc-roster-stats">HP ${Number(token?.hp ?? npc.hp) || 0}/${Number(npc.maxHp) || 0} \xB7 AC ${Number(npc.ac) || 0} \xB7 Init ${signed(npc.initiativeModifier)}</div>
       <div class="npc-roster-actions">
-        <button class="btn-ghost npc-map-btn" type="button">${token ? 'Remove' : 'Place'}</button>
-        <button class="btn-ghost npc-combat-btn" type="button" ${token ? '' : 'disabled'}>⚔ Combat</button>
+        <button class="btn-ghost npc-map-btn" type="button">${token ? "Remove" : "Place"}</button>
+        <button class="btn-ghost npc-combat-btn" type="button" ${token ? "" : "disabled"}>\u2694 Combat</button>
         <button class="btn-ghost npc-edit-btn" type="button">Edit</button>
         <button class="btn-danger-soft npc-delete-btn" type="button">Delete</button>
       </div>
     `;
-    card.querySelector('.npc-map-btn').onclick = () => {
-      if (token) socket.emit('token:remove', { id: token.id });
-      else socket.emit('npc:place', { id: npc.id });
-    };
-    card.querySelector('.npc-combat-btn').onclick = () => token && openNpcCombatManager(token.id);
-    card.querySelector('.npc-edit-btn').onclick = () => editNpc(npc.id);
-    card.querySelector('.npc-delete-btn').onclick = () => {
-      if (confirm(`Permanently delete ${npc.name}? It will also be removed from every saved scene.`)) socket.emit('npc:delete', { id: npc.id });
-    };
-    roster.appendChild(card);
-  });
-}
-
-function renderOnlineUsers() {
-  const list = document.getElementById('dm-online-list');
-  const count = document.getElementById('dm-online-count');
-  if (!list || myRole !== 'dm') return;
-  const users = Array.isArray(onlineUsers) ? onlineUsers : [];
-  if (count) count.textContent = String(users.length);
-  list.innerHTML = '';
-  if (!users.length) {
-    list.innerHTML = '<p class="player-sidebar-empty">No one is currently connected.</p>';
-    return;
+      card.querySelector(".npc-map-btn").onclick = () => {
+        if (token) socket.emit("token:remove", { id: token.id });
+        else socket.emit("npc:place", { id: npc.id });
+      };
+      card.querySelector(".npc-combat-btn").onclick = () => token && openNpcCombatManager(token.id);
+      card.querySelector(".npc-edit-btn").onclick = () => editNpc(npc.id);
+      card.querySelector(".npc-delete-btn").onclick = () => {
+        if (confirm(`Permanently delete ${npc.name}? It will also be removed from every saved scene.`)) socket.emit("npc:delete", { id: npc.id });
+      };
+      roster.appendChild(card);
+    });
   }
-  users.forEach(user => {
-    const row = document.createElement('div');
-    row.className = 'online-user-row';
-    const roleLabel = user.role === 'dm' ? 'Dungeon Master' : 'Player';
-    const connectionNote = Number(user.connections) > 1 ? ` · ${user.connections} tabs` : '';
-    row.innerHTML = `
+  function renderOnlineUsers() {
+    const list = document.getElementById("dm-online-list");
+    const count = document.getElementById("dm-online-count");
+    if (!list || myRole !== "dm") return;
+    const users = Array.isArray(onlineUsers) ? onlineUsers : [];
+    if (count) count.textContent = String(users.length);
+    list.innerHTML = "";
+    if (!users.length) {
+      list.innerHTML = '<p class="player-sidebar-empty">No one is currently connected.</p>';
+      return;
+    }
+    users.forEach((user) => {
+      const row = document.createElement("div");
+      row.className = "online-user-row";
+      const roleLabel = user.role === "dm" ? "Dungeon Master" : "Player";
+      const connectionNote = Number(user.connections) > 1 ? ` \xB7 ${user.connections} tabs` : "";
+      row.innerHTML = `
       <span class="online-user-dot" aria-hidden="true"></span>
       <span class="online-user-copy"><strong>${escapeHtml(user.name)}</strong><small>${roleLabel}${connectionNote}</small></span>
     `;
-    list.appendChild(row);
-  });
-}
-
-function renderPlayerSidebar() {
-  const container = document.getElementById('player-character-summary');
-  if (!container || !state) return;
-  container.innerHTML = '';
-  const characters = Object.values(state.characters || {}).filter(character => character.canManage);
-  if (!characters.length) {
-    container.innerHTML = '<p class="player-sidebar-empty">No character is linked to your account yet. Ask the DM to set your player name or claim your character from the Characters tab.</p>';
-    return;
+      list.appendChild(row);
+    });
   }
-  characters.forEach(character => {
-    const species = character.species || character.race || '';
-    const charClass = character.charClass || character.className || '';
-    const skilled = Object.keys(SKILL_ABILITIES)
-      .filter(skill => character.skills?.[skill]?.proficient || character.fields?.[`skill-${skill}-prof`])
-      .slice(0, 5)
-      .map(skill => `${SKILL_LABELS[skill]} ${signed(characterSkillModifier(character, skill))}`);
-    const card = document.createElement('article');
-    card.className = 'player-sidebar-card';
-    card.innerHTML = `
+  function renderPlayerSidebar() {
+    const container = document.getElementById("player-character-summary");
+    if (!container || !state) return;
+    container.innerHTML = "";
+    const characters = Object.values(state.characters || {}).filter((character) => character.canManage);
+    if (!characters.length) {
+      container.innerHTML = '<p class="player-sidebar-empty">No character is linked to your account yet. Ask the DM to set your player name or claim your character from the Characters tab.</p>';
+      return;
+    }
+    characters.forEach((character) => {
+      const species = character.species || character.race || "";
+      const charClass = character.charClass || character.className || "";
+      const skilled = Object.keys(SKILL_ABILITIES).filter((skill) => character.skills?.[skill]?.proficient || character.fields?.[`skill-${skill}-prof`]).slice(0, 5).map((skill) => `${SKILL_LABELS[skill]} ${signed(characterSkillModifier(character, skill))}`);
+      const card = document.createElement("article");
+      card.className = "player-sidebar-card";
+      card.innerHTML = `
       <div class="player-sidebar-head">
-        <div class="player-sidebar-portrait">${character.portraitUrl ? `<img src="${escapeAttr(character.portraitUrl)}" alt="">` : '🍃'}</div>
-        <div><strong>${escapeHtml(character.name)}</strong><div class="player-sidebar-meta">${escapeHtml([character.pronouns, species, charClass, `Level ${Number(character.level) || 1}`].filter(Boolean).join(' · '))}</div></div>
+        <div class="player-sidebar-portrait">${character.portraitUrl ? `<img src="${escapeAttr(character.portraitUrl)}" alt="">` : "\u{1F343}"}</div>
+        <div><strong>${escapeHtml(character.name)}</strong><div class="player-sidebar-meta">${escapeHtml([character.pronouns, species, charClass, `Level ${Number(character.level) || 1}`].filter(Boolean).join(" \xB7 "))}</div></div>
       </div>
       <div class="player-sidebar-vitals">
         <span>HP ${Number(character.hp) || 0}/${Number(character.maxHp) || 0}</span>
         <span>AC ${Number(character.ac) || 0}</span>
       </div>
-      <div class="player-sidebar-skills"><strong>Best skills:</strong> ${skilled.length ? escapeHtml(skilled.join(' · ')) : 'No proficiencies marked yet'}</div>
+      <div class="player-sidebar-skills"><strong>Best skills:</strong> ${skilled.length ? escapeHtml(skilled.join(" \xB7 ")) : "No proficiencies marked yet"}</div>
       <div class="player-sidebar-actions">
         <button class="btn-ghost open-sheet" type="button">Sheet</button>
-        <button class="btn-ghost open-rolls" type="button">🎲 Roll</button>
-        <button class="btn-ghost open-combat" type="button">⚔ Fight</button>
+        <button class="btn-ghost open-rolls" type="button">\u{1F3B2} Roll</button>
+        <button class="btn-ghost open-combat" type="button">\u2694 Fight</button>
       </div>
     `;
-    card.querySelector('.open-sheet').onclick = () => { switchView('characters'); openSheetEditor(character); };
-    card.querySelector('.open-rolls').onclick = () => openCharacterRoller(character.name);
-    card.querySelector('.open-combat').onclick = () => openCombatManager(character.name);
-    container.appendChild(card);
-  });
-}
-
-// ================= CHARACTERS =================
-function replaceSelectOptions(select, options, placeholder, selected = '') {
-  select.innerHTML = '';
-  const empty = document.createElement('option');
-  empty.value = '';
-  empty.textContent = placeholder;
-  select.appendChild(empty);
-  options.forEach(value => {
-    const option = document.createElement('option');
-    option.value = value;
-    option.textContent = value;
-    select.appendChild(option);
-  });
-  const canonicalSelected = options.find(value => value.toLowerCase() === String(selected || '').trim().toLowerCase()) || '';
-  select.value = canonicalSelected;
-}
-
-function sheetSpeciesOptions() {
-  return characterRules.speciesOptions({ includeNpcOnly: !!editingNpcSheetId });
-}
-
-function updateSpeciesOptions(selected = '') {
-  replaceSelectOptions(
-    document.getElementById('sf-species'),
-    sheetSpeciesOptions(),
-    'Choose a species...',
-    selected
-  );
-}
-
-function updateSubraceOptions(selected = '') {
-  const includeNpcOnly = !!editingNpcSheetId;
-  const species = characterRules.canonicalSpecies(
-    document.getElementById('sf-species').value,
-    { includeNpcOnly }
-  );
-  const select = document.getElementById('sf-subrace');
-  const options = characterRules.subracesFor(species, { includeNpcOnly });
-  const placeholder = !species ? 'Choose a species first...' : options.length ? 'Choose a subrace...' : 'This species has no subrace';
-  replaceSelectOptions(select, options, placeholder, selected);
-  select.disabled = !species || !options.length || !editingCanEdit;
-}
-
-function syncAutomaticSpeciesTraits(force = false) {
-  const field = document.getElementById('sf-racial-traits');
-  if (!field) return;
-  const current = field.value || '';
-  const hasAutomaticBlock = current.includes(characterRules.AUTO_SPECIES_TRAITS_START);
-  // An older sheet may contain hand-written race notes. Preserve those on
-  // open; if the player actively changes a choice, append the marked automatic
-  // block alongside their notes instead of replacing anything.
-  if (!force && current.trim() && !hasAutomaticBlock) return;
-  const automatic = characterRules.automaticSpeciesTraitText(
-    document.getElementById('sf-species').value,
-    document.getElementById('sf-subrace').value
-  );
-  field.value = characterRules.mergeAutomaticSpeciesTraits(current, automatic);
-}
-
-function syncAutomaticClassFeatures(force = false) {
-  const field = document.getElementById('sf-features');
-  if (!field) return;
-  const current = field.value || '';
-  const hasAutomaticBlock = current.includes(characterRules.AUTO_CLASS_FEATURES_START);
-  // Preserve feature notes from older sheets until the player actively
-  // changes class, subclass, or level. Generated content is isolated inside
-  // its own block so future updates never replace hand-written choices.
-  if (!force && current.trim() && !hasAutomaticBlock) return;
-  const automatic = characterRules.automaticClassFeatureText(
-    document.getElementById('sf-class').value,
-    document.getElementById('sf-subclass').value,
-    document.getElementById('sf-level').value
-  );
-  field.value = characterRules.mergeAutomaticClassFeatures(current, automatic);
-}
-
-function updateSubclassOptions(selected = '') {
-  const className = characterRules.canonicalClass(document.getElementById('sf-class').value);
-  const select = document.getElementById('sf-subclass');
-  const options = characterRules.subclassesFor(className);
-  replaceSelectOptions(select, options, className ? 'Choose a subclass...' : 'Choose a class first...', selected);
-  select.disabled = !className || !options.length || !editingCanEdit;
-}
-
-function setCharacterRuleSelections(fields = {}) {
-  updateSpeciesOptions(fields.species);
-  updateSubraceOptions(fields.subrace);
-  syncAutomaticSpeciesTraits();
-  document.getElementById('sf-class').value = characterRules.canonicalClass(fields.class) || '';
-  updateSubclassOptions(fields.subclass);
-  syncAutomaticClassFeatures();
-}
-
-function initializeCharacterRuleControls() {
-  updateSpeciesOptions();
-  replaceSelectOptions(document.getElementById('sf-class'), Object.keys(characterRules.CLASS_SUBCLASSES), 'Choose a class...');
-  updateSubraceOptions();
-  updateSubclassOptions();
-  document.getElementById('sf-species').addEventListener('change', () => {
+      card.querySelector(".open-sheet").onclick = () => {
+        switchView("characters");
+        openSheetEditor(character);
+      };
+      card.querySelector(".open-rolls").onclick = () => openCharacterRoller(character.name);
+      card.querySelector(".open-combat").onclick = () => openCombatManager(character.name);
+      container.appendChild(card);
+    });
+  }
+  function replaceSelectOptions(select, options, placeholder, selected = "") {
+    select.innerHTML = "";
+    const empty = document.createElement("option");
+    empty.value = "";
+    empty.textContent = placeholder;
+    select.appendChild(empty);
+    options.forEach((value) => {
+      const option = document.createElement("option");
+      option.value = value;
+      option.textContent = value;
+      select.appendChild(option);
+    });
+    const canonicalSelected = options.find((value) => value.toLowerCase() === String(selected || "").trim().toLowerCase()) || "";
+    select.value = canonicalSelected;
+  }
+  function sheetSpeciesOptions() {
+    return characterRules.speciesOptions({ includeNpcOnly: !!editingNpcSheetId });
+  }
+  function updateSpeciesOptions(selected = "") {
+    replaceSelectOptions(
+      document.getElementById("sf-species"),
+      sheetSpeciesOptions(),
+      "Choose a species...",
+      selected
+    );
+  }
+  function updateSubraceOptions(selected = "") {
+    const includeNpcOnly = !!editingNpcSheetId;
+    const species = characterRules.canonicalSpecies(
+      document.getElementById("sf-species").value,
+      { includeNpcOnly }
+    );
+    const select = document.getElementById("sf-subrace");
+    const options = characterRules.subracesFor(species, { includeNpcOnly });
+    const placeholder = !species ? "Choose a species first..." : options.length ? "Choose a subrace..." : "This species has no subrace";
+    replaceSelectOptions(select, options, placeholder, selected);
+    select.disabled = !species || !options.length || !editingCanEdit;
+  }
+  function syncAutomaticSpeciesTraits(force = false) {
+    const field = document.getElementById("sf-racial-traits");
+    if (!field) return;
+    const current = field.value || "";
+    const hasAutomaticBlock = current.includes(characterRules.AUTO_SPECIES_TRAITS_START);
+    if (!force && current.trim() && !hasAutomaticBlock) return;
+    const automatic = characterRules.automaticSpeciesTraitText(
+      document.getElementById("sf-species").value,
+      document.getElementById("sf-subrace").value
+    );
+    field.value = characterRules.mergeAutomaticSpeciesTraits(current, automatic);
+  }
+  function syncAutomaticClassFeatures(force = false) {
+    const field = document.getElementById("sf-features");
+    if (!field) return;
+    const current = field.value || "";
+    const hasAutomaticBlock = current.includes(characterRules.AUTO_CLASS_FEATURES_START);
+    if (!force && current.trim() && !hasAutomaticBlock) return;
+    const automatic = characterRules.automaticClassFeatureText(
+      document.getElementById("sf-class").value,
+      document.getElementById("sf-subclass").value,
+      document.getElementById("sf-level").value
+    );
+    field.value = characterRules.mergeAutomaticClassFeatures(current, automatic);
+  }
+  function updateSubclassOptions(selected = "") {
+    const className = characterRules.canonicalClass(document.getElementById("sf-class").value);
+    const select = document.getElementById("sf-subclass");
+    const options = characterRules.subclassesFor(className);
+    replaceSelectOptions(select, options, className ? "Choose a subclass..." : "Choose a class first...", selected);
+    select.disabled = !className || !options.length || !editingCanEdit;
+  }
+  function setCharacterRuleSelections(fields = {}) {
+    updateSpeciesOptions(fields.species);
+    updateSubraceOptions(fields.subrace);
+    syncAutomaticSpeciesTraits();
+    document.getElementById("sf-class").value = characterRules.canonicalClass(fields.class) || "";
+    updateSubclassOptions(fields.subclass);
+    syncAutomaticClassFeatures();
+  }
+  function initializeCharacterRuleControls() {
+    updateSpeciesOptions();
+    replaceSelectOptions(document.getElementById("sf-class"), Object.keys(characterRules.CLASS_SUBCLASSES), "Choose a class...");
     updateSubraceOptions();
-    syncAutomaticSpeciesTraits(true);
-    applyRecommendedArmorMethod();
-  });
-  document.getElementById('sf-subrace').addEventListener('change', () => {
-    syncAutomaticSpeciesTraits(true);
-  });
-  document.getElementById('sf-class').addEventListener('change', () => {
     updateSubclassOptions();
-    syncAutomaticClassFeatures(true);
-    applyClassDefaults();
-    renderSpellListEditor();
-  });
-  document.getElementById('sf-subclass').addEventListener('change', () => {
-    syncAutomaticClassFeatures(true);
+    document.getElementById("sf-species").addEventListener("change", () => {
+      updateSubraceOptions();
+      syncAutomaticSpeciesTraits(true);
+      applyRecommendedArmorMethod();
+    });
+    document.getElementById("sf-subrace").addEventListener("change", () => {
+      syncAutomaticSpeciesTraits(true);
+    });
+    document.getElementById("sf-class").addEventListener("change", () => {
+      updateSubclassOptions();
+      syncAutomaticClassFeatures(true);
+      applyClassDefaults();
+      renderSpellListEditor();
+    });
+    document.getElementById("sf-subclass").addEventListener("change", () => {
+      syncAutomaticClassFeatures(true);
+      applySpellcastingDefaults();
+      updateSpellSlotsForLevel();
+      refreshCharacterCalculations(false, true);
+      renderSpellListEditor();
+    });
+  }
+  function applyRecommendedArmorMethod() {
+    if (acMethodManuallySelected) return refreshArmorClass();
+    const method = characterRules.defaultArmorMethod(
+      document.getElementById("sf-species").value,
+      document.getElementById("sf-class").value
+    );
+    document.getElementById("sf-ac-method").value = method;
+    refreshArmorClass();
+  }
+  function applyClassDefaults() {
+    const className = characterRules.canonicalClass(document.getElementById("sf-class").value);
+    if (!className) return;
+    const level = Math.max(1, Math.min(20, Number(document.getElementById("sf-level").value) || 1));
+    const hitDie = characterRules.hitDieFor(className);
+    document.getElementById("sf-hitdice").value = `${level}d${hitDie}`;
+    document.getElementById("sf-hitdice-left").value = level;
+    const savingThrows = new Set(characterRules.classSavingThrows(className));
+    ABILITIES.forEach((ability) => {
+      document.getElementById(`sf-save-${ability}-prof`).checked = savingThrows.has(ability);
+    });
+    if (!editingOriginalName && level === 1) {
+      const maximum = Math.max(1, hitDie + characterRules.abilityModifier(document.getElementById("sf-con").value));
+      document.getElementById("sf-maxhp").value = maximum;
+      document.getElementById("sf-hp").value = maximum;
+    }
     applySpellcastingDefaults();
     updateSpellSlotsForLevel();
-    refreshCharacterCalculations(false, true);
-    renderSpellListEditor();
-  });
-}
-
-function applyRecommendedArmorMethod() {
-  if (acMethodManuallySelected) return refreshArmorClass();
-  const method = characterRules.defaultArmorMethod(
-    document.getElementById('sf-species').value,
-    document.getElementById('sf-class').value
-  );
-  document.getElementById('sf-ac-method').value = method;
-  refreshArmorClass();
-}
-
-function applyClassDefaults() {
-  const className = characterRules.canonicalClass(document.getElementById('sf-class').value);
-  if (!className) return;
-  const level = Math.max(1, Math.min(20, Number(document.getElementById('sf-level').value) || 1));
-  const hitDie = characterRules.hitDieFor(className);
-  document.getElementById('sf-hitdice').value = `${level}d${hitDie}`;
-  document.getElementById('sf-hitdice-left').value = level;
-
-  const savingThrows = new Set(characterRules.classSavingThrows(className));
-  ABILITIES.forEach(ability => {
-    document.getElementById(`sf-save-${ability}-prof`).checked = savingThrows.has(ability);
-  });
-
-  if (!editingOriginalName && level === 1) {
-    const maximum = Math.max(1, hitDie + characterRules.abilityModifier(document.getElementById('sf-con').value));
-    document.getElementById('sf-maxhp').value = maximum;
-    document.getElementById('sf-hp').value = maximum;
+    applyRecommendedArmorMethod();
+    refreshCharacterCalculations(true, true);
   }
-  applySpellcastingDefaults();
-  updateSpellSlotsForLevel();
-  applyRecommendedArmorMethod();
-  refreshCharacterCalculations(true, true);
-}
-
-function refreshNewCharacterHitPoints() {
-  if (editingOriginalName || editingBaseLevel !== 1 || Number(document.getElementById('sf-level').value) !== 1) return;
-  const className = characterRules.canonicalClass(document.getElementById('sf-class').value);
-  if (!className) return;
-  const maximum = Math.max(
-    1,
-    characterRules.hitDieFor(className) + characterRules.abilityModifier(document.getElementById('sf-con').value)
-  );
-  document.getElementById('sf-maxhp').value = maximum;
-  document.getElementById('sf-hp').value = maximum;
-}
-
-function applySpellcastingDefaults() {
-  const className = characterRules.canonicalClass(document.getElementById('sf-class').value);
-  const subclass = document.getElementById('sf-subclass').value;
-  const ability = characterRules.spellcastingAbilityFor(className, subclass);
-  if (!ability) return;
-  document.getElementById('sf-spell-class').value = className;
-  document.getElementById('sf-spell-ability').value = ability.toUpperCase();
-}
-
-function initializeFeatPresetControls() {
-  const select = document.getElementById('feat-preset-select');
-  HUMBLEWOOD_FEAT_PRESETS.forEach(feat => {
-    const option = document.createElement('option');
-    option.value = feat.title;
-    const prerequisite = feat.facts?.find(([label]) => label === 'Prerequisite')?.[1];
-    option.textContent = prerequisite ? `${feat.title} · requires ${prerequisite}` : feat.title;
-    select.appendChild(option);
-  });
-  document.getElementById('feat-preset-add').addEventListener('click', addFeatPresetToSheet);
-}
-
-function addFeatPresetToSheet() {
-  const select = document.getElementById('feat-preset-select');
-  const feat = HUMBLEWOOD_FEAT_PRESETS.find(entry => entry.title === select.value);
-  if (!feat) return showToast('Choose a Humblewood feat first.');
-  const prerequisite = feat.facts?.find(([label]) => label === 'Prerequisite')?.[1] || '';
-  const species = characterRules.canonicalSpecies(document.getElementById('sf-species').value);
-  if (/glide trait/i.test(prerequisite) && !/\(birdfolk\)$/i.test(species)) {
-    return showToast(`${feat.title} requires the Glide trait. Choose a birdfolk species first.`);
+  function refreshNewCharacterHitPoints() {
+    if (editingOriginalName || editingBaseLevel !== 1 || Number(document.getElementById("sf-level").value) !== 1) return;
+    const className = characterRules.canonicalClass(document.getElementById("sf-class").value);
+    if (!className) return;
+    const maximum = Math.max(
+      1,
+      characterRules.hitDieFor(className) + characterRules.abilityModifier(document.getElementById("sf-con").value)
+    );
+    document.getElementById("sf-maxhp").value = maximum;
+    document.getElementById("sf-hp").value = maximum;
   }
-
-  const textarea = document.getElementById('sf-feats');
-  if (new RegExp(`(^|\\n)${feat.title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(\\n|$)`, 'i').test(textarea.value.trim())) {
-    return showToast(`${feat.title} is already on this character.`);
+  function applySpellcastingDefaults() {
+    const className = characterRules.canonicalClass(document.getElementById("sf-class").value);
+    const subclass = document.getElementById("sf-subclass").value;
+    const ability = characterRules.spellcastingAbilityFor(className, subclass);
+    if (!ability) return;
+    document.getElementById("sf-spell-class").value = className;
+    document.getElementById("sf-spell-ability").value = ability.toUpperCase();
   }
-
-  const details = [];
-  (feat.facts || []).forEach(([label, value]) => details.push(`${label}: ${value}`));
-  (feat.sections || []).forEach(section => {
-    if (section.text) details.push(`${section.heading}: ${section.text}`);
-    (section.items || []).forEach(item => details.push(`• ${item}`));
-  });
-  const block = [feat.title, ...details].join('\n');
-  textarea.value = [textarea.value.trim(), block].filter(Boolean).join('\n\n');
-  select.value = '';
-  textarea.focus();
-  showToast(`${feat.title} added.`);
-}
-
-function renderCharacters() {
-  const grid = document.getElementById('char-grid');
-  grid.innerHTML = '';
-  renderNpcFilterControls();
-  const characters = Object.values(state.characters || {}).sort((a, b) => a.name.localeCompare(b.name));
-  if (!characters.length) grid.innerHTML = '<p class="empty-character-grid">No player characters yet.</p>';
-  characters.forEach(c => {
-    const card = document.createElement('div');
-    card.className = 'char-card';
-    const canEdit = canEditCharacter(c);
-    const mapToken = state.tokens.find(token => token.characterName === c.name);
-    const combat = c.combat || {};
-    const conditionSummary = [
-      ...(combat.conditions || []),
-      combat.concentration ? 'Concentrating' : '',
-      combat.exhaustion ? `Exhaustion ${combat.exhaustion}` : ''
-    ].filter(Boolean);
-    const species = c.species || c.race || '';
-    const charClass = c.charClass || c.className || '';
-    card.innerHTML = `
+  function initializeFeatPresetControls() {
+    const select = document.getElementById("feat-preset-select");
+    HUMBLEWOOD_FEAT_PRESETS.forEach((feat) => {
+      const option = document.createElement("option");
+      option.value = feat.title;
+      const prerequisite = feat.facts?.find(([label]) => label === "Prerequisite")?.[1];
+      option.textContent = prerequisite ? `${feat.title} \xB7 requires ${prerequisite}` : feat.title;
+      select.appendChild(option);
+    });
+    document.getElementById("feat-preset-add").addEventListener("click", addFeatPresetToSheet);
+  }
+  function addFeatPresetToSheet() {
+    const select = document.getElementById("feat-preset-select");
+    const feat = HUMBLEWOOD_FEAT_PRESETS.find((entry) => entry.title === select.value);
+    if (!feat) return showToast("Choose a Humblewood feat first.");
+    const prerequisite = feat.facts?.find(([label]) => label === "Prerequisite")?.[1] || "";
+    const species = characterRules.canonicalSpecies(document.getElementById("sf-species").value);
+    if (/glide trait/i.test(prerequisite) && !/\(birdfolk\)$/i.test(species)) {
+      return showToast(`${feat.title} requires the Glide trait. Choose a birdfolk species first.`);
+    }
+    const textarea = document.getElementById("sf-feats");
+    if (new RegExp(`(^|\\n)${feat.title.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(\\n|$)`, "i").test(textarea.value.trim())) {
+      return showToast(`${feat.title} is already on this character.`);
+    }
+    const details = [];
+    (feat.facts || []).forEach(([label, value]) => details.push(`${label}: ${value}`));
+    (feat.sections || []).forEach((section) => {
+      if (section.text) details.push(`${section.heading}: ${section.text}`);
+      (section.items || []).forEach((item) => details.push(`\u2022 ${item}`));
+    });
+    const block = [feat.title, ...details].join("\n");
+    textarea.value = [textarea.value.trim(), block].filter(Boolean).join("\n\n");
+    select.value = "";
+    textarea.focus();
+    showToast(`${feat.title} added.`);
+  }
+  function renderCharacters() {
+    const grid = document.getElementById("char-grid");
+    grid.innerHTML = "";
+    renderNpcFilterControls();
+    const characters = Object.values(state.characters || {}).sort((a, b) => a.name.localeCompare(b.name));
+    if (!characters.length) grid.innerHTML = '<p class="empty-character-grid">No player characters yet.</p>';
+    characters.forEach((c) => {
+      const card = document.createElement("div");
+      card.className = "char-card";
+      const canEdit = canEditCharacter(c);
+      const mapToken = state.tokens.find((token) => token.characterName === c.name);
+      const combat = c.combat || {};
+      const conditionSummary = [
+        ...combat.conditions || [],
+        combat.concentration ? "Concentrating" : "",
+        combat.exhaustion ? `Exhaustion ${combat.exhaustion}` : ""
+      ].filter(Boolean);
+      const species = c.species || c.race || "";
+      const charClass = c.charClass || c.className || "";
+      card.innerHTML = `
       <div class="card-top">
-        <div class="card-portrait">${c.portraitUrl ? `<img src="${escapeAttr(c.portraitUrl)}" alt="">` : '🍃'}</div>
-        <div><h3>${escapeHtml(c.name)}</h3><div class="meta">${escapeHtml([c.pronouns, species, charClass, `Level ${Number(c.level) || 1}`].filter(Boolean).join(' · '))}</div></div>
-        ${canEdit ? '' : '<span class="locked-badge">View only</span>'}
+        <div class="card-portrait">${c.portraitUrl ? `<img src="${escapeAttr(c.portraitUrl)}" alt="">` : "\u{1F343}"}</div>
+        <div><h3>${escapeHtml(c.name)}</h3><div class="meta">${escapeHtml([c.pronouns, species, charClass, `Level ${Number(c.level) || 1}`].filter(Boolean).join(" \xB7 "))}</div></div>
+        ${canEdit ? "" : '<span class="locked-badge">View only</span>'}
       </div>
       <div class="stat-row">
         <span class="stat-pill">HP ${Number(c.hp) || 0}/${Number(c.maxHp) || 0}</span>
-        ${Number(c.tempHp) ? `<span class="stat-pill temp-hp-pill">+${Number(c.tempHp)} temp</span>` : ''}
+        ${Number(c.tempHp) ? `<span class="stat-pill temp-hp-pill">+${Number(c.tempHp)} temp</span>` : ""}
         <span class="stat-pill">AC ${Number(c.ac) || 0}</span>
         <span class="stat-pill">Init ${signed(characterInitiativeModifier(c))}</span>
       </div>
-      ${conditionSummary.length ? `<div class="character-condition-summary">${conditionSummary.map(item => `<span>${escapeHtml(item)}</span>`).join('')}</div>` : ''}
+      ${conditionSummary.length ? `<div class="character-condition-summary">${conditionSummary.map((item) => `<span>${escapeHtml(item)}</span>`).join("")}</div>` : ""}
       <div class="char-card-actions">
-        <button type="button" class="btn-ghost view-character-btn">${canEdit ? 'Open sheet' : 'View sheet'}</button>
-        ${canEdit ? '<button type="button" class="btn-rose roll-character-btn">🎲 Roll</button>' : ''}
-        ${myRole === 'dm' ? '<button type="button" class="btn-ghost initiative-character-btn">🎲 Initiative</button>' : ''}
-        ${canEdit ? '<button type="button" class="btn-ghost combat-character-btn">⚔ Combat</button>' : ''}
-        ${canEdit ? `<button type="button" class="btn-ghost map-character-btn">${mapToken ? 'Remove from map' : 'Put on map'}</button>` : ''}
-        ${myRole === 'player' && canEdit && !c.claimed ? '<button type="button" class="btn-ghost claim-character-btn">Claim character</button>' : ''}
-        ${myRole === 'dm' && c.claimed ? '<button type="button" class="btn-ghost release-character-btn">Release owner</button>' : ''}
+        <button type="button" class="btn-ghost view-character-btn">${canEdit ? "Open sheet" : "View sheet"}</button>
+        ${canEdit ? '<button type="button" class="btn-rose roll-character-btn">\u{1F3B2} Roll</button>' : ""}
+        ${myRole === "dm" ? '<button type="button" class="btn-ghost initiative-character-btn">\u{1F3B2} Initiative</button>' : ""}
+        ${canEdit ? '<button type="button" class="btn-ghost combat-character-btn">\u2694 Combat</button>' : ""}
+        ${canEdit ? `<button type="button" class="btn-ghost map-character-btn">${mapToken ? "Remove from map" : "Put on map"}</button>` : ""}
+        ${myRole === "player" && canEdit && !c.claimed ? '<button type="button" class="btn-ghost claim-character-btn">Claim character</button>' : ""}
+        ${myRole === "dm" && c.claimed ? '<button type="button" class="btn-ghost release-character-btn">Release owner</button>' : ""}
       </div>
     `;
-    card.querySelector('.view-character-btn').onclick = () => openSheetEditor(c);
-    card.querySelector('.roll-character-btn')?.addEventListener('click', () => openCharacterRoller(c.name));
-    card.querySelector('.initiative-character-btn')?.addEventListener('click', () => rollCharacterInitiative(c, 'normal'));
-    card.querySelector('.combat-character-btn')?.addEventListener('click', () => openCombatManager(c.name));
-    card.querySelector('.map-character-btn')?.addEventListener('click', () => {
-      if (mapToken) socket.emit('token:remove', { id: mapToken.id });
-      else socket.emit('token:add', { characterName: c.name });
+      card.querySelector(".view-character-btn").onclick = () => openSheetEditor(c);
+      card.querySelector(".roll-character-btn")?.addEventListener("click", () => openCharacterRoller(c.name));
+      card.querySelector(".initiative-character-btn")?.addEventListener("click", () => rollCharacterInitiative(c, "normal"));
+      card.querySelector(".combat-character-btn")?.addEventListener("click", () => openCombatManager(c.name));
+      card.querySelector(".map-character-btn")?.addEventListener("click", () => {
+        if (mapToken) socket.emit("token:remove", { id: mapToken.id });
+        else socket.emit("token:add", { characterName: c.name });
+      });
+      card.querySelector(".claim-character-btn")?.addEventListener("click", () => socket.emit("character:claim", { name: c.name }));
+      card.querySelector(".release-character-btn")?.addEventListener("click", () => {
+        if (confirm(`Release ${c.name} so their named player can claim them again?`)) socket.emit("character:ownership:release", { name: c.name });
+      });
+      grid.appendChild(card);
     });
-    card.querySelector('.claim-character-btn')?.addEventListener('click', () => socket.emit('character:claim', { name: c.name }));
-    card.querySelector('.release-character-btn')?.addEventListener('click', () => {
-      if (confirm(`Release ${c.name} so their named player can claim them again?`)) socket.emit('character:ownership:release', { name: c.name });
-    });
-    grid.appendChild(card);
-  });
-
-  const npcGrid = document.getElementById('npc-sheet-grid');
-  if (!npcGrid) return;
-  npcGrid.innerHTML = '';
-  const allNpcs = Object.values(state.npcs || {});
-  const npcs = filteredNpcDirectory(allNpcs).sort((a, b) => a.name.localeCompare(b.name));
-  if (!npcs.length) {
-    npcGrid.innerHTML = `<p class="empty-character-grid">${allNpcs.length ? 'No NPCs match these filters.' : 'No NPCs yet. Create one from a preset or paste a stat block.'}</p>`;
-    return;
-  }
-  npcs.forEach(npc => {
-    const token = state.tokens.find(entry => entry.npcId === npc.id);
-    const fields = npc.sheet?.fields || {};
-    const descriptor = fields.background || (npc.sheet ? 'Full NPC sheet' : 'Quick NPC');
-    const challenge = npc.sheet?.challenge ? ` · CR ${npc.sheet.challenge}` : '';
-    const details = npcDirectoryDetails(npc);
-    const card = document.createElement('div');
-    card.className = 'char-card npc-sheet-card';
-    card.innerHTML = `
+    const npcGrid = document.getElementById("npc-sheet-grid");
+    if (!npcGrid) return;
+    npcGrid.innerHTML = "";
+    const allNpcs = Object.values(state.npcs || {});
+    const npcs = filteredNpcDirectory(allNpcs).sort((a, b) => a.name.localeCompare(b.name));
+    if (!npcs.length) {
+      npcGrid.innerHTML = `<p class="empty-character-grid">${allNpcs.length ? "No NPCs match these filters." : "No NPCs yet. Create one from a preset or paste a stat block."}</p>`;
+      return;
+    }
+    npcs.forEach((npc) => {
+      const token = state.tokens.find((entry) => entry.npcId === npc.id);
+      const fields = npc.sheet?.fields || {};
+      const descriptor = fields.background || (npc.sheet ? "Full NPC sheet" : "Quick NPC");
+      const challenge = npc.sheet?.challenge ? ` \xB7 CR ${npc.sheet.challenge}` : "";
+      const details = npcDirectoryDetails(npc);
+      const card = document.createElement("div");
+      card.className = "char-card npc-sheet-card";
+      card.innerHTML = `
       <div class="card-top">
-        <div class="card-portrait">${npc.imageUrl ? `<img src="${escapeAttr(npc.imageUrl)}" alt="">` : '🦊'}</div>
-        <div><h3>${escapeHtml(npc.name)}</h3><div class="meta">${escapeHtml([npc.pronouns, details.race !== 'Unspecified' ? details.race : '', details.className !== 'Unspecified' ? details.className : '', descriptor].filter(Boolean).join(' · '))}${escapeHtml(challenge)}</div></div>
+        <div class="card-portrait">${npc.imageUrl ? `<img src="${escapeAttr(npc.imageUrl)}" alt="">` : "\u{1F98A}"}</div>
+        <div><h3>${escapeHtml(npc.name)}</h3><div class="meta">${escapeHtml([npc.pronouns, details.race !== "Unspecified" ? details.race : "", details.className !== "Unspecified" ? details.className : "", descriptor].filter(Boolean).join(" \xB7 "))}${escapeHtml(challenge)}</div></div>
         <span class="npc-sheet-badge">NPC</span>
       </div>
       <div class="stat-row">
         <span class="stat-pill">HP ${Number(token?.hp ?? npc.hp) || 0}/${Number(npc.maxHp) || 0}</span>
-        ${Number(token?.tempHp ?? npc.tempHp) ? `<span class="stat-pill temp-hp-pill">+${Number(token?.tempHp ?? npc.tempHp)} temp</span>` : ''}
+        ${Number(token?.tempHp ?? npc.tempHp) ? `<span class="stat-pill temp-hp-pill">+${Number(token?.tempHp ?? npc.tempHp)} temp</span>` : ""}
         <span class="stat-pill">AC ${Number(npc.ac) || 0}</span>
         <span class="stat-pill">Init ${signed(npc.initiativeModifier)}</span>
       </div>
       <div class="char-card-actions">
-        <button type="button" class="btn-ghost npc-sheet-open-btn">${npc.sheet ? 'Open full sheet' : 'Expand to full sheet'}</button>
-        <button type="button" class="btn-rose npc-sheet-combat-btn" ${token ? '' : 'disabled'}>⚔ Combat</button>
-        <button type="button" class="btn-ghost npc-sheet-initiative-btn" ${token ? '' : 'disabled'}>🎲 Initiative</button>
-        <button type="button" class="btn-ghost npc-sheet-map-btn">${token ? 'Remove from map' : 'Put on map'}</button>
+        <button type="button" class="btn-ghost npc-sheet-open-btn">${npc.sheet ? "Open full sheet" : "Expand to full sheet"}</button>
+        <button type="button" class="btn-rose npc-sheet-combat-btn" ${token ? "" : "disabled"}>\u2694 Combat</button>
+        <button type="button" class="btn-ghost npc-sheet-initiative-btn" ${token ? "" : "disabled"}>\u{1F3B2} Initiative</button>
+        <button type="button" class="btn-ghost npc-sheet-map-btn">${token ? "Remove from map" : "Put on map"}</button>
         <button type="button" class="btn-danger-soft npc-sheet-delete-btn">Delete</button>
       </div>
     `;
-    card.querySelector('.npc-sheet-open-btn').onclick = () => openSheetEditor(npc, { npc: true });
-    card.querySelector('.npc-sheet-combat-btn').onclick = () => token && openNpcCombatManager(token.id);
-    card.querySelector('.npc-sheet-initiative-btn').onclick = () => token && rollNpcInitiative(token, 'normal');
-    card.querySelector('.npc-sheet-map-btn').onclick = () => {
-      if (token) socket.emit('token:remove', { id: token.id });
-      else socket.emit('npc:place', { id: npc.id });
-    };
-    card.querySelector('.npc-sheet-delete-btn').onclick = () => {
-      if (confirm(`Permanently delete ${npc.name}? It will also be removed from every saved scene.`)) socket.emit('npc:delete', { id: npc.id });
-    };
-    npcGrid.appendChild(card);
-  });
-}
-
-document.getElementById('new-sheet-btn').onclick = () => openSheetEditor(null, { npc: false });
-document.getElementById('new-npc-sheet-btn').onclick = () => openSheetEditor(null, { npc: true });
-document.getElementById('close-sheet-btn').onclick = () => {
-  closeLevelUpDialog(false);
-  editingNpcSheetId = null;
-  document.getElementById('sheet-editor').classList.add('hidden');
-};
-
-function openSheetEditor(c, options = {}) {
-  const isNpc = !!options.npc;
-  const form = document.getElementById('sheet-form');
-  form.reset();
-  closeLevelUpDialog(false);
-  document.getElementById('sheet-editor').classList.remove('hidden');
-  document.getElementById('sheet-editor-title').textContent = c
-    ? `Edit ${c.name}${isNpc ? ' · NPC' : ''}`
-    : (isNpc ? 'New NPC stat block' : 'New character');
-  editingNpcSheetId = isNpc ? (c?.id || '__new__') : null;
-  editingOriginalName = !isNpc && c ? c.name : null;
-  editingCanEdit = isNpc ? myRole === 'dm' : canEditCharacter(c);
-  pendingPortraitFile = null;
-  editingPortraitUrl = (isNpc ? c?.imageUrl : c?.portraitUrl) || null;
-  const fields = {
-    ...(isNpc ? (c?.sheet?.fields || legacyNpcFields(c)) : (c?.fields || legacyCharacterFields(c)))
-  };
-  if (!Object.prototype.hasOwnProperty.call(fields, 'pronouns')) {
-    fields.pronouns = isNpc
-      ? (c?.pronouns || c?.sheet?.pronouns || '')
-      : (c?.pronouns || '');
+      card.querySelector(".npc-sheet-open-btn").onclick = () => openSheetEditor(npc, { npc: true });
+      card.querySelector(".npc-sheet-combat-btn").onclick = () => token && openNpcCombatManager(token.id);
+      card.querySelector(".npc-sheet-initiative-btn").onclick = () => token && rollNpcInitiative(token, "normal");
+      card.querySelector(".npc-sheet-map-btn").onclick = () => {
+        if (token) socket.emit("token:remove", { id: token.id });
+        else socket.emit("npc:place", { id: npc.id });
+      };
+      card.querySelector(".npc-sheet-delete-btn").onclick = () => {
+        if (confirm(`Permanently delete ${npc.name}? It will also be removed from every saved scene.`)) socket.emit("npc:delete", { id: npc.id });
+      };
+      npcGrid.appendChild(card);
+    });
   }
-  editingBaseLevel = Math.max(1, Math.min(20, Number(fields.level ?? c?.level) || 1));
-  acMethodManuallySelected = !!c || !!fields['ac-method'];
-  initiativeManuallyEdited = !!c && fields.initiative !== '' && fields.initiative !== undefined;
-  document.getElementById('npc-sheet-tools').classList.toggle('hidden', !isNpc);
-  document.getElementById('level-up-btn').classList.toggle('hidden', isNpc);
-  document.getElementById('save-sheet-btn').textContent = isNpc ? 'Save NPC' : 'Save character';
-  form.dataset.npcChallenge = isNpc ? (c?.sheet?.challenge || '') : '';
-  document.getElementById('npc-statblock-import').value = '';
-  document.getElementById('npc-sheet-preset').value = '';
-  ABILITIES.forEach(ability => { document.getElementById(`sf-${ability}`).max = isNpc ? '30' : '20'; });
-  form.querySelectorAll('[id^="sf-"]').forEach(input => {
-    if (input.type === 'file') return;
-    const key = input.id.slice(3);
-    if (!Object.prototype.hasOwnProperty.call(fields, key)) return;
-    if (input.type === 'checkbox') input.checked = !!fields[key];
-    else input.value = fields[key] ?? '';
-  });
-  setCharacterRuleSelections(fields);
-  if (!c && !fields['ac-method']) applyRecommendedArmorMethod();
-  editingInventory = normalizeInventory(isNpc ? c?.sheet?.inventory : c?.inventory);
-  inventoryExpandedContainers = new Set(editingInventory.filter(item => item.isContainer).map(item => item.id));
-  renderInventoryEditor();
-  editingAttacks = normalizeAttackList(isNpc ? (c?.sheet?.attacks || c?.attacks) : c?.attacks);
-  editingAttackId = null;
-  document.getElementById('attack-add-form').classList.add('hidden');
-  renderAttackEditor();
-  editingSpells = normalizeSpellList(fields['spell-list'] || (isNpc ? c?.spells : null));
-  if (isNpc && !editingSpells.length) editingSpells = normalizeSpellList(c?.spells);
-  if (!editingSpells.length) editingSpells = migrateLegacySpellText(fields);
-  editingSpellId = null;
-  document.getElementById('spell-add-form').classList.add('hidden');
-  renderSpellListEditor();
-  renderPortraitPreview(editingPortraitUrl);
-  refreshCharacterCalculations(!c, !c && !isNpc);
-  setSheetEditable(editingCanEdit, !!c);
-  document.getElementById('view-characters').scrollIntoView({ behavior: 'smooth' });
-}
-
-function legacyCharacterFields(c) {
-  if (!c) return {};
-  const fields = {
-    name: c.name || '', pronouns: c.pronouns || '', species: c.species || c.race || '', class: c.charClass || '', level: c.level ?? 1,
-    hp: c.hp ?? 10, maxhp: c.maxHp ?? 10, ac: c.ac ?? 10, speed: c.speed || '30 ft', notes: c.notes || ''
+  document.getElementById("new-sheet-btn").onclick = () => openSheetEditor(null, { npc: false });
+  document.getElementById("new-npc-sheet-btn").onclick = () => openSheetEditor(null, { npc: true });
+  document.getElementById("close-sheet-btn").onclick = () => {
+    closeLevelUpDialog(false);
+    editingNpcSheetId = null;
+    document.getElementById("sheet-editor").classList.add("hidden");
   };
-  ABILITIES.forEach(ability => { fields[ability] = c.abilities?.[ability] ?? 10; });
-  return fields;
-}
-
-function legacyNpcFields(npc) {
-  if (!npc) return {};
-  const fields = {
-    name: npc.name || '', pronouns: npc.pronouns || '', level: '1', hp: npc.hp ?? npc.maxHp ?? 10, maxhp: npc.maxHp ?? 10,
-    temphp: npc.tempHp ?? 0, ac: npc.ac ?? 10, initiative: npc.initiativeModifier ?? 0,
-    speed: '30 ft.', 'ac-method': 'manual', 'ac-base': npc.ac ?? 10,
-    'attacks-notes': npc.notes || '', notes: npc.notes || ''
-  };
-  ABILITIES.forEach(ability => { fields[ability] = npc.sheet?.abilities?.[ability] ?? 10; });
-  return fields;
-}
-
-function canEditCharacter(c) {
-  return !c || !!c.canManage;
-}
-
-function setSheetEditable(canEdit, hasCharacter) {
-  document.querySelectorAll('#sheet-form input, #sheet-form select, #sheet-form textarea, #sheet-form button').forEach(control => {
-    control.disabled = !canEdit;
-  });
-  document.getElementById('save-sheet-btn').classList.toggle('hidden', !canEdit);
-  document.getElementById('delete-sheet-btn').classList.toggle('hidden', !canEdit || !hasCharacter);
-  const ownerNote = document.getElementById('sheet-owner-note');
-  ownerNote.textContent = canEdit ? '' : 'Only this character’s owner or the Dungeon Master can edit it.';
-  updateSubraceOptions(document.getElementById('sf-subrace').value);
-  updateSubclassOptions(document.getElementById('sf-subclass').value);
-}
-
-function normalizeInventory(inventory) {
-  const source = Array.isArray(inventory)
-    ? inventory
-    : typeof inventory === 'string' && inventory.trim()
-      ? inventory.split(/\n|,/).map(name => ({ name, qty: 1 }))
-      : [];
-  const seen = new Set();
-  const items = source.map((item, index) => {
-    if (!item || typeof item !== 'object') return null;
-    let id = String(item.id || `item-${Date.now()}-${index}`);
-    if (!id || seen.has(id)) id = `item-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 7)}`;
-    seen.add(id);
-    const quantity = item.qty === 0 ? 0 : Number(item.qty);
-    const name = String(item.name || '').trim();
-    return {
-      id,
+  function openSheetEditor(c, options = {}) {
+    const isNpc = !!options.npc;
+    const form = document.getElementById("sheet-form");
+    form.reset();
+    closeLevelUpDialog(false);
+    document.getElementById("sheet-editor").classList.remove("hidden");
+    document.getElementById("sheet-editor-title").textContent = c ? `Edit ${c.name}${isNpc ? " \xB7 NPC" : ""}` : isNpc ? "New NPC stat block" : "New character";
+    editingNpcSheetId = isNpc ? c?.id || "__new__" : null;
+    editingOriginalName = !isNpc && c ? c.name : null;
+    editingCanEdit = isNpc ? myRole === "dm" : canEditCharacter(c);
+    pendingPortraitFile = null;
+    editingPortraitUrl = (isNpc ? c?.imageUrl : c?.portraitUrl) || null;
+    const fields = {
+      ...isNpc ? c?.sheet?.fields || legacyNpcFields(c) : c?.fields || legacyCharacterFields(c)
+    };
+    if (!Object.prototype.hasOwnProperty.call(fields, "pronouns")) {
+      fields.pronouns = isNpc ? c?.pronouns || c?.sheet?.pronouns || "" : c?.pronouns || "";
+    }
+    editingBaseLevel = Math.max(1, Math.min(20, Number(fields.level ?? c?.level) || 1));
+    acMethodManuallySelected = !!c || !!fields["ac-method"];
+    initiativeManuallyEdited = !!c && fields.initiative !== "" && fields.initiative !== void 0;
+    document.getElementById("npc-sheet-tools").classList.toggle("hidden", !isNpc);
+    document.getElementById("level-up-btn").classList.toggle("hidden", isNpc);
+    document.getElementById("save-sheet-btn").textContent = isNpc ? "Save NPC" : "Save character";
+    form.dataset.npcChallenge = isNpc ? c?.sheet?.challenge || "" : "";
+    document.getElementById("npc-statblock-import").value = "";
+    document.getElementById("npc-sheet-preset").value = "";
+    ABILITIES.forEach((ability) => {
+      document.getElementById(`sf-${ability}`).max = isNpc ? "30" : "20";
+    });
+    form.querySelectorAll('[id^="sf-"]').forEach((input) => {
+      if (input.type === "file") return;
+      const key = input.id.slice(3);
+      if (!Object.prototype.hasOwnProperty.call(fields, key)) return;
+      if (input.type === "checkbox") input.checked = !!fields[key];
+      else input.value = fields[key] ?? "";
+    });
+    setCharacterRuleSelections(fields);
+    if (!c && !fields["ac-method"]) applyRecommendedArmorMethod();
+    editingInventory = normalizeInventory(isNpc ? c?.sheet?.inventory : c?.inventory);
+    inventoryExpandedContainers = new Set(editingInventory.filter((item) => item.isContainer).map((item) => item.id));
+    renderInventoryEditor();
+    editingAttacks = normalizeAttackList(isNpc ? c?.sheet?.attacks || c?.attacks : c?.attacks);
+    editingAttackId = null;
+    document.getElementById("attack-add-form").classList.add("hidden");
+    renderAttackEditor();
+    editingSpells = normalizeSpellList(fields["spell-list"] || (isNpc ? c?.spells : null));
+    if (isNpc && !editingSpells.length) editingSpells = normalizeSpellList(c?.spells);
+    if (!editingSpells.length) editingSpells = migrateLegacySpellText(fields);
+    editingSpellId = null;
+    document.getElementById("spell-add-form").classList.add("hidden");
+    renderSpellListEditor();
+    renderPortraitPreview(editingPortraitUrl);
+    refreshCharacterCalculations(!c, !c && !isNpc);
+    setSheetEditable(editingCanEdit, !!c);
+    document.getElementById("view-characters").scrollIntoView({ behavior: "smooth" });
+  }
+  function legacyCharacterFields(c) {
+    if (!c) return {};
+    const fields = {
+      name: c.name || "",
+      pronouns: c.pronouns || "",
+      species: c.species || c.race || "",
+      class: c.charClass || "",
+      level: c.level ?? 1,
+      hp: c.hp ?? 10,
+      maxhp: c.maxHp ?? 10,
+      ac: c.ac ?? 10,
+      speed: c.speed || "30 ft",
+      notes: c.notes || ""
+    };
+    ABILITIES.forEach((ability) => {
+      fields[ability] = c.abilities?.[ability] ?? 10;
+    });
+    return fields;
+  }
+  function legacyNpcFields(npc) {
+    if (!npc) return {};
+    const fields = {
+      name: npc.name || "",
+      pronouns: npc.pronouns || "",
+      level: "1",
+      hp: npc.hp ?? npc.maxHp ?? 10,
+      maxhp: npc.maxHp ?? 10,
+      temphp: npc.tempHp ?? 0,
+      ac: npc.ac ?? 10,
+      initiative: npc.initiativeModifier ?? 0,
+      speed: "30 ft.",
+      "ac-method": "manual",
+      "ac-base": npc.ac ?? 10,
+      "attacks-notes": npc.notes || "",
+      notes: npc.notes || ""
+    };
+    ABILITIES.forEach((ability) => {
+      fields[ability] = npc.sheet?.abilities?.[ability] ?? 10;
+    });
+    return fields;
+  }
+  function canEditCharacter(c) {
+    return !c || !!c.canManage;
+  }
+  function setSheetEditable(canEdit, hasCharacter) {
+    document.querySelectorAll("#sheet-form input, #sheet-form select, #sheet-form textarea, #sheet-form button").forEach((control) => {
+      control.disabled = !canEdit;
+    });
+    document.getElementById("save-sheet-btn").classList.toggle("hidden", !canEdit);
+    document.getElementById("delete-sheet-btn").classList.toggle("hidden", !canEdit || !hasCharacter);
+    const ownerNote = document.getElementById("sheet-owner-note");
+    ownerNote.textContent = canEdit ? "" : "Only this character\u2019s owner or the Dungeon Master can edit it.";
+    updateSubraceOptions(document.getElementById("sf-subrace").value);
+    updateSubclassOptions(document.getElementById("sf-subclass").value);
+  }
+  function normalizeInventory(inventory) {
+    const source = Array.isArray(inventory) ? inventory : typeof inventory === "string" && inventory.trim() ? inventory.split(/\n|,/).map((name) => ({ name, qty: 1 })) : [];
+    const seen = /* @__PURE__ */ new Set();
+    const items = source.map((item, index) => {
+      if (!item || typeof item !== "object") return null;
+      let id = String(item.id || `item-${Date.now()}-${index}`);
+      if (!id || seen.has(id)) id = `item-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 7)}`;
+      seen.add(id);
+      const quantity = item.qty === 0 ? 0 : Number(item.qty);
+      const name = String(item.name || "").trim();
+      return {
+        id,
+        name,
+        qty: Math.max(0, Math.min(9999, Number.isFinite(quantity) ? quantity : 1)),
+        location: item.location === "carried" ? "carried" : "backpack",
+        isContainer: !!(item.isContainer ?? item.container) || /(?:backpack|bag|pouch|chest|satchel|quiver|case|pack)$/i.test(name),
+        containerId: String(item.containerId || "").trim() || null
+      };
+    }).filter((item) => item && item.name);
+    const byId = new Map(items.map((item) => [item.id, item]));
+    items.forEach((item) => {
+      if (!item.containerId || item.containerId === item.id) {
+        item.containerId = null;
+        return;
+      }
+      const visited = /* @__PURE__ */ new Set([item.id]);
+      let parent = byId.get(item.containerId);
+      while (parent) {
+        if (visited.has(parent.id) || !parent.isContainer) {
+          item.containerId = null;
+          break;
+        }
+        visited.add(parent.id);
+        parent = parent.containerId ? byId.get(parent.containerId) : null;
+      }
+      if (item.containerId && !byId.has(item.containerId)) item.containerId = null;
+    });
+    return items;
+  }
+  function inventoryChildren(itemId) {
+    return editingInventory.filter((item) => item.containerId === itemId);
+  }
+  function inventoryIsInSubtree(itemId, rootId) {
+    if (!itemId || !rootId || itemId === rootId) return itemId === rootId;
+    const visited = /* @__PURE__ */ new Set();
+    let current = editingInventory.find((item) => item.id === itemId);
+    while (current?.containerId && !visited.has(current.id)) {
+      visited.add(current.id);
+      if (current.containerId === rootId) return true;
+      current = editingInventory.find((item) => item.id === current.containerId);
+    }
+    return false;
+  }
+  function inventorySubtree(itemId) {
+    return editingInventory.filter((item) => item.id === itemId || inventoryIsInSubtree(item.id, itemId));
+  }
+  function clearInventoryDropIndicators() {
+    document.querySelectorAll(".inventory-item.inventory-drop-before, .inventory-item.inventory-drop-after, .inventory-item.inventory-drop-inside, .inventory-group.inventory-drop-group").forEach((element) => {
+      element.classList.remove("inventory-drop-before", "inventory-drop-after", "inventory-drop-inside", "inventory-drop-group");
+      delete element.dataset.dropMode;
+    });
+  }
+  function inventoryDragId(event) {
+    return event.dataTransfer?.getData("text/plain") || inventoryDraggingId;
+  }
+  function inventoryCanDropOn(sourceId, targetId) {
+    return !!sourceId && !!targetId && sourceId !== targetId && !inventoryIsInSubtree(targetId, sourceId);
+  }
+  function inventoryMoveSubtree(sourceId, mode, target = null, location2 = null) {
+    const source = editingInventory.find((item) => item.id === sourceId);
+    if (!source || !editingCanEdit) return false;
+    if (target && !inventoryCanDropOn(sourceId, target.id)) return false;
+    const targetLocation = target ? inventoryEffectiveLocation(target) : location2 === "carried" ? "carried" : "backpack";
+    const moving = inventorySubtree(sourceId);
+    const movingIds = new Set(moving.map((item) => item.id));
+    const remaining = editingInventory.filter((item) => !movingIds.has(item.id));
+    source.containerId = mode === "inside" ? target.id : target?.containerId || null;
+    source.location = source.containerId ? targetLocation : target ? target.location : targetLocation;
+    let insertAt = remaining.length;
+    if (target) {
+      const targetIndex = remaining.findIndex((item) => item.id === target.id);
+      if (targetIndex < 0) return false;
+      if (mode === "inside") {
+        let lastDescendant = targetIndex;
+        for (let index = targetIndex + 1; index < remaining.length; index += 1) {
+          if (inventoryIsInSubtree(remaining[index].id, target.id)) lastDescendant = index;
+        }
+        insertAt = lastDescendant + 1;
+      } else {
+        insertAt = targetIndex + (mode === "after" ? 1 : 0);
+      }
+    } else {
+      let lastRootEnd = -1;
+      remaining.forEach((item, index) => {
+        if (!item.containerId && item.location === targetLocation) {
+          lastRootEnd = index;
+          for (let descendantIndex = index + 1; descendantIndex < remaining.length; descendantIndex += 1) {
+            if (inventoryIsInSubtree(remaining[descendantIndex].id, item.id)) lastRootEnd = descendantIndex;
+          }
+        }
+      });
+      insertAt = lastRootEnd >= 0 ? lastRootEnd + 1 : remaining.length;
+    }
+    remaining.splice(insertAt, 0, ...moving);
+    editingInventory = remaining;
+    if (mode === "inside") inventoryExpandedContainers.add(target.id);
+    clearInventoryDropIndicators();
+    renderInventoryEditor();
+    return true;
+  }
+  function inventoryDropMode(event, item) {
+    const rect = item.getBoundingClientRect();
+    const ratio = rect.height ? (event.clientY - rect.top) / rect.height : 0.5;
+    if (item.dataset.isContainer === "true" && ratio > 0.25 && ratio < 0.75) return "inside";
+    return ratio < 0.5 ? "before" : "after";
+  }
+  function inventoryEffectiveLocation(item) {
+    let current = item;
+    const visited = /* @__PURE__ */ new Set();
+    while (current?.containerId && !visited.has(current.id)) {
+      visited.add(current.id);
+      const parent = editingInventory.find((candidate) => candidate.id === current.containerId);
+      if (!parent) break;
+      current = parent;
+    }
+    return current?.location === "carried" ? "carried" : "backpack";
+  }
+  function renderInventoryContainerOptions() {
+    const select = document.getElementById("inv-item-container");
+    if (!select) return;
+    const selected = select.value;
+    select.innerHTML = '<option value="">No container</option>';
+    editingInventory.filter((item) => item.isContainer).forEach((item) => {
+      const option = document.createElement("option");
+      option.value = item.id;
+      option.textContent = `Inside ${item.name}`;
+      select.appendChild(option);
+    });
+    select.value = editingInventory.some((item) => item.id === selected && item.isContainer) ? selected : "";
+  }
+  function removeInventoryItem(item) {
+    const parent = item.containerId ? editingInventory.find((candidate) => candidate.id === item.containerId) : null;
+    editingInventory = editingInventory.filter((entry) => entry.id !== item.id).map((entry) => entry.containerId === item.id ? { ...entry, containerId: parent?.id || null, location: parent ? inventoryEffectiveLocation(parent) : item.location } : entry);
+    inventoryExpandedContainers.delete(item.id);
+    renderInventoryContainerOptions();
+    renderInventoryEditor();
+  }
+  function moveInventoryItem(item) {
+    const effectiveLocation = inventoryEffectiveLocation(item);
+    if (item.containerId) {
+      item.containerId = null;
+      item.location = effectiveLocation === "carried" ? "backpack" : "carried";
+    } else {
+      item.location = item.location === "carried" ? "backpack" : "carried";
+    }
+    renderInventoryEditor();
+  }
+  function renderInventoryItem(item) {
+    const children = inventoryChildren(item.id);
+    const row = document.createElement("div");
+    row.className = "inventory-item";
+    row.dataset.itemId = item.id;
+    row.dataset.isContainer = item.isContainer ? "true" : "false";
+    row.draggable = !!editingCanEdit;
+    if (editingCanEdit) {
+      row.addEventListener("dragstart", (event) => {
+        inventoryDraggingId = item.id;
+        event.dataTransfer?.setData("text/plain", item.id);
+        if (event.dataTransfer) event.dataTransfer.effectAllowed = "move";
+        row.classList.add("inventory-dragging");
+      });
+      row.addEventListener("dragend", () => {
+        inventoryDraggingId = "";
+        row.classList.remove("inventory-dragging");
+        clearInventoryDropIndicators();
+      });
+      row.addEventListener("dragover", (event) => {
+        const sourceId = inventoryDragId(event);
+        if (!inventoryCanDropOn(sourceId, item.id)) return;
+        event.preventDefault();
+        if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
+        clearInventoryDropIndicators();
+        const mode = inventoryDropMode(event, row);
+        row.dataset.dropMode = mode;
+        row.classList.add(mode === "inside" ? "inventory-drop-inside" : mode === "before" ? "inventory-drop-before" : "inventory-drop-after");
+      });
+      row.addEventListener("dragleave", (event) => {
+        if (!row.contains(event.relatedTarget)) {
+          row.classList.remove("inventory-drop-before", "inventory-drop-after", "inventory-drop-inside");
+          delete row.dataset.dropMode;
+        }
+      });
+      row.addEventListener("drop", (event) => {
+        const sourceId = inventoryDragId(event);
+        if (!inventoryCanDropOn(sourceId, item.id)) return;
+        event.preventDefault();
+        const mode = row.dataset.dropMode || inventoryDropMode(event, row);
+        inventoryMoveSubtree(sourceId, mode, item);
+      });
+    }
+    const summary = document.createElement("div");
+    summary.className = "inventory-item-summary";
+    const toggle = document.createElement("button");
+    toggle.type = "button";
+    toggle.className = "inventory-item-toggle";
+    toggle.setAttribute("aria-label", children.length ? `Toggle contents of ${item.name}` : "No contents");
+    toggle.textContent = children.length ? inventoryExpandedContainers.has(item.id) ? "\u25BE" : "\u25B8" : "\xB7";
+    toggle.disabled = !children.length;
+    toggle.onclick = () => {
+      if (inventoryExpandedContainers.has(item.id)) inventoryExpandedContainers.delete(item.id);
+      else inventoryExpandedContainers.add(item.id);
+      renderInventoryEditor();
+    };
+    const main = document.createElement("div");
+    main.className = "inventory-item-main";
+    const name = document.createElement("div");
+    name.className = "inventory-item-name";
+    name.textContent = item.name;
+    if (item.isContainer) {
+      const badge = document.createElement("span");
+      badge.className = "inventory-container-badge";
+      badge.textContent = "container";
+      name.appendChild(badge);
+    }
+    const meta = document.createElement("div");
+    meta.className = "inventory-item-meta";
+    meta.textContent = item.containerId ? `Inside ${editingInventory.find((parent) => parent.id === item.containerId)?.name || "container"}` : item.location === "carried" ? "Carried / on character" : "Backpack";
+    main.append(name, meta);
+    summary.append(toggle, main);
+    const controls = document.createElement("div");
+    controls.className = "inventory-item-controls";
+    const decrease = document.createElement("button");
+    decrease.type = "button";
+    decrease.textContent = "\u2212";
+    decrease.title = "Use one";
+    decrease.disabled = !editingCanEdit || item.qty <= 0;
+    decrease.onclick = () => {
+      item.qty = Math.max(0, item.qty - 1);
+      renderInventoryEditor();
+    };
+    const quantity = document.createElement("span");
+    quantity.className = "qty";
+    quantity.textContent = `\xD7${item.qty}`;
+    const increase = document.createElement("button");
+    increase.type = "button";
+    increase.textContent = "+";
+    increase.title = "Add one";
+    increase.disabled = !editingCanEdit || item.qty >= 9999;
+    increase.onclick = () => {
+      item.qty = Math.min(9999, item.qty + 1);
+      renderInventoryEditor();
+    };
+    const move = document.createElement("button");
+    move.type = "button";
+    move.textContent = "\u2194";
+    move.title = item.containerId ? "Take out of container" : "Move between carried and backpack";
+    move.disabled = !editingCanEdit;
+    move.onclick = () => moveInventoryItem(item);
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "del";
+    remove.textContent = "\xD7";
+    remove.title = "Remove item";
+    remove.disabled = !editingCanEdit;
+    remove.onclick = () => removeInventoryItem(item);
+    controls.append(decrease, quantity, increase, move, remove);
+    row.append(summary, controls);
+    const wrapper = document.createDocumentFragment();
+    wrapper.appendChild(row);
+    if (children.length && inventoryExpandedContainers.has(item.id)) {
+      const childList = document.createElement("div");
+      childList.className = "inventory-item-children";
+      children.forEach((child) => childList.appendChild(renderInventoryItem(child)));
+      wrapper.appendChild(childList);
+    }
+    return wrapper;
+  }
+  function renderInventoryEditor() {
+    const list = document.getElementById("inventory-list");
+    if (!list) return;
+    list.innerHTML = "";
+    renderInventoryContainerOptions();
+    ["carried", "backpack"].forEach((location2) => {
+      const group = document.createElement("section");
+      group.className = "inventory-group";
+      group.dataset.location = location2;
+      if (editingCanEdit) {
+        group.addEventListener("dragover", (event) => {
+          if (event.target.closest(".inventory-item")) return;
+          const sourceId = inventoryDragId(event);
+          if (!sourceId || !editingInventory.some((item) => item.id === sourceId)) return;
+          event.preventDefault();
+          if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
+          clearInventoryDropIndicators();
+          group.dataset.dropMode = "group";
+          group.classList.add("inventory-drop-group");
+        });
+        group.addEventListener("dragleave", (event) => {
+          if (!group.contains(event.relatedTarget)) {
+            group.classList.remove("inventory-drop-group");
+            delete group.dataset.dropMode;
+          }
+        });
+        group.addEventListener("drop", (event) => {
+          if (event.target.closest(".inventory-item")) return;
+          const sourceId = inventoryDragId(event);
+          if (!sourceId || !editingInventory.some((item) => item.id === sourceId)) return;
+          event.preventDefault();
+          inventoryMoveSubtree(sourceId, "group", null, location2);
+        });
+      }
+      const heading = document.createElement("h4");
+      heading.className = "inventory-group-title";
+      heading.textContent = location2 === "carried" ? "Carried / on character" : "Backpack";
+      group.appendChild(heading);
+      const roots = editingInventory.filter((item) => !item.containerId && item.location === location2);
+      if (!roots.length) {
+        const empty = document.createElement("p");
+        empty.className = "inventory-group-empty";
+        empty.textContent = location2 === "carried" ? "Nothing carried or held." : "Nothing in the backpack.";
+        group.appendChild(empty);
+      } else roots.forEach((item) => group.appendChild(renderInventoryItem(item)));
+      list.appendChild(group);
+    });
+  }
+  document.getElementById("inv-add-btn").onclick = () => {
+    const nameInput = document.getElementById("inv-item-name");
+    const qtyInput = document.getElementById("inv-item-qty");
+    const locationInput = document.getElementById("inv-item-location");
+    const containerInput = document.getElementById("inv-item-container");
+    const containerFlag = document.getElementById("inv-item-is-container");
+    const name = nameInput.value.trim();
+    if (!name) return;
+    const parent = editingInventory.find((item2) => item2.id === containerInput.value && item2.isContainer);
+    const quantity = Number(qtyInput.value);
+    const location2 = parent ? inventoryEffectiveLocation(parent) : locationInput.value === "carried" ? "carried" : "backpack";
+    const item = {
+      id: `item-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       name,
       qty: Math.max(0, Math.min(9999, Number.isFinite(quantity) ? quantity : 1)),
-      location: item.location === 'carried' ? 'carried' : 'backpack',
-      isContainer: !!(item.isContainer ?? item.container) || /(?:backpack|bag|pouch|chest|satchel|quiver|case|pack)$/i.test(name),
-      containerId: String(item.containerId || '').trim() || null
+      location: location2,
+      isContainer: !!containerFlag.checked,
+      containerId: parent?.id || null
     };
-  }).filter(item => item && item.name);
-  const byId = new Map(items.map(item => [item.id, item]));
-  items.forEach(item => {
-    if (!item.containerId || item.containerId === item.id) {
-      item.containerId = null;
-      return;
-    }
-    const visited = new Set([item.id]);
-    let parent = byId.get(item.containerId);
-    while (parent) {
-      if (visited.has(parent.id) || !parent.isContainer) {
-        item.containerId = null;
-        break;
-      }
-      visited.add(parent.id);
-      parent = parent.containerId ? byId.get(parent.containerId) : null;
-    }
-    if (item.containerId && !byId.has(item.containerId)) item.containerId = null;
-  });
-  return items;
-}
-
-function inventoryChildren(itemId) {
-  return editingInventory.filter(item => item.containerId === itemId);
-}
-
-function inventoryIsInSubtree(itemId, rootId) {
-  if (!itemId || !rootId || itemId === rootId) return itemId === rootId;
-  const visited = new Set();
-  let current = editingInventory.find(item => item.id === itemId);
-  while (current?.containerId && !visited.has(current.id)) {
-    visited.add(current.id);
-    if (current.containerId === rootId) return true;
-    current = editingInventory.find(item => item.id === current.containerId);
-  }
-  return false;
-}
-
-function inventorySubtree(itemId) {
-  return editingInventory.filter(item => item.id === itemId || inventoryIsInSubtree(item.id, itemId));
-}
-
-function clearInventoryDropIndicators() {
-  document.querySelectorAll('.inventory-item.inventory-drop-before, .inventory-item.inventory-drop-after, .inventory-item.inventory-drop-inside, .inventory-group.inventory-drop-group').forEach(element => {
-    element.classList.remove('inventory-drop-before', 'inventory-drop-after', 'inventory-drop-inside', 'inventory-drop-group');
-    delete element.dataset.dropMode;
-  });
-}
-
-function inventoryDragId(event) {
-  return event.dataTransfer?.getData('text/plain') || inventoryDraggingId;
-}
-
-function inventoryCanDropOn(sourceId, targetId) {
-  return !!sourceId && !!targetId && sourceId !== targetId && !inventoryIsInSubtree(targetId, sourceId);
-}
-
-function inventoryMoveSubtree(sourceId, mode, target = null, location = null) {
-  const source = editingInventory.find(item => item.id === sourceId);
-  if (!source || !editingCanEdit) return false;
-  if (target && !inventoryCanDropOn(sourceId, target.id)) return false;
-
-  const targetLocation = target ? inventoryEffectiveLocation(target) : (location === 'carried' ? 'carried' : 'backpack');
-  const moving = inventorySubtree(sourceId);
-  const movingIds = new Set(moving.map(item => item.id));
-  const remaining = editingInventory.filter(item => !movingIds.has(item.id));
-
-  source.containerId = mode === 'inside' ? target.id : (target?.containerId || null);
-  source.location = source.containerId ? targetLocation : (target ? target.location : targetLocation);
-
-  let insertAt = remaining.length;
-  if (target) {
-    const targetIndex = remaining.findIndex(item => item.id === target.id);
-    if (targetIndex < 0) return false;
-    if (mode === 'inside') {
-      let lastDescendant = targetIndex;
-      for (let index = targetIndex + 1; index < remaining.length; index += 1) {
-        if (inventoryIsInSubtree(remaining[index].id, target.id)) lastDescendant = index;
-      }
-      insertAt = lastDescendant + 1;
-    } else {
-      insertAt = targetIndex + (mode === 'after' ? 1 : 0);
-    }
-  } else {
-    // A drop on a group appends after the last root (and its descendants) in that group.
-    let lastRootEnd = -1;
-    remaining.forEach((item, index) => {
-      if (!item.containerId && item.location === targetLocation) {
-        lastRootEnd = index;
-        for (let descendantIndex = index + 1; descendantIndex < remaining.length; descendantIndex += 1) {
-          if (inventoryIsInSubtree(remaining[descendantIndex].id, item.id)) lastRootEnd = descendantIndex;
-        }
-      }
-    });
-    insertAt = lastRootEnd >= 0 ? lastRootEnd + 1 : remaining.length;
-  }
-
-  remaining.splice(insertAt, 0, ...moving);
-  editingInventory = remaining;
-  if (mode === 'inside') inventoryExpandedContainers.add(target.id);
-  clearInventoryDropIndicators();
-  renderInventoryEditor();
-  return true;
-}
-
-function inventoryDropMode(event, item) {
-  const rect = item.getBoundingClientRect();
-  const ratio = rect.height ? (event.clientY - rect.top) / rect.height : 0.5;
-  if (item.dataset.isContainer === 'true' && ratio > 0.25 && ratio < 0.75) return 'inside';
-  return ratio < 0.5 ? 'before' : 'after';
-}
-
-function inventoryEffectiveLocation(item) {
-  let current = item;
-  const visited = new Set();
-  while (current?.containerId && !visited.has(current.id)) {
-    visited.add(current.id);
-    const parent = editingInventory.find(candidate => candidate.id === current.containerId);
-    if (!parent) break;
-    current = parent;
-  }
-  return current?.location === 'carried' ? 'carried' : 'backpack';
-}
-
-function renderInventoryContainerOptions() {
-  const select = document.getElementById('inv-item-container');
-  if (!select) return;
-  const selected = select.value;
-  select.innerHTML = '<option value="">No container</option>';
-  editingInventory.filter(item => item.isContainer).forEach(item => {
-    const option = document.createElement('option');
-    option.value = item.id;
-    option.textContent = `Inside ${item.name}`;
-    select.appendChild(option);
-  });
-  select.value = editingInventory.some(item => item.id === selected && item.isContainer) ? selected : '';
-}
-
-function removeInventoryItem(item) {
-  const parent = item.containerId ? editingInventory.find(candidate => candidate.id === item.containerId) : null;
-  editingInventory = editingInventory
-    .filter(entry => entry.id !== item.id)
-    .map(entry => entry.containerId === item.id
-      ? { ...entry, containerId: parent?.id || null, location: parent ? inventoryEffectiveLocation(parent) : item.location }
-      : entry);
-  inventoryExpandedContainers.delete(item.id);
-  renderInventoryContainerOptions();
-  renderInventoryEditor();
-}
-
-function moveInventoryItem(item) {
-  const effectiveLocation = inventoryEffectiveLocation(item);
-  if (item.containerId) {
-    item.containerId = null;
-    item.location = effectiveLocation === 'carried' ? 'backpack' : 'carried';
-  } else {
-    item.location = item.location === 'carried' ? 'backpack' : 'carried';
-  }
-  renderInventoryEditor();
-}
-
-function renderInventoryItem(item) {
-  const children = inventoryChildren(item.id);
-  const row = document.createElement('div');
-  row.className = 'inventory-item';
-  row.dataset.itemId = item.id;
-  row.dataset.isContainer = item.isContainer ? 'true' : 'false';
-  row.draggable = !!editingCanEdit;
-  if (editingCanEdit) {
-    row.addEventListener('dragstart', event => {
-      inventoryDraggingId = item.id;
-      event.dataTransfer?.setData('text/plain', item.id);
-      if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move';
-      row.classList.add('inventory-dragging');
-    });
-    row.addEventListener('dragend', () => {
-      inventoryDraggingId = '';
-      row.classList.remove('inventory-dragging');
-      clearInventoryDropIndicators();
-    });
-    row.addEventListener('dragover', event => {
-      const sourceId = inventoryDragId(event);
-      if (!inventoryCanDropOn(sourceId, item.id)) return;
-      event.preventDefault();
-      if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
-      clearInventoryDropIndicators();
-      const mode = inventoryDropMode(event, row);
-      row.dataset.dropMode = mode;
-      row.classList.add(mode === 'inside' ? 'inventory-drop-inside' : mode === 'before' ? 'inventory-drop-before' : 'inventory-drop-after');
-    });
-    row.addEventListener('dragleave', event => {
-      if (!row.contains(event.relatedTarget)) {
-        row.classList.remove('inventory-drop-before', 'inventory-drop-after', 'inventory-drop-inside');
-        delete row.dataset.dropMode;
-      }
-    });
-    row.addEventListener('drop', event => {
-      const sourceId = inventoryDragId(event);
-      if (!inventoryCanDropOn(sourceId, item.id)) return;
-      event.preventDefault();
-      const mode = row.dataset.dropMode || inventoryDropMode(event, row);
-      inventoryMoveSubtree(sourceId, mode, item);
-    });
-  }
-
-  const summary = document.createElement('div');
-  summary.className = 'inventory-item-summary';
-  const toggle = document.createElement('button');
-  toggle.type = 'button';
-  toggle.className = 'inventory-item-toggle';
-  toggle.setAttribute('aria-label', children.length ? `Toggle contents of ${item.name}` : 'No contents');
-  toggle.textContent = children.length ? (inventoryExpandedContainers.has(item.id) ? '▾' : '▸') : '·';
-  toggle.disabled = !children.length;
-  toggle.onclick = () => {
-    if (inventoryExpandedContainers.has(item.id)) inventoryExpandedContainers.delete(item.id);
-    else inventoryExpandedContainers.add(item.id);
+    editingInventory.push(item);
+    if (parent) inventoryExpandedContainers.add(parent.id);
+    nameInput.value = "";
+    qtyInput.value = 1;
+    containerInput.value = "";
+    containerFlag.checked = false;
     renderInventoryEditor();
   };
-
-  const main = document.createElement('div');
-  main.className = 'inventory-item-main';
-  const name = document.createElement('div');
-  name.className = 'inventory-item-name';
-  name.textContent = item.name;
-  if (item.isContainer) {
-    const badge = document.createElement('span');
-    badge.className = 'inventory-container-badge';
-    badge.textContent = 'container';
-    name.appendChild(badge);
-  }
-  const meta = document.createElement('div');
-  meta.className = 'inventory-item-meta';
-  meta.textContent = item.containerId ? `Inside ${editingInventory.find(parent => parent.id === item.containerId)?.name || 'container'}` : (item.location === 'carried' ? 'Carried / on character' : 'Backpack');
-  main.append(name, meta);
-  summary.append(toggle, main);
-
-  const controls = document.createElement('div');
-  controls.className = 'inventory-item-controls';
-  const decrease = document.createElement('button');
-  decrease.type = 'button'; decrease.textContent = '−'; decrease.title = 'Use one';
-  decrease.disabled = !editingCanEdit || item.qty <= 0;
-  decrease.onclick = () => { item.qty = Math.max(0, item.qty - 1); renderInventoryEditor(); };
-  const quantity = document.createElement('span');
-  quantity.className = 'qty'; quantity.textContent = `×${item.qty}`;
-  const increase = document.createElement('button');
-  increase.type = 'button'; increase.textContent = '+'; increase.title = 'Add one';
-  increase.disabled = !editingCanEdit || item.qty >= 9999;
-  increase.onclick = () => { item.qty = Math.min(9999, item.qty + 1); renderInventoryEditor(); };
-  const move = document.createElement('button');
-  move.type = 'button'; move.textContent = '↔'; move.title = item.containerId ? 'Take out of container' : 'Move between carried and backpack';
-  move.disabled = !editingCanEdit;
-  move.onclick = () => moveInventoryItem(item);
-  const remove = document.createElement('button');
-  remove.type = 'button'; remove.className = 'del'; remove.textContent = '×'; remove.title = 'Remove item';
-  remove.disabled = !editingCanEdit;
-  remove.onclick = () => removeInventoryItem(item);
-  controls.append(decrease, quantity, increase, move, remove);
-  row.append(summary, controls);
-
-  const wrapper = document.createDocumentFragment();
-  wrapper.appendChild(row);
-  if (children.length && inventoryExpandedContainers.has(item.id)) {
-    const childList = document.createElement('div');
-    childList.className = 'inventory-item-children';
-    children.forEach(child => childList.appendChild(renderInventoryItem(child)));
-    wrapper.appendChild(childList);
-  }
-  return wrapper;
-}
-
-function renderInventoryEditor() {
-  const list = document.getElementById('inventory-list');
-  if (!list) return;
-  list.innerHTML = '';
-  renderInventoryContainerOptions();
-  ['carried', 'backpack'].forEach(location => {
-    const group = document.createElement('section');
-    group.className = 'inventory-group';
-    group.dataset.location = location;
-    if (editingCanEdit) {
-      group.addEventListener('dragover', event => {
-        if (event.target.closest('.inventory-item')) return;
-        const sourceId = inventoryDragId(event);
-        if (!sourceId || !editingInventory.some(item => item.id === sourceId)) return;
-        event.preventDefault();
-        if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
-        clearInventoryDropIndicators();
-        group.dataset.dropMode = 'group';
-        group.classList.add('inventory-drop-group');
-      });
-      group.addEventListener('dragleave', event => {
-        if (!group.contains(event.relatedTarget)) {
-          group.classList.remove('inventory-drop-group');
-          delete group.dataset.dropMode;
-        }
-      });
-      group.addEventListener('drop', event => {
-        if (event.target.closest('.inventory-item')) return;
-        const sourceId = inventoryDragId(event);
-        if (!sourceId || !editingInventory.some(item => item.id === sourceId)) return;
-        event.preventDefault();
-        inventoryMoveSubtree(sourceId, 'group', null, location);
-      });
-    }
-    const heading = document.createElement('h4');
-    heading.className = 'inventory-group-title';
-    heading.textContent = location === 'carried' ? 'Carried / on character' : 'Backpack';
-    group.appendChild(heading);
-    const roots = editingInventory.filter(item => !item.containerId && item.location === location);
-    if (!roots.length) {
-      const empty = document.createElement('p');
-      empty.className = 'inventory-group-empty';
-      empty.textContent = location === 'carried' ? 'Nothing carried or held.' : 'Nothing in the backpack.';
-      group.appendChild(empty);
-    } else roots.forEach(item => group.appendChild(renderInventoryItem(item)));
-    list.appendChild(group);
-  });
-}
-
-document.getElementById('inv-add-btn').onclick = () => {
-  const nameInput = document.getElementById('inv-item-name');
-  const qtyInput = document.getElementById('inv-item-qty');
-  const locationInput = document.getElementById('inv-item-location');
-  const containerInput = document.getElementById('inv-item-container');
-  const containerFlag = document.getElementById('inv-item-is-container');
-  const name = nameInput.value.trim();
-  if (!name) return;
-  const parent = editingInventory.find(item => item.id === containerInput.value && item.isContainer);
-  const quantity = Number(qtyInput.value);
-  const location = parent ? inventoryEffectiveLocation(parent) : (locationInput.value === 'carried' ? 'carried' : 'backpack');
-  const item = {
-    id: `item-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-    name,
-    qty: Math.max(0, Math.min(9999, Number.isFinite(quantity) ? quantity : 1)),
-    location,
-    isContainer: !!containerFlag.checked,
-    containerId: parent?.id || null
-  };
-  editingInventory.push(item);
-  if (parent) inventoryExpandedContainers.add(parent.id);
-  nameInput.value = '';
-  qtyInput.value = 1;
-  containerInput.value = '';
-  containerFlag.checked = false;
-  renderInventoryEditor();
-};
-
-// ---- Reusable attack editor ----
-function normalizeAttack(attack, index = 0) {
-  if (!attack || typeof attack !== 'object') return null;
-  const name = String(attack.name || '').trim();
-  if (!name) return null;
-  return {
-    id: String(attack.id || `attack-normalized-${index}`),
-    name,
-    bonus: String(attack.bonus || '').trim(),
-    damage: String(attack.damage || '').trim(),
-    details: String(attack.details || '').trim(),
-    source: String(attack.source || '').trim()
-  };
-}
-
-function normalizeAttackList(raw) {
-  return (Array.isArray(raw) ? raw : []).map(normalizeAttack).filter(Boolean);
-}
-
-function initializeAttackPresetControls() {
-  const select = document.getElementById('attack-preset-select');
-  creationPresets.ATTACK_PRESETS.forEach(preset => {
-    const option = document.createElement('option');
-    option.value = preset.name;
-    option.textContent = `${preset.name}${preset.properties ? ` · ${preset.properties}` : ''}`;
-    select.appendChild(option);
-  });
-  document.getElementById('attack-add-btn').onclick = () => openAttackForm(null);
-  document.getElementById('attack-form-cancel').onclick = closeAttackForm;
-  document.getElementById('attack-preset-load').onclick = () => {
-    const preset = creationPresets.ATTACK_PRESETS.find(entry => entry.name === select.value);
-    if (!preset) return showToast('Choose an attack preset first.');
-    const scores = Object.fromEntries(ABILITIES.map(ability => [ability, document.getElementById(`sf-${ability}`).value]));
-    populateAttackForm(creationPresets.attackPresetValues(preset, scores, document.getElementById('sf-prof-bonus').value));
-  };
-  document.getElementById('attack-form-save').onclick = () => {
-    const name = document.getElementById('attack-form-name').value.trim();
-    if (!name) return showToast('Give the attack a name first.');
-    const value = normalizeAttack({
-      id: editingAttackId || `attack-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+  function normalizeAttack(attack, index = 0) {
+    if (!attack || typeof attack !== "object") return null;
+    const name = String(attack.name || "").trim();
+    if (!name) return null;
+    return {
+      id: String(attack.id || `attack-normalized-${index}`),
       name,
-      bonus: document.getElementById('attack-form-bonus').value,
-      damage: document.getElementById('attack-form-damage').value,
-      details: document.getElementById('attack-form-details').value,
-      source: document.getElementById('attack-add-form').dataset.attackSource || ''
-    });
-    if (editingAttackId) {
-      const index = editingAttacks.findIndex(entry => entry.id === editingAttackId);
-      if (index !== -1) editingAttacks[index] = value;
-    } else {
-      editingAttacks.push(value);
-    }
-    closeAttackForm();
-    renderAttackEditor();
-  };
-}
-
-function populateAttackForm(value = {}) {
-  document.getElementById('attack-add-form').dataset.attackSource = value.source || '';
-  document.getElementById('attack-form-name').value = value.name || '';
-  document.getElementById('attack-form-bonus').value = value.bonus || '';
-  document.getElementById('attack-form-damage').value = value.damage || '';
-  document.getElementById('attack-form-details').value = value.details || '';
-}
-
-function openAttackForm(value) {
-  editingAttackId = value?.id || null;
-  document.getElementById('attack-add-form').classList.remove('hidden');
-  document.getElementById('attack-preset-select').value = '';
-  populateAttackForm(value || {});
-  document.getElementById('attack-form-name').focus();
-}
-
-function closeAttackForm() {
-  editingAttackId = null;
-  document.getElementById('attack-add-form').classList.add('hidden');
-}
-
-function renderAttackEditor() {
-  const list = document.getElementById('attack-list');
-  list.innerHTML = '';
-  if (!editingAttacks.length) {
-    list.innerHTML = '<p class="sidebar-help">No attacks configured yet.</p>';
-    return;
+      bonus: String(attack.bonus || "").trim(),
+      damage: String(attack.damage || "").trim(),
+      details: String(attack.details || "").trim(),
+      source: String(attack.source || "").trim()
+    };
   }
-  editingAttacks.forEach(value => {
-    const row = document.createElement('div');
-    row.className = 'attack-list-item';
-    row.innerHTML = `
-      <span class="attack-list-name">${escapeHtml(value.name)}</span>
-      <span class="attack-list-value">${escapeHtml(value.bonus || 'No roll')}</span>
-      <span class="attack-list-value">${escapeHtml(value.damage || 'No damage')}</span>
-      ${value.details ? `<span class="attack-list-details">${escapeHtml(value.details)}</span>` : ''}
-      <span class="attack-list-actions">
-        <button type="button" class="edit" title="Edit attack">✎</button>
-        <button type="button" class="del" title="Remove attack">×</button>
-      </span>
-    `;
-    const edit = row.querySelector('.edit');
-    const remove = row.querySelector('.del');
-    edit.disabled = !editingCanEdit;
-    remove.disabled = !editingCanEdit;
-    edit.onclick = () => openAttackForm(value);
-    remove.onclick = () => {
-      editingAttacks = editingAttacks.filter(entry => entry.id !== value.id);
+  function normalizeAttackList(raw) {
+    return (Array.isArray(raw) ? raw : []).map(normalizeAttack).filter(Boolean);
+  }
+  function initializeAttackPresetControls() {
+    const select = document.getElementById("attack-preset-select");
+    creationPresets.ATTACK_PRESETS.forEach((preset) => {
+      const option = document.createElement("option");
+      option.value = preset.name;
+      option.textContent = `${preset.name}${preset.properties ? ` \xB7 ${preset.properties}` : ""}`;
+      select.appendChild(option);
+    });
+    document.getElementById("attack-add-btn").onclick = () => openAttackForm(null);
+    document.getElementById("attack-form-cancel").onclick = closeAttackForm;
+    document.getElementById("attack-preset-load").onclick = () => {
+      const preset = creationPresets.ATTACK_PRESETS.find((entry) => entry.name === select.value);
+      if (!preset) return showToast("Choose an attack preset first.");
+      const scores = Object.fromEntries(ABILITIES.map((ability) => [ability, document.getElementById(`sf-${ability}`).value]));
+      populateAttackForm(creationPresets.attackPresetValues(preset, scores, document.getElementById("sf-prof-bonus").value));
+    };
+    document.getElementById("attack-form-save").onclick = () => {
+      const name = document.getElementById("attack-form-name").value.trim();
+      if (!name) return showToast("Give the attack a name first.");
+      const value = normalizeAttack({
+        id: editingAttackId || `attack-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        name,
+        bonus: document.getElementById("attack-form-bonus").value,
+        damage: document.getElementById("attack-form-damage").value,
+        details: document.getElementById("attack-form-details").value,
+        source: document.getElementById("attack-add-form").dataset.attackSource || ""
+      });
+      if (editingAttackId) {
+        const index = editingAttacks.findIndex((entry) => entry.id === editingAttackId);
+        if (index !== -1) editingAttacks[index] = value;
+      } else {
+        editingAttacks.push(value);
+      }
+      closeAttackForm();
       renderAttackEditor();
     };
-    list.appendChild(row);
-  });
-}
-
-// ---- NPC preset and pasted stat-block importer ----
-function initializeNpcPresetControls() {
-  const select = document.getElementById('npc-sheet-preset');
-  const groups = new Map();
-  creationPresets.NPC_PRESETS.forEach(preset => {
-    if (!groups.has(preset.source)) {
-      const group = document.createElement('optgroup');
-      group.label = preset.source;
-      groups.set(preset.source, group);
-      select.appendChild(group);
-    }
-    const option = document.createElement('option');
-    option.value = preset.id;
-    option.textContent = preset.name;
-    groups.get(preset.source).appendChild(option);
-  });
-  document.getElementById('npc-sheet-preset-load').onclick = () => {
-    const preset = creationPresets.NPC_PRESETS.find(entry => entry.id === select.value);
-    if (!preset) return showToast('Choose an NPC preset first.');
-    applyImportedStatBlock(creationPresets.parseStatBlock(preset.statBlock, {
-      name: preset.name,
-      spellPresets: allSpellPresets()
-    }));
-  };
-  document.getElementById('npc-statblock-import-btn').onclick = () => {
-    const text = document.getElementById('npc-statblock-import').value;
-    applyImportedStatBlock(creationPresets.parseStatBlock(text, { spellPresets: allSpellPresets() }));
-  };
-  document.getElementById('npc-statblock-clear-btn').onclick = () => {
-    document.getElementById('npc-statblock-import').value = '';
-  };
-}
-
-function applyImportedStatBlock(parsed) {
-  if (parsed.error) return showToast(parsed.error);
-  const form = document.getElementById('sheet-form');
-  form.reset();
-  const fields = parsed.fields || {};
-  form.querySelectorAll('[id^="sf-"]').forEach(input => {
-    if (input.type === 'file') return;
-    const key = input.id.slice(3);
-    if (!Object.prototype.hasOwnProperty.call(fields, key)) return;
-    if (input.type === 'checkbox') input.checked = !!fields[key];
-    else input.value = fields[key] ?? '';
-  });
-  setCharacterRuleSelections(fields);
-  acMethodManuallySelected = true;
-  initiativeManuallyEdited = true;
-  editingInventory = [];
-  renderInventoryEditor();
-  editingAttacks = normalizeAttackList(parsed.attacks);
-  closeAttackForm();
-  renderAttackEditor();
-  editingSpells = normalizeSpellList(parsed.spells);
-  editingSpellId = null;
-  document.getElementById('spell-add-form').classList.add('hidden');
-  renderSpellListEditor();
-  form.dataset.npcChallenge = parsed.challenge || '';
-  refreshCharacterCalculations(false, false);
-  document.getElementById('sf-ac').value = fields.ac || '10';
-  document.getElementById('sf-ac-method').value = 'manual';
-  refreshArmorClass();
-  document.getElementById('sf-name').focus();
-  showToast(`${parsed.name} imported. Review it, add a portrait if wanted, then save.`);
-}
-
-// ---- Spell list editor ----
-const SPELL_LEVEL_NAMES = ['Cantrip', 'Level 1', 'Level 2', 'Level 3', 'Level 4', 'Level 5', 'Level 6', 'Level 7', 'Level 8', 'Level 9'];
-const HUMBLEWOOD_SPELL_PRESETS = [
-  {
-    name: 'Ambush Prey', level: 2, school: 'Illusion', range: 'Self', castingTime: '1 action',
-    duration: '1 hour', components: 'S, M (a broken twig)', attack: 'First attack against an unaware target',
-    damage: '+1d6', source: 'Humblewood',
-    effect: 'Become invisible while you remain within 5 feet of where you cast the spell. Your first attack against a target unaware of you deals extra damage and ends the spell. The bonus damage rises by 1d6 per slot level above 2nd.'
-  },
-  {
-    name: 'Elevated Sight', level: 1, school: 'Divination', range: 'Self', castingTime: '1 action',
-    duration: 'Concentration, up to 1 minute', components: 'V, S', attack: 'None', damage: '', source: 'Humblewood',
-    effect: 'See through a movable invisible sensor up to 120 feet above you with a 360-degree view. You are blind while looking through the sensor.'
-  },
-  {
-    name: 'Feathered Reach', level: 3, school: 'Transmutation', range: 'Self', castingTime: '1 action',
-    duration: '1 minute', components: 'S, M (a small feather)', attack: 'None', damage: '', source: 'Humblewood',
-    effect: 'Your arms become wings. You gain bonus-action flight up to twice your speed but must land, an upward boost, reaction gliding, and improved jumping. Your hands must be free of shields and heavy weapons, and you cannot be encumbered.'
-  },
-  {
-    name: 'Globe of Twilight', level: 3, school: 'Conjuration', range: 'Self (15-foot radius, 15 feet high)', castingTime: '1 action',
-    duration: 'Concentration, up to 10 minutes', components: 'V, S, M (pitch and glittering sand)', attack: 'Wisdom save', damage: '', source: 'Humblewood',
-    effect: 'Create a lightly obscured twilight sphere. Chosen creatures can hide and have advantage on Stealth. Other creatures have disadvantage on Perception and can be blinded until the end of their turn on a failed save.'
-  },
-  {
-    name: 'Gust Barrier', level: 0, school: 'Evocation', range: 'Self', castingTime: '1 action',
-    duration: '1 round', components: 'S', attack: 'Constitution save after a melee hit', damage: '', source: 'Humblewood',
-    effect: 'Ranged attacks against you have disadvantage until the end of your next turn. A melee attacker that hits must save or be pushed up to 10 feet away and knocked prone.'
-  },
-  {
-    name: 'Invoke the Amaranthine', level: 3, school: 'Divination', range: 'Self; affects a visible creature within 60 feet', castingTime: '10 minutes',
-    duration: '24 hours', components: 'V, S, M (a holy symbol of the Amaranthine)', attack: 'None', damage: '', source: 'Humblewood',
-    effect: 'Roll and record two d20s, assigning each to attacks, checks, or saves. For 24 hours, use a reaction to replace a matching roll made by a visible ally or enemy within 60 feet before the outcome is known.'
-  },
-  {
-    name: 'Shape Plants', level: 4, school: 'Transmutation', range: 'Touch', castingTime: '1 action',
-    duration: 'Instantaneous; shaped form normally lasts 1 hour', components: 'V, S', attack: 'None', damage: '2d4 piercing per 5 feet moved', source: 'Humblewood',
-    effect: 'Reshape plant life in a 5-foot cube. Brambles or thorny plants can become damaging difficult terrain. A plant may agree to keep the new form; the affected cube grows by 5 feet per slot level above 4th.'
-  },
-  {
-    name: 'Spiny Shield', level: 1, school: 'Abjuration', range: 'Self', castingTime: '1 reaction',
-    duration: '1 round', components: 'V, S, M (a small quill)', attack: 'Triggers when hit by a melee attack', damage: '2d4 piercing', source: 'Humblewood',
-    effect: 'Reduce the triggering melee damage by 2d4 and deal the same amount to the attacker. The barrier also grants +2 AC against ranged attacks. Both dice effects rise by 1d4 per slot level above 1st.'
-  },
-  {
-    name: 'Stellar Bodies', level: 4, school: 'Evocation', range: 'Special; star attack reaches 120 feet', castingTime: '1 action',
-    duration: '1 minute', components: 'V, S', attack: 'Ranged spell attack; Wisdom and Constitution saves', damage: '4d8 radiant', source: 'Humblewood',
-    effect: 'Create two orbiting stars. Nearby melee attackers can take 1d8 radiant damage per star on a failed Wisdom save. Once per round, expend a star as a ranged spell attack; on a hit the target takes damage and can be blinded on a failed Constitution save.'
-  },
-  {
-    name: 'Veil of Dusk', level: 1, school: 'Abjuration', range: '60 feet', castingTime: '1 bonus action',
-    duration: 'Concentration, up to 10 minutes', components: 'V, S, M (a pinch of soot)', attack: 'None', damage: '', source: 'Humblewood',
-    effect: 'Cloak one creature in shadow and silence. The target gains +1 AC and has advantage on Stealth checks for the duration.'
   }
-];
-
-function allSpellPresets() {
-  return [
-    ...HUMBLEWOOD_SPELL_PRESETS,
-    ...(window.HumblewoodPhbSpellPresets?.PHB_SPELL_PRESETS || []),
-    ...creationPresets.STANDARD_SPELL_PRESETS
-  ];
-}
-
-function normalizeSpell(spell, index = 0) {
-  if (!spell || typeof spell !== 'object') return null;
-  const name = String(spell.name || '').trim();
-  if (!name) return null;
-  const normalized = {
-    id: String(spell.id || `spell-normalized-${index}`),
-    name,
-    level: Math.max(0, Math.min(9, Number(spell.level) || 0)),
-    school: String(spell.school || '').trim(),
-    range: String(spell.range || '').trim(),
-    castingTime: String(spell.castingTime || '').trim(),
-    duration: String(spell.duration || '').trim(),
-    components: String(spell.components || '').trim(),
-    attack: String(spell.attack || '').trim(),
-    damage: String(spell.damage || '').trim(),
-    effect: String(spell.effect ?? spell.description ?? '').trim(),
-    source: String(spell.source || '').trim()
-  };
-  if (typeof spell.prepared === 'boolean') normalized.prepared = spell.prepared;
-  if (spell.alwaysPrepared === true) normalized.alwaysPrepared = true;
-  return normalized;
-}
-
-function normalizeSpellList(raw) {
-  let list = Array.isArray(raw) ? raw : null;
-  if (typeof raw === 'string' && raw.trim()) {
-    try {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) list = parsed;
-    } catch (err) { /* not JSON, treated as empty — legacy text lives in spells-N fields */ }
+  function populateAttackForm(value = {}) {
+    document.getElementById("attack-add-form").dataset.attackSource = value.source || "";
+    document.getElementById("attack-form-name").value = value.name || "";
+    document.getElementById("attack-form-bonus").value = value.bonus || "";
+    document.getElementById("attack-form-damage").value = value.damage || "";
+    document.getElementById("attack-form-details").value = value.details || "";
   }
-  return (list || []).map(normalizeSpell).filter(Boolean);
-}
-
-function migrateLegacySpellText(fields) {
-  const migrated = [];
-  for (let level = 0; level <= 9; level += 1) {
-    const text = String(fields?.[`spells-${level}`] || '').trim();
-    if (!text) continue;
-    text.split(/\n|;/).flatMap(line => {
-      const trimmed = line.trim();
-      return trimmed.includes(',') && !/\d+d\d+/i.test(trimmed) ? trimmed.split(',') : [trimmed];
-    }).map(name => name.trim()).filter(Boolean).forEach(name => {
-      migrated.push(normalizeSpell({ id: `spell-migrated-${level}-${migrated.length}`, name, level }, migrated.length));
-    });
+  function openAttackForm(value) {
+    editingAttackId = value?.id || null;
+    document.getElementById("attack-add-form").classList.remove("hidden");
+    document.getElementById("attack-preset-select").value = "";
+    populateAttackForm(value || {});
+    document.getElementById("attack-form-name").focus();
   }
-  return migrated;
-}
-
-function syncSpellListField() {
-  document.getElementById('sf-spell-list').value = JSON.stringify(editingSpells);
-}
-
-function renderSpellListEditor() {
-  const container = document.getElementById('spell-list');
-  container.innerHTML = '';
-  if (!editingSpells.length) {
-    container.innerHTML = '<p class="sidebar-help">No spells added yet.</p>';
-    syncSpellListField();
-    return;
+  function closeAttackForm() {
+    editingAttackId = null;
+    document.getElementById("attack-add-form").classList.add("hidden");
   }
-  const preparesSpells = characterRules.preparedSpellCount(
-    document.getElementById('sf-class').value,
-    document.getElementById('sf-level').value,
-    10
-  ) !== null;
-  const byLevel = new Map();
-  editingSpells.forEach(spell => {
-    const level = Math.max(0, Math.min(9, Number(spell.level) || 0));
-    if (!byLevel.has(level)) byLevel.set(level, []);
-    byLevel.get(level).push(spell);
-  });
-  [...byLevel.keys()].sort((a, b) => a - b).forEach(level => {
-    const group = document.createElement('div');
-    group.className = 'spell-level-group';
-    const title = document.createElement('div');
-    title.className = 'spell-level-group-title';
-    title.textContent = SPELL_LEVEL_NAMES[level];
-    group.appendChild(title);
-    byLevel.get(level).forEach(spell => {
-      const row = document.createElement('div');
-      row.className = 'spell-list-item';
-      const main = document.createElement('div');
-      main.className = 'spell-list-item-main';
-      const name = document.createElement('div');
-      name.className = 'spell-list-item-name';
-      name.textContent = spell.name;
-      if (spell.source) {
-        const source = document.createElement('span');
-        source.className = 'spell-source-badge';
-        source.textContent = spell.source;
-        name.appendChild(source);
-      }
-      if (spell.alwaysPrepared || (preparesSpells && spell.level > 0 && spell.prepared === true)) {
-        const prepared = document.createElement('span');
-        prepared.className = `spell-prepared-badge${spell.alwaysPrepared ? ' always' : ''}`;
-        prepared.textContent = spell.alwaysPrepared ? 'Always prepared' : 'Prepared';
-        name.appendChild(prepared);
-      }
-      main.appendChild(name);
-      const metadata = [
-        spell.school,
-        spell.range ? `Range: ${spell.range}` : '',
-        spell.attack && !/^none$/i.test(spell.attack) ? `Attack/save: ${spell.attack}` : '',
-        spell.damage ? `Damage: ${spell.damage}` : ''
-      ].filter(Boolean);
-      if (metadata.length) {
-        const meta = document.createElement('div');
-        meta.className = 'spell-list-item-meta';
-        metadata.forEach(value => {
-          const item = document.createElement('span');
-          item.textContent = value;
-          meta.appendChild(item);
-        });
-        main.appendChild(meta);
-      }
-      if (spell.effect) {
-        const desc = document.createElement('div');
-        desc.className = 'spell-list-item-desc';
-        desc.textContent = spell.effect;
-        main.appendChild(desc);
-      }
-      row.appendChild(main);
-      const actions = document.createElement('div');
-      actions.className = 'spell-list-item-actions';
-      const edit = document.createElement('button');
-      edit.type = 'button'; edit.className = 'edit'; edit.textContent = '✎'; edit.title = 'Edit spell';
-      edit.disabled = !editingCanEdit;
-      edit.onclick = () => openSpellForm(spell);
-      const del = document.createElement('button');
-      del.type = 'button'; del.className = 'del'; del.textContent = '×'; del.title = 'Remove spell';
-      del.disabled = !editingCanEdit;
-      del.onclick = () => {
-        editingSpells = editingSpells.filter(entry => entry.id !== spell.id);
-        renderSpellListEditor();
-      };
-      actions.append(edit, del);
-      row.appendChild(actions);
-      group.appendChild(row);
-    });
-    container.appendChild(group);
-  });
-  syncSpellListField();
-}
-
-function populateSpellForm(spell = {}) {
-  const form = document.getElementById('spell-add-form');
-  const normalized = normalizeSpell({ name: spell.name || ' ', ...spell }) || {};
-  form.dataset.spellSource = normalized.source || '';
-  document.getElementById('spell-form-name').value = spell.name || '';
-  document.getElementById('spell-form-level').value = normalized.level ?? '0';
-  document.getElementById('spell-form-school').value = normalized.school || '';
-  document.getElementById('spell-form-range').value = normalized.range || '';
-  document.getElementById('spell-form-casting-time').value = normalized.castingTime || '';
-  document.getElementById('spell-form-duration').value = normalized.duration || '';
-  document.getElementById('spell-form-components').value = normalized.components || '';
-  document.getElementById('spell-form-attack').value = normalized.attack || '';
-  document.getElementById('spell-form-damage').value = normalized.damage || '';
-  document.getElementById('spell-form-effect').value = normalized.effect || '';
-  document.getElementById('spell-form-always-prepared').checked = !!normalized.alwaysPrepared;
-}
-
-function openSpellForm(spell) {
-  const form = document.getElementById('spell-add-form');
-  form.classList.remove('hidden');
-  editingSpellId = spell ? spell.id : null;
-  document.getElementById('spell-preset-select').value = '';
-  populateSpellForm(spell || {});
-  document.getElementById('spell-form-name').focus();
-}
-
-const spellPresetSelect = document.getElementById('spell-preset-select');
-['Humblewood', "Player's Handbook (2014)"].forEach(source => {
-  const group = document.createElement('optgroup');
-  group.label = source;
-  allSpellPresets()
-    .filter(spell => spell.source === source)
-    .sort((a, b) => a.level - b.level || a.name.localeCompare(b.name))
-    .forEach(spell => {
-      const option = document.createElement('option');
-      option.value = `${source}::${spell.name}`;
-      option.textContent = `${SPELL_LEVEL_NAMES[spell.level]} · ${spell.name}`;
-      group.appendChild(option);
-    });
-  spellPresetSelect.appendChild(group);
-});
-
-function selectedSpellPreset() {
-  const [source, ...nameParts] = spellPresetSelect.value.split('::');
-  const name = nameParts.join('::');
-  return allSpellPresets().find(spell => spell.source === source && spell.name === name);
-}
-
-function addSpellNames(raw) {
-  const names = String(raw || '').split(/[,;\n]/).map(name => name.trim()).filter(Boolean);
-  if (!names.length) return showToast('Enter at least one spell name.');
-  let added = 0;
-  names.forEach(name => {
-    if (editingSpells.some(existing => existing.name.toLowerCase() === name.toLowerCase())) return;
-    const preset = creationPresets.findSpellPreset(name, allSpellPresets());
-    editingSpells.push(normalizeSpell({
-      ...(preset || {}),
-      id: `spell-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-      name: preset?.name || name,
-      level: preset?.level || 0,
-      source: preset?.source || 'Custom list'
-    }));
-    added += 1;
-  });
-  renderSpellListEditor();
-  document.getElementById('spell-bulk-list').value = '';
-  showToast(added ? `Added ${added} spell${added === 1 ? '' : 's'}.` : 'Those spells are already on the sheet.');
-}
-
-document.getElementById('spell-preset-load').onclick = () => {
-  const preset = selectedSpellPreset();
-  if (!preset) return showToast('Choose a spell preset first.');
-  populateSpellForm(preset);
-};
-document.getElementById('spell-bulk-add').onclick = () => addSpellNames(document.getElementById('spell-bulk-list').value);
-
-document.getElementById('spell-add-btn').onclick = () => openSpellForm(null);
-document.getElementById('spell-form-cancel').onclick = () => {
-  document.getElementById('spell-add-form').classList.add('hidden');
-  editingSpellId = null;
-};
-document.getElementById('spell-form-save').onclick = () => {
-  const name = document.getElementById('spell-form-name').value.trim();
-  if (!name) return alert('Give the spell a name first.');
-  const existing = editingSpells.find(entry => entry.id === editingSpellId);
-  const spell = normalizeSpell({
-    id: editingSpellId || `spell-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-    name,
-    level: document.getElementById('spell-form-level').value,
-    school: document.getElementById('spell-form-school').value,
-    range: document.getElementById('spell-form-range').value,
-    castingTime: document.getElementById('spell-form-casting-time').value,
-    duration: document.getElementById('spell-form-duration').value,
-    components: document.getElementById('spell-form-components').value,
-    attack: document.getElementById('spell-form-attack').value,
-    damage: document.getElementById('spell-form-damage').value,
-    effect: document.getElementById('spell-form-effect').value,
-    source: document.getElementById('spell-add-form').dataset.spellSource || '',
-    prepared: existing?.prepared,
-    alwaysPrepared: document.getElementById('spell-form-always-prepared').checked
-  });
-  if (editingSpellId) {
-    const index = editingSpells.findIndex(entry => entry.id === editingSpellId);
-    if (index !== -1) editingSpells[index] = spell;
-  } else {
-    editingSpells.push(spell);
-  }
-  editingSpellId = null;
-  document.getElementById('spell-add-form').classList.add('hidden');
-  renderSpellListEditor();
-};
-
-document.getElementById('sf-portrait').onchange = (event) => {
-  pendingPortraitFile = event.target.files[0] || null;
-  if (!pendingPortraitFile) return renderPortraitPreview(editingPortraitUrl);
-  const reader = new FileReader();
-  reader.onload = () => renderPortraitPreview(reader.result);
-  reader.readAsDataURL(pendingPortraitFile);
-};
-
-function renderPortraitPreview(url) {
-  const preview = document.getElementById('portrait-preview');
-  preview.innerHTML = '';
-  if (!url) {
-    preview.textContent = '🍃';
-    return;
-  }
-  const image = document.createElement('img');
-  image.src = url;
-  image.alt = 'Character portrait';
-  preview.appendChild(image);
-}
-
-function collectCharacterFields() {
-  const fields = {};
-  document.querySelectorAll('#sheet-form [id^="sf-"]').forEach(input => {
-    if (input.type === 'file') return;
-    const key = input.id.slice(3);
-    fields[key] = input.type === 'checkbox' ? input.checked : input.value;
-  });
-  return fields;
-}
-
-document.getElementById('save-sheet-btn').onclick = async () => {
-  if (!editingCanEdit) return;
-  refreshCharacterCalculations(false);
-  let fields = collectCharacterFields();
-  const name = String(fields.name || '').trim();
-  const isNpc = !!editingNpcSheetId;
-  if (!name) return alert(`Every ${isNpc ? 'NPC' : 'character'} needs a name.`);
-  if (!isNpc) {
-    const constrainedCharacter = { fields };
-    const validationError = characterRules.validatePlayerCharacter(constrainedCharacter);
-    if (validationError) return alert(validationError);
-    characterRules.applyPlayerCharacterConstraints(constrainedCharacter);
-    fields = constrainedCharacter.fields;
-  }
-  const saveButton = document.getElementById('save-sheet-btn');
-  saveButton.disabled = true;
-  saveButton.textContent = 'Saving…';
-  try {
-    if (pendingPortraitFile) editingPortraitUrl = await uploadFile(pendingPortraitFile);
-  } catch (error) {
-    showToast('The portrait could not be uploaded. Please try again.');
-    saveButton.disabled = false;
-    saveButton.textContent = isNpc ? 'Save NPC' : 'Save character';
-    return;
-  }
-
-  const num = (key, fallback = 0) => Number(fields[key]) || fallback;
-  const sheet = {
-    name,
-    pronouns: String(fields.pronouns || '').trim(),
-    _originalName: editingOriginalName,
-    portraitUrl: editingPortraitUrl,
-    species: fields.species || '',
-    race: fields.species || '',
-    subrace: fields.subrace || '',
-    charClass: fields.class || '',
-    subclass: fields.subclass || '',
-    level: Math.max(1, Math.min(20, num('level', 1))),
-    hp: num('hp'), maxHp: num('maxhp'), tempHp: num('temphp'), ac: num('ac', 10),
-    initiativeModifier: num('initiative'), speed: fields.speed || '',
-    abilities: Object.fromEntries(ABILITIES.map(ability => [ability, num(ability, 10)])),
-    saves: Object.fromEntries(ABILITIES.map(ability => [ability, {
-      proficient: !!fields[`save-${ability}-prof`], modifier: num(`save-${ability}`)
-    }])),
-    skills: Object.fromEntries(Object.keys(SKILL_ABILITIES).map(skill => [skill, {
-      proficient: !!fields[`skill-${skill}-prof`], modifier: num(`skill-${skill}`)
-    }])),
-    attacks: editingAttacks.map(attack => ({ ...attack })),
-    spellcasting: {
-      className: fields['spell-class'] || '', ability: fields['spell-ability'] || '',
-      saveDc: num('spell-dc'), attackBonus: num('spell-attack')
-    },
-    inventory: editingInventory.map(item => ({ ...item })),
-    notes: fields.notes || '',
-    fields
-  };
-  if (isNpc) {
-    const existing = editingNpcSheetId === '__new__' ? null : state.npcs?.[editingNpcSheetId];
-    const spellSlots = {};
-    for (let level = 1; level <= 9; level += 1) {
-      const total = Math.max(0, Number(fields[`spell-slots-${level}`]) || 0);
-      spellSlots[level] = {
-        total,
-        used: Math.max(0, Math.min(total, Number(fields[`spell-used-${level}`]) || 0))
-      };
-    }
-    const npcPayload = {
-      ...(existing ? { id: existing.id } : {}),
-      name,
-      pronouns: sheet.pronouns,
-      imageUrl: editingPortraitUrl,
-      hp: num('hp', 10), maxHp: Math.max(1, num('maxhp', 10)), tempHp: Math.max(0, num('temphp')),
-      ac: num('ac', 10), initiativeModifier: num('initiative'),
-      attacks: sheet.attacks,
-      spells: editingSpells.map(spell => ({ ...spell })),
-      spellcasting: sheet.spellcasting,
-      notes: fields['attacks-notes'] || fields.notes || '',
-      combat: {
-        ...(existing?.combat || {}),
-        spellSlots
-      },
-      sheet: {
-        ...sheet,
-        portraitUrl: editingPortraitUrl,
-        challenge: document.getElementById('sheet-form').dataset.npcChallenge || existing?.sheet?.challenge || '',
-        spells: editingSpells.map(spell => ({ ...spell }))
-      }
-    };
-    socket.emit(existing ? 'npc:update' : 'npc:create', npcPayload);
-  } else {
-    socket.emit('character:save', sheet);
-    document.getElementById('sheet-editor').classList.add('hidden');
-  }
-  saveButton.disabled = false;
-  saveButton.textContent = isNpc ? 'Save NPC' : 'Save character';
-  if (!isNpc) showToast(`${name} saved.`);
-};
-
-document.getElementById('delete-sheet-btn').onclick = () => {
-  if (editingNpcSheetId) {
-    if (editingNpcSheetId !== '__new__' && confirm(`Delete ${state.npcs?.[editingNpcSheetId]?.name || 'this NPC'}?`)) {
-      socket.emit('npc:delete', { id: editingNpcSheetId });
-    } else if (editingNpcSheetId !== '__new__') {
+  function renderAttackEditor() {
+    const list = document.getElementById("attack-list");
+    list.innerHTML = "";
+    if (!editingAttacks.length) {
+      list.innerHTML = '<p class="sidebar-help">No attacks configured yet.</p>';
       return;
     }
-    editingNpcSheetId = null;
-    document.getElementById('sheet-editor').classList.add('hidden');
-    return;
+    editingAttacks.forEach((value) => {
+      const row = document.createElement("div");
+      row.className = "attack-list-item";
+      row.innerHTML = `
+      <span class="attack-list-name">${escapeHtml(value.name)}</span>
+      <span class="attack-list-value">${escapeHtml(value.bonus || "No roll")}</span>
+      <span class="attack-list-value">${escapeHtml(value.damage || "No damage")}</span>
+      ${value.details ? `<span class="attack-list-details">${escapeHtml(value.details)}</span>` : ""}
+      <span class="attack-list-actions">
+        <button type="button" class="edit" title="Edit attack">\u270E</button>
+        <button type="button" class="del" title="Remove attack">\xD7</button>
+      </span>
+    `;
+      const edit = row.querySelector(".edit");
+      const remove = row.querySelector(".del");
+      edit.disabled = !editingCanEdit;
+      remove.disabled = !editingCanEdit;
+      edit.onclick = () => openAttackForm(value);
+      remove.onclick = () => {
+        editingAttacks = editingAttacks.filter((entry) => entry.id !== value.id);
+        renderAttackEditor();
+      };
+      list.appendChild(row);
+    });
   }
-  if (editingOriginalName && confirm(`Delete ${editingOriginalName}?`)) {
-    socket.emit('character:remove', { name: editingOriginalName });
-  } else if (editingOriginalName) {
-    return;
+  function initializeNpcPresetControls() {
+    const select = document.getElementById("npc-sheet-preset");
+    const groups = /* @__PURE__ */ new Map();
+    creationPresets.NPC_PRESETS.forEach((preset) => {
+      if (!groups.has(preset.source)) {
+        const group = document.createElement("optgroup");
+        group.label = preset.source;
+        groups.set(preset.source, group);
+        select.appendChild(group);
+      }
+      const option = document.createElement("option");
+      option.value = preset.id;
+      option.textContent = preset.name;
+      groups.get(preset.source).appendChild(option);
+    });
+    document.getElementById("npc-sheet-preset-load").onclick = () => {
+      const preset = creationPresets.NPC_PRESETS.find((entry) => entry.id === select.value);
+      if (!preset) return showToast("Choose an NPC preset first.");
+      applyImportedStatBlock(creationPresets.parseStatBlock(preset.statBlock, {
+        name: preset.name,
+        spellPresets: allSpellPresets()
+      }));
+    };
+    document.getElementById("npc-statblock-import-btn").onclick = () => {
+      const text = document.getElementById("npc-statblock-import").value;
+      applyImportedStatBlock(creationPresets.parseStatBlock(text, { spellPresets: allSpellPresets() }));
+    };
+    document.getElementById("npc-statblock-clear-btn").onclick = () => {
+      document.getElementById("npc-statblock-import").value = "";
+    };
   }
-  document.getElementById('sheet-editor').classList.add('hidden');
-};
-
-function abilityModifier(score) {
-  return Math.floor(((Number(score) || 10) - 10) / 2);
-}
-
-function proficiencyBonus(level) {
-  return 2 + Math.floor((Math.max(1, Math.min(20, Number(level) || 1)) - 1) / 4);
-}
-
-function updateSpellSlotsForLevel() {
-  const className = document.getElementById('sf-class').value;
-  const subclass = document.getElementById('sf-subclass').value;
-  const level = document.getElementById('sf-level').value;
-  const slots = characterRules.spellSlotsFor(className, subclass, level);
-  for (let spellLevel = 1; spellLevel <= 9; spellLevel += 1) {
-    const maximum = slots[spellLevel - 1] || 0;
-    const maximumInput = document.getElementById(`sf-spell-slots-${spellLevel}`);
-    const usedInput = document.getElementById(`sf-spell-used-${spellLevel}`);
-    maximumInput.value = maximum;
-    usedInput.value = Math.min(maximum, Math.max(0, Number(usedInput.value) || 0));
+  function applyImportedStatBlock(parsed) {
+    if (parsed.error) return showToast(parsed.error);
+    const form = document.getElementById("sheet-form");
+    form.reset();
+    const fields = parsed.fields || {};
+    form.querySelectorAll('[id^="sf-"]').forEach((input) => {
+      if (input.type === "file") return;
+      const key = input.id.slice(3);
+      if (!Object.prototype.hasOwnProperty.call(fields, key)) return;
+      if (input.type === "checkbox") input.checked = !!fields[key];
+      else input.value = fields[key] ?? "";
+    });
+    setCharacterRuleSelections(fields);
+    acMethodManuallySelected = true;
+    initiativeManuallyEdited = true;
+    editingInventory = [];
+    renderInventoryEditor();
+    editingAttacks = normalizeAttackList(parsed.attacks);
+    closeAttackForm();
+    renderAttackEditor();
+    editingSpells = normalizeSpellList(parsed.spells);
+    editingSpellId = null;
+    document.getElementById("spell-add-form").classList.add("hidden");
+    renderSpellListEditor();
+    form.dataset.npcChallenge = parsed.challenge || "";
+    refreshCharacterCalculations(false, false);
+    document.getElementById("sf-ac").value = fields.ac || "10";
+    document.getElementById("sf-ac-method").value = "manual";
+    refreshArmorClass();
+    document.getElementById("sf-name").focus();
+    showToast(`${parsed.name} imported. Review it, add a portrait if wanted, then save.`);
   }
-}
-
-function refreshArmorClass() {
-  const methodInput = document.getElementById('sf-ac-method');
-  const armorClassInput = document.getElementById('sf-ac');
-  const baseInput = document.getElementById('sf-ac-base');
-  const method = methodInput.value;
-  const calculated = characterRules.armorClass({
-    method,
-    base: baseInput.value,
-    bonus: document.getElementById('sf-ac-bonus').value,
-    dex: document.getElementById('sf-dex').value,
-    con: document.getElementById('sf-con').value,
-    wis: document.getElementById('sf-wis').value
+  const SPELL_LEVEL_NAMES = ["Cantrip", "Level 1", "Level 2", "Level 3", "Level 4", "Level 5", "Level 6", "Level 7", "Level 8", "Level 9"];
+  const HUMBLEWOOD_SPELL_PRESETS = [
+    {
+      name: "Ambush Prey",
+      level: 2,
+      school: "Illusion",
+      range: "Self",
+      castingTime: "1 action",
+      duration: "1 hour",
+      components: "S, M (a broken twig)",
+      attack: "First attack against an unaware target",
+      damage: "+1d6",
+      source: "Humblewood",
+      effect: "Become invisible while you remain within 5 feet of where you cast the spell. Your first attack against a target unaware of you deals extra damage and ends the spell. The bonus damage rises by 1d6 per slot level above 2nd."
+    },
+    {
+      name: "Elevated Sight",
+      level: 1,
+      school: "Divination",
+      range: "Self",
+      castingTime: "1 action",
+      duration: "Concentration, up to 1 minute",
+      components: "V, S",
+      attack: "None",
+      damage: "",
+      source: "Humblewood",
+      effect: "See through a movable invisible sensor up to 120 feet above you with a 360-degree view. You are blind while looking through the sensor."
+    },
+    {
+      name: "Feathered Reach",
+      level: 3,
+      school: "Transmutation",
+      range: "Self",
+      castingTime: "1 action",
+      duration: "1 minute",
+      components: "S, M (a small feather)",
+      attack: "None",
+      damage: "",
+      source: "Humblewood",
+      effect: "Your arms become wings. You gain bonus-action flight up to twice your speed but must land, an upward boost, reaction gliding, and improved jumping. Your hands must be free of shields and heavy weapons, and you cannot be encumbered."
+    },
+    {
+      name: "Globe of Twilight",
+      level: 3,
+      school: "Conjuration",
+      range: "Self (15-foot radius, 15 feet high)",
+      castingTime: "1 action",
+      duration: "Concentration, up to 10 minutes",
+      components: "V, S, M (pitch and glittering sand)",
+      attack: "Wisdom save",
+      damage: "",
+      source: "Humblewood",
+      effect: "Create a lightly obscured twilight sphere. Chosen creatures can hide and have advantage on Stealth. Other creatures have disadvantage on Perception and can be blinded until the end of their turn on a failed save."
+    },
+    {
+      name: "Gust Barrier",
+      level: 0,
+      school: "Evocation",
+      range: "Self",
+      castingTime: "1 action",
+      duration: "1 round",
+      components: "S",
+      attack: "Constitution save after a melee hit",
+      damage: "",
+      source: "Humblewood",
+      effect: "Ranged attacks against you have disadvantage until the end of your next turn. A melee attacker that hits must save or be pushed up to 10 feet away and knocked prone."
+    },
+    {
+      name: "Invoke the Amaranthine",
+      level: 3,
+      school: "Divination",
+      range: "Self; affects a visible creature within 60 feet",
+      castingTime: "10 minutes",
+      duration: "24 hours",
+      components: "V, S, M (a holy symbol of the Amaranthine)",
+      attack: "None",
+      damage: "",
+      source: "Humblewood",
+      effect: "Roll and record two d20s, assigning each to attacks, checks, or saves. For 24 hours, use a reaction to replace a matching roll made by a visible ally or enemy within 60 feet before the outcome is known."
+    },
+    {
+      name: "Shape Plants",
+      level: 4,
+      school: "Transmutation",
+      range: "Touch",
+      castingTime: "1 action",
+      duration: "Instantaneous; shaped form normally lasts 1 hour",
+      components: "V, S",
+      attack: "None",
+      damage: "2d4 piercing per 5 feet moved",
+      source: "Humblewood",
+      effect: "Reshape plant life in a 5-foot cube. Brambles or thorny plants can become damaging difficult terrain. A plant may agree to keep the new form; the affected cube grows by 5 feet per slot level above 4th."
+    },
+    {
+      name: "Spiny Shield",
+      level: 1,
+      school: "Abjuration",
+      range: "Self",
+      castingTime: "1 reaction",
+      duration: "1 round",
+      components: "V, S, M (a small quill)",
+      attack: "Triggers when hit by a melee attack",
+      damage: "2d4 piercing",
+      source: "Humblewood",
+      effect: "Reduce the triggering melee damage by 2d4 and deal the same amount to the attacker. The barrier also grants +2 AC against ranged attacks. Both dice effects rise by 1d4 per slot level above 1st."
+    },
+    {
+      name: "Stellar Bodies",
+      level: 4,
+      school: "Evocation",
+      range: "Special; star attack reaches 120 feet",
+      castingTime: "1 action",
+      duration: "1 minute",
+      components: "V, S",
+      attack: "Ranged spell attack; Wisdom and Constitution saves",
+      damage: "4d8 radiant",
+      source: "Humblewood",
+      effect: "Create two orbiting stars. Nearby melee attackers can take 1d8 radiant damage per star on a failed Wisdom save. Once per round, expend a star as a ranged spell attack; on a hit the target takes damage and can be blinded on a failed Constitution save."
+    },
+    {
+      name: "Veil of Dusk",
+      level: 1,
+      school: "Abjuration",
+      range: "60 feet",
+      castingTime: "1 bonus action",
+      duration: "Concentration, up to 10 minutes",
+      components: "V, S, M (a pinch of soot)",
+      attack: "None",
+      damage: "",
+      source: "Humblewood",
+      effect: "Cloak one creature in shadow and silence. The target gains +1 AC and has advantage on Stealth checks for the duration."
+    }
+  ];
+  function allSpellPresets() {
+    return [
+      ...HUMBLEWOOD_SPELL_PRESETS,
+      ...window.HumblewoodPhbSpellPresets?.PHB_SPELL_PRESETS || [],
+      ...creationPresets.STANDARD_SPELL_PRESETS
+    ];
+  }
+  function normalizeSpell(spell, index = 0) {
+    if (!spell || typeof spell !== "object") return null;
+    const name = String(spell.name || "").trim();
+    if (!name) return null;
+    const normalized = {
+      id: String(spell.id || `spell-normalized-${index}`),
+      name,
+      level: Math.max(0, Math.min(9, Number(spell.level) || 0)),
+      school: String(spell.school || "").trim(),
+      range: String(spell.range || "").trim(),
+      castingTime: String(spell.castingTime || "").trim(),
+      duration: String(spell.duration || "").trim(),
+      components: String(spell.components || "").trim(),
+      attack: String(spell.attack || "").trim(),
+      damage: String(spell.damage || "").trim(),
+      effect: String(spell.effect ?? spell.description ?? "").trim(),
+      source: String(spell.source || "").trim()
+    };
+    if (typeof spell.prepared === "boolean") normalized.prepared = spell.prepared;
+    if (spell.alwaysPrepared === true) normalized.alwaysPrepared = true;
+    return normalized;
+  }
+  function normalizeSpellList(raw) {
+    let list = Array.isArray(raw) ? raw : null;
+    if (typeof raw === "string" && raw.trim()) {
+      try {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) list = parsed;
+      } catch (err) {
+      }
+    }
+    return (list || []).map(normalizeSpell).filter(Boolean);
+  }
+  function migrateLegacySpellText(fields) {
+    const migrated = [];
+    for (let level = 0; level <= 9; level += 1) {
+      const text = String(fields?.[`spells-${level}`] || "").trim();
+      if (!text) continue;
+      text.split(/\n|;/).flatMap((line) => {
+        const trimmed = line.trim();
+        return trimmed.includes(",") && !/\d+d\d+/i.test(trimmed) ? trimmed.split(",") : [trimmed];
+      }).map((name) => name.trim()).filter(Boolean).forEach((name) => {
+        migrated.push(normalizeSpell({ id: `spell-migrated-${level}-${migrated.length}`, name, level }, migrated.length));
+      });
+    }
+    return migrated;
+  }
+  function syncSpellListField() {
+    document.getElementById("sf-spell-list").value = JSON.stringify(editingSpells);
+  }
+  function renderSpellListEditor() {
+    const container = document.getElementById("spell-list");
+    container.innerHTML = "";
+    if (!editingSpells.length) {
+      container.innerHTML = '<p class="sidebar-help">No spells added yet.</p>';
+      syncSpellListField();
+      return;
+    }
+    const preparesSpells = characterRules.preparedSpellCount(
+      document.getElementById("sf-class").value,
+      document.getElementById("sf-level").value,
+      10
+    ) !== null;
+    const byLevel = /* @__PURE__ */ new Map();
+    editingSpells.forEach((spell) => {
+      const level = Math.max(0, Math.min(9, Number(spell.level) || 0));
+      if (!byLevel.has(level)) byLevel.set(level, []);
+      byLevel.get(level).push(spell);
+    });
+    [...byLevel.keys()].sort((a, b) => a - b).forEach((level) => {
+      const group = document.createElement("div");
+      group.className = "spell-level-group";
+      const title = document.createElement("div");
+      title.className = "spell-level-group-title";
+      title.textContent = SPELL_LEVEL_NAMES[level];
+      group.appendChild(title);
+      byLevel.get(level).forEach((spell) => {
+        const row = document.createElement("div");
+        row.className = "spell-list-item";
+        const main = document.createElement("div");
+        main.className = "spell-list-item-main";
+        const name = document.createElement("div");
+        name.className = "spell-list-item-name";
+        name.textContent = spell.name;
+        if (spell.source) {
+          const source = document.createElement("span");
+          source.className = "spell-source-badge";
+          source.textContent = spell.source;
+          name.appendChild(source);
+        }
+        if (spell.alwaysPrepared || preparesSpells && spell.level > 0 && spell.prepared === true) {
+          const prepared = document.createElement("span");
+          prepared.className = `spell-prepared-badge${spell.alwaysPrepared ? " always" : ""}`;
+          prepared.textContent = spell.alwaysPrepared ? "Always prepared" : "Prepared";
+          name.appendChild(prepared);
+        }
+        main.appendChild(name);
+        const metadata = [
+          spell.school,
+          spell.range ? `Range: ${spell.range}` : "",
+          spell.attack && !/^none$/i.test(spell.attack) ? `Attack/save: ${spell.attack}` : "",
+          spell.damage ? `Damage: ${spell.damage}` : ""
+        ].filter(Boolean);
+        if (metadata.length) {
+          const meta = document.createElement("div");
+          meta.className = "spell-list-item-meta";
+          metadata.forEach((value) => {
+            const item = document.createElement("span");
+            item.textContent = value;
+            meta.appendChild(item);
+          });
+          main.appendChild(meta);
+        }
+        if (spell.effect) {
+          const desc = document.createElement("div");
+          desc.className = "spell-list-item-desc";
+          desc.textContent = spell.effect;
+          main.appendChild(desc);
+        }
+        row.appendChild(main);
+        const actions = document.createElement("div");
+        actions.className = "spell-list-item-actions";
+        const edit = document.createElement("button");
+        edit.type = "button";
+        edit.className = "edit";
+        edit.textContent = "\u270E";
+        edit.title = "Edit spell";
+        edit.disabled = !editingCanEdit;
+        edit.onclick = () => openSpellForm(spell);
+        const del = document.createElement("button");
+        del.type = "button";
+        del.className = "del";
+        del.textContent = "\xD7";
+        del.title = "Remove spell";
+        del.disabled = !editingCanEdit;
+        del.onclick = () => {
+          editingSpells = editingSpells.filter((entry) => entry.id !== spell.id);
+          renderSpellListEditor();
+        };
+        actions.append(edit, del);
+        row.appendChild(actions);
+        group.appendChild(row);
+      });
+      container.appendChild(group);
+    });
+    syncSpellListField();
+  }
+  function populateSpellForm(spell = {}) {
+    const form = document.getElementById("spell-add-form");
+    const normalized = normalizeSpell({ name: spell.name || " ", ...spell }) || {};
+    form.dataset.spellSource = normalized.source || "";
+    document.getElementById("spell-form-name").value = spell.name || "";
+    document.getElementById("spell-form-level").value = normalized.level ?? "0";
+    document.getElementById("spell-form-school").value = normalized.school || "";
+    document.getElementById("spell-form-range").value = normalized.range || "";
+    document.getElementById("spell-form-casting-time").value = normalized.castingTime || "";
+    document.getElementById("spell-form-duration").value = normalized.duration || "";
+    document.getElementById("spell-form-components").value = normalized.components || "";
+    document.getElementById("spell-form-attack").value = normalized.attack || "";
+    document.getElementById("spell-form-damage").value = normalized.damage || "";
+    document.getElementById("spell-form-effect").value = normalized.effect || "";
+    document.getElementById("spell-form-always-prepared").checked = !!normalized.alwaysPrepared;
+  }
+  function openSpellForm(spell) {
+    const form = document.getElementById("spell-add-form");
+    form.classList.remove("hidden");
+    editingSpellId = spell ? spell.id : null;
+    document.getElementById("spell-preset-select").value = "";
+    populateSpellForm(spell || {});
+    document.getElementById("spell-form-name").focus();
+  }
+  const spellPresetSelect = document.getElementById("spell-preset-select");
+  ["Humblewood", "Player's Handbook (2014)"].forEach((source) => {
+    const group = document.createElement("optgroup");
+    group.label = source;
+    allSpellPresets().filter((spell) => spell.source === source).sort((a, b) => a.level - b.level || a.name.localeCompare(b.name)).forEach((spell) => {
+      const option = document.createElement("option");
+      option.value = `${source}::${spell.name}`;
+      option.textContent = `${SPELL_LEVEL_NAMES[spell.level]} \xB7 ${spell.name}`;
+      group.appendChild(option);
+    });
+    spellPresetSelect.appendChild(group);
   });
-  const automatic = calculated !== null;
-  armorClassInput.readOnly = automatic;
-  baseInput.readOnly = !['light', 'medium', 'heavy'].includes(method);
-  if (automatic) armorClassInput.value = calculated;
-
-  const notes = {
-    manual: 'Manual AC remains unchanged.',
-    unarmored: '10 + Dexterity modifier + the shield/other bonus.',
-    light: 'Armor base + Dexterity modifier + the shield/other bonus.',
-    medium: 'Armor base + Dexterity modifier (maximum +2) + the shield/other bonus.',
-    heavy: 'Armor base + the shield/other bonus; Dexterity does not apply.',
-    barbarian: '10 + Dexterity modifier + Constitution modifier + the shield/other bonus.',
-    monk: '10 + Dexterity modifier + Wisdom modifier + other bonuses. Monk Unarmored Defense does not allow a shield.',
-    hedge: '14 + Dexterity modifier + the shield/other bonus. Hedges cannot wear armor.',
-    'hedge-curled': '19 + the shield/other bonus while curled up; Dexterity does not apply.'
+  function selectedSpellPreset() {
+    const [source, ...nameParts] = spellPresetSelect.value.split("::");
+    const name = nameParts.join("::");
+    return allSpellPresets().find((spell) => spell.source === source && spell.name === name);
+  }
+  function addSpellNames(raw) {
+    const names = String(raw || "").split(/[,;\n]/).map((name) => name.trim()).filter(Boolean);
+    if (!names.length) return showToast("Enter at least one spell name.");
+    let added = 0;
+    names.forEach((name) => {
+      if (editingSpells.some((existing) => existing.name.toLowerCase() === name.toLowerCase())) return;
+      const preset = creationPresets.findSpellPreset(name, allSpellPresets());
+      editingSpells.push(normalizeSpell({
+        ...preset || {},
+        id: `spell-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        name: preset?.name || name,
+        level: preset?.level || 0,
+        source: preset?.source || "Custom list"
+      }));
+      added += 1;
+    });
+    renderSpellListEditor();
+    document.getElementById("spell-bulk-list").value = "";
+    showToast(added ? `Added ${added} spell${added === 1 ? "" : "s"}.` : "Those spells are already on the sheet.");
+  }
+  document.getElementById("spell-preset-load").onclick = () => {
+    const preset = selectedSpellPreset();
+    if (!preset) return showToast("Choose a spell preset first.");
+    populateSpellForm(preset);
   };
-  document.getElementById('ac-calculation-note').textContent = notes[method] || notes.manual;
-}
-
-function refreshCharacterCalculations(force, recalculateSpell = false) {
-  const level = document.getElementById('sf-level');
-  const bonus = proficiencyBonus(level.value);
-  document.getElementById('sf-prof-bonus').value = bonus;
-  ABILITIES.forEach(ability => {
-    const modifier = abilityModifier(document.getElementById(`sf-${ability}`).value);
-    document.getElementById(`mod-${ability}`).textContent = signed(modifier);
-    const saveInput = document.getElementById(`sf-save-${ability}`);
-    const saveValue = modifier + (document.getElementById(`sf-save-${ability}-prof`).checked ? bonus : 0);
-    if (force || saveInput.value === '') saveInput.value = saveValue;
-  });
-  Object.entries(SKILL_ABILITIES).forEach(([skill, ability]) => {
-    const input = document.getElementById(`sf-skill-${skill}`);
-    const value = abilityModifier(document.getElementById(`sf-${ability}`).value) +
-      (document.getElementById(`sf-skill-${skill}-prof`).checked ? bonus : 0);
-    if (force || input.value === '') input.value = value;
-  });
-  const initiativeInput = document.getElementById('sf-initiative');
-  if (!initiativeManuallyEdited && (force || initiativeInput.value === '')) {
-    initiativeInput.value = abilityModifier(document.getElementById('sf-dex').value);
+  document.getElementById("spell-bulk-add").onclick = () => addSpellNames(document.getElementById("spell-bulk-list").value);
+  document.getElementById("spell-add-btn").onclick = () => openSpellForm(null);
+  document.getElementById("spell-form-cancel").onclick = () => {
+    document.getElementById("spell-add-form").classList.add("hidden");
+    editingSpellId = null;
+  };
+  document.getElementById("spell-form-save").onclick = () => {
+    const name = document.getElementById("spell-form-name").value.trim();
+    if (!name) return alert("Give the spell a name first.");
+    const existing = editingSpells.find((entry) => entry.id === editingSpellId);
+    const spell = normalizeSpell({
+      id: editingSpellId || `spell-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      name,
+      level: document.getElementById("spell-form-level").value,
+      school: document.getElementById("spell-form-school").value,
+      range: document.getElementById("spell-form-range").value,
+      castingTime: document.getElementById("spell-form-casting-time").value,
+      duration: document.getElementById("spell-form-duration").value,
+      components: document.getElementById("spell-form-components").value,
+      attack: document.getElementById("spell-form-attack").value,
+      damage: document.getElementById("spell-form-damage").value,
+      effect: document.getElementById("spell-form-effect").value,
+      source: document.getElementById("spell-add-form").dataset.spellSource || "",
+      prepared: existing?.prepared,
+      alwaysPrepared: document.getElementById("spell-form-always-prepared").checked
+    });
+    if (editingSpellId) {
+      const index = editingSpells.findIndex((entry) => entry.id === editingSpellId);
+      if (index !== -1) editingSpells[index] = spell;
+    } else {
+      editingSpells.push(spell);
+    }
+    editingSpellId = null;
+    document.getElementById("spell-add-form").classList.add("hidden");
+    renderSpellListEditor();
+  };
+  document.getElementById("sf-portrait").onchange = (event) => {
+    pendingPortraitFile = event.target.files[0] || null;
+    if (!pendingPortraitFile) return renderPortraitPreview(editingPortraitUrl);
+    const reader = new FileReader();
+    reader.onload = () => renderPortraitPreview(reader.result);
+    reader.readAsDataURL(pendingPortraitFile);
+  };
+  function renderPortraitPreview(url) {
+    const preview = document.getElementById("portrait-preview");
+    preview.innerHTML = "";
+    if (!url) {
+      preview.textContent = "\u{1F343}";
+      return;
+    }
+    const image = document.createElement("img");
+    image.src = url;
+    image.alt = "Character portrait";
+    preview.appendChild(image);
   }
-  const passive = document.getElementById('sf-passive-perception');
-  if (force || passive.value === '') passive.value = 10 + Number(document.getElementById('sf-skill-perception').value || 0);
-  const spellAbility = document.getElementById('sf-spell-ability').value.toLowerCase();
-  if (ABILITIES.includes(spellAbility)) {
-    const calculated = characterRules.spellcastingValues(
-      document.getElementById(`sf-${spellAbility}`).value,
-      level.value
+  function collectCharacterFields() {
+    const fields = {};
+    document.querySelectorAll('#sheet-form [id^="sf-"]').forEach((input) => {
+      if (input.type === "file") return;
+      const key = input.id.slice(3);
+      fields[key] = input.type === "checkbox" ? input.checked : input.value;
+    });
+    return fields;
+  }
+  document.getElementById("save-sheet-btn").onclick = async () => {
+    if (!editingCanEdit) return;
+    refreshCharacterCalculations(false);
+    let fields = collectCharacterFields();
+    const name = String(fields.name || "").trim();
+    const isNpc = !!editingNpcSheetId;
+    if (!name) return alert(`Every ${isNpc ? "NPC" : "character"} needs a name.`);
+    if (!isNpc) {
+      const constrainedCharacter = { fields };
+      const validationError = characterRules.validatePlayerCharacter(constrainedCharacter);
+      if (validationError) return alert(validationError);
+      characterRules.applyPlayerCharacterConstraints(constrainedCharacter);
+      fields = constrainedCharacter.fields;
+    }
+    const saveButton = document.getElementById("save-sheet-btn");
+    saveButton.disabled = true;
+    saveButton.textContent = "Saving\u2026";
+    try {
+      if (pendingPortraitFile) editingPortraitUrl = await uploadFile(pendingPortraitFile);
+    } catch (error) {
+      showToast("The portrait could not be uploaded. Please try again.");
+      saveButton.disabled = false;
+      saveButton.textContent = isNpc ? "Save NPC" : "Save character";
+      return;
+    }
+    const num = (key, fallback = 0) => Number(fields[key]) || fallback;
+    const sheet = {
+      name,
+      pronouns: String(fields.pronouns || "").trim(),
+      _originalName: editingOriginalName,
+      portraitUrl: editingPortraitUrl,
+      species: fields.species || "",
+      race: fields.species || "",
+      subrace: fields.subrace || "",
+      charClass: fields.class || "",
+      subclass: fields.subclass || "",
+      level: Math.max(1, Math.min(20, num("level", 1))),
+      hp: num("hp"),
+      maxHp: num("maxhp"),
+      tempHp: num("temphp"),
+      ac: num("ac", 10),
+      initiativeModifier: num("initiative"),
+      speed: fields.speed || "",
+      abilities: Object.fromEntries(ABILITIES.map((ability) => [ability, num(ability, 10)])),
+      saves: Object.fromEntries(ABILITIES.map((ability) => [ability, {
+        proficient: !!fields[`save-${ability}-prof`],
+        modifier: num(`save-${ability}`)
+      }])),
+      skills: Object.fromEntries(Object.keys(SKILL_ABILITIES).map((skill) => [skill, {
+        proficient: !!fields[`skill-${skill}-prof`],
+        modifier: num(`skill-${skill}`)
+      }])),
+      attacks: editingAttacks.map((attack) => ({ ...attack })),
+      spellcasting: {
+        className: fields["spell-class"] || "",
+        ability: fields["spell-ability"] || "",
+        saveDc: num("spell-dc"),
+        attackBonus: num("spell-attack")
+      },
+      inventory: editingInventory.map((item) => ({ ...item })),
+      notes: fields.notes || "",
+      fields
+    };
+    if (isNpc) {
+      const existing = editingNpcSheetId === "__new__" ? null : state.npcs?.[editingNpcSheetId];
+      const spellSlots = {};
+      for (let level = 1; level <= 9; level += 1) {
+        const total = Math.max(0, Number(fields[`spell-slots-${level}`]) || 0);
+        spellSlots[level] = {
+          total,
+          used: Math.max(0, Math.min(total, Number(fields[`spell-used-${level}`]) || 0))
+        };
+      }
+      const npcPayload = {
+        ...existing ? { id: existing.id } : {},
+        name,
+        pronouns: sheet.pronouns,
+        imageUrl: editingPortraitUrl,
+        hp: num("hp", 10),
+        maxHp: Math.max(1, num("maxhp", 10)),
+        tempHp: Math.max(0, num("temphp")),
+        ac: num("ac", 10),
+        initiativeModifier: num("initiative"),
+        attacks: sheet.attacks,
+        spells: editingSpells.map((spell) => ({ ...spell })),
+        spellcasting: sheet.spellcasting,
+        notes: fields["attacks-notes"] || fields.notes || "",
+        combat: {
+          ...existing?.combat || {},
+          spellSlots
+        },
+        sheet: {
+          ...sheet,
+          portraitUrl: editingPortraitUrl,
+          challenge: document.getElementById("sheet-form").dataset.npcChallenge || existing?.sheet?.challenge || "",
+          spells: editingSpells.map((spell) => ({ ...spell }))
+        }
+      };
+      socket.emit(existing ? "npc:update" : "npc:create", npcPayload);
+    } else {
+      socket.emit("character:save", sheet);
+      document.getElementById("sheet-editor").classList.add("hidden");
+    }
+    saveButton.disabled = false;
+    saveButton.textContent = isNpc ? "Save NPC" : "Save character";
+    if (!isNpc) showToast(`${name} saved.`);
+  };
+  document.getElementById("delete-sheet-btn").onclick = () => {
+    if (editingNpcSheetId) {
+      if (editingNpcSheetId !== "__new__" && confirm(`Delete ${state.npcs?.[editingNpcSheetId]?.name || "this NPC"}?`)) {
+        socket.emit("npc:delete", { id: editingNpcSheetId });
+      } else if (editingNpcSheetId !== "__new__") {
+        return;
+      }
+      editingNpcSheetId = null;
+      document.getElementById("sheet-editor").classList.add("hidden");
+      return;
+    }
+    if (editingOriginalName && confirm(`Delete ${editingOriginalName}?`)) {
+      socket.emit("character:remove", { name: editingOriginalName });
+    } else if (editingOriginalName) {
+      return;
+    }
+    document.getElementById("sheet-editor").classList.add("hidden");
+  };
+  function abilityModifier(score) {
+    return Math.floor(((Number(score) || 10) - 10) / 2);
+  }
+  function proficiencyBonus(level) {
+    return 2 + Math.floor((Math.max(1, Math.min(20, Number(level) || 1)) - 1) / 4);
+  }
+  function updateSpellSlotsForLevel() {
+    const className = document.getElementById("sf-class").value;
+    const subclass = document.getElementById("sf-subclass").value;
+    const level = document.getElementById("sf-level").value;
+    const slots = characterRules.spellSlotsFor(className, subclass, level);
+    for (let spellLevel = 1; spellLevel <= 9; spellLevel += 1) {
+      const maximum = slots[spellLevel - 1] || 0;
+      const maximumInput = document.getElementById(`sf-spell-slots-${spellLevel}`);
+      const usedInput = document.getElementById(`sf-spell-used-${spellLevel}`);
+      maximumInput.value = maximum;
+      usedInput.value = Math.min(maximum, Math.max(0, Number(usedInput.value) || 0));
+    }
+  }
+  function refreshArmorClass() {
+    const methodInput = document.getElementById("sf-ac-method");
+    const armorClassInput = document.getElementById("sf-ac");
+    const baseInput = document.getElementById("sf-ac-base");
+    const method = methodInput.value;
+    const calculated = characterRules.armorClass({
+      method,
+      base: baseInput.value,
+      bonus: document.getElementById("sf-ac-bonus").value,
+      dex: document.getElementById("sf-dex").value,
+      con: document.getElementById("sf-con").value,
+      wis: document.getElementById("sf-wis").value
+    });
+    const automatic = calculated !== null;
+    armorClassInput.readOnly = automatic;
+    baseInput.readOnly = !["light", "medium", "heavy"].includes(method);
+    if (automatic) armorClassInput.value = calculated;
+    const notes = {
+      manual: "Manual AC remains unchanged.",
+      unarmored: "10 + Dexterity modifier + the shield/other bonus.",
+      light: "Armor base + Dexterity modifier + the shield/other bonus.",
+      medium: "Armor base + Dexterity modifier (maximum +2) + the shield/other bonus.",
+      heavy: "Armor base + the shield/other bonus; Dexterity does not apply.",
+      barbarian: "10 + Dexterity modifier + Constitution modifier + the shield/other bonus.",
+      monk: "10 + Dexterity modifier + Wisdom modifier + other bonuses. Monk Unarmored Defense does not allow a shield.",
+      hedge: "14 + Dexterity modifier + the shield/other bonus. Hedges cannot wear armor.",
+      "hedge-curled": "19 + the shield/other bonus while curled up; Dexterity does not apply."
+    };
+    document.getElementById("ac-calculation-note").textContent = notes[method] || notes.manual;
+  }
+  function refreshCharacterCalculations(force, recalculateSpell = false) {
+    const level = document.getElementById("sf-level");
+    const bonus = proficiencyBonus(level.value);
+    document.getElementById("sf-prof-bonus").value = bonus;
+    ABILITIES.forEach((ability) => {
+      const modifier = abilityModifier(document.getElementById(`sf-${ability}`).value);
+      document.getElementById(`mod-${ability}`).textContent = signed(modifier);
+      const saveInput = document.getElementById(`sf-save-${ability}`);
+      const saveValue = modifier + (document.getElementById(`sf-save-${ability}-prof`).checked ? bonus : 0);
+      if (force || saveInput.value === "") saveInput.value = saveValue;
+    });
+    Object.entries(SKILL_ABILITIES).forEach(([skill, ability]) => {
+      const input = document.getElementById(`sf-skill-${skill}`);
+      const value = abilityModifier(document.getElementById(`sf-${ability}`).value) + (document.getElementById(`sf-skill-${skill}-prof`).checked ? bonus : 0);
+      if (force || input.value === "") input.value = value;
+    });
+    const initiativeInput = document.getElementById("sf-initiative");
+    if (!initiativeManuallyEdited && (force || initiativeInput.value === "")) {
+      initiativeInput.value = abilityModifier(document.getElementById("sf-dex").value);
+    }
+    const passive = document.getElementById("sf-passive-perception");
+    if (force || passive.value === "") passive.value = 10 + Number(document.getElementById("sf-skill-perception").value || 0);
+    const spellAbility = document.getElementById("sf-spell-ability").value.toLowerCase();
+    if (ABILITIES.includes(spellAbility)) {
+      const calculated = characterRules.spellcastingValues(
+        document.getElementById(`sf-${spellAbility}`).value,
+        level.value
+      );
+      const spellDc = document.getElementById("sf-spell-dc");
+      const spellAttack = document.getElementById("sf-spell-attack");
+      if (recalculateSpell || spellDc.value === "") spellDc.value = calculated.saveDc;
+      if (recalculateSpell || spellAttack.value === "") spellAttack.value = calculated.attackBonus;
+    }
+    const className = document.getElementById("sf-class").value;
+    const subclass = document.getElementById("sf-subclass").value;
+    const preparedAbility = characterRules.spellcastingAbilityFor(className, subclass) || spellAbility;
+    const prepared = characterRules.preparedSpellCount(
+      className,
+      level.value,
+      ABILITIES.includes(preparedAbility) ? document.getElementById(`sf-${preparedAbility}`).value : 10
     );
-    const spellDc = document.getElementById('sf-spell-dc');
-    const spellAttack = document.getElementById('sf-spell-attack');
-    if (recalculateSpell || spellDc.value === '') spellDc.value = calculated.saveDc;
-    if (recalculateSpell || spellAttack.value === '') spellAttack.value = calculated.attackBonus;
+    document.getElementById("sf-spells-prepared").value = prepared === null ? "" : prepared;
+    refreshArmorClass();
   }
-  const className = document.getElementById('sf-class').value;
-  const subclass = document.getElementById('sf-subclass').value;
-  const preparedAbility = characterRules.spellcastingAbilityFor(className, subclass) || spellAbility;
-  const prepared = characterRules.preparedSpellCount(
-    className,
-    level.value,
-    ABILITIES.includes(preparedAbility) ? document.getElementById(`sf-${preparedAbility}`).value : 10
-  );
-  document.getElementById('sf-spells-prepared').value = prepared === null ? '' : prepared;
-  refreshArmorClass();
-}
-
-ABILITIES.forEach(ability => document.getElementById(`sf-${ability}`).addEventListener('input', () => {
-  const spellAbility = document.getElementById('sf-spell-ability').value.toLowerCase();
-  if (ability === 'con') refreshNewCharacterHitPoints();
-  refreshCharacterCalculations(true, ability === spellAbility);
-}));
-document.getElementById('sf-level').addEventListener('input', () => {
-  refreshCharacterCalculations(true, true);
-  syncAutomaticClassFeatures(true);
-  renderSpellListEditor();
-});
-document.getElementById('sf-initiative').addEventListener('input', () => { initiativeManuallyEdited = true; });
-ABILITIES.forEach(ability => document.getElementById(`sf-save-${ability}-prof`).addEventListener('change', () => refreshCharacterCalculations(true)));
-Object.keys(SKILL_ABILITIES).forEach(skill => document.getElementById(`sf-skill-${skill}-prof`).addEventListener('change', () => refreshCharacterCalculations(true)));
-document.getElementById('sf-spell-ability').addEventListener('change', () => refreshCharacterCalculations(false, true));
-document.getElementById('sf-ac-method').addEventListener('change', () => {
-  acMethodManuallySelected = true;
-  refreshArmorClass();
-});
-document.getElementById('sf-ac-base').addEventListener('input', refreshArmorClass);
-document.getElementById('sf-ac-bonus').addEventListener('input', refreshArmorClass);
-
-function formatSpellSlots(slots) {
-  const parts = slots.map((count, index) => count ? `${index + 1}st${index ? '' : ''}: ${count}` : '').filter(Boolean);
-  return parts.length ? parts.join(', ').replace(/2st/g, '2nd').replace(/3st/g, '3rd').replace(/([4-9])st/g, '$1th') : 'none';
-}
-
-function abilitySelectMarkup(className) {
-  return `<select class="${className}"><option value="">Choose an ability...</option>${ABILITIES.map(ability =>
-    `<option value="${ability}">${ABILITY_LABELS[ability]} (${document.getElementById(`sf-${ability}`).value})</option>`
-  ).join('')}</select>`;
-}
-
-function closeLevelUpDialog(resetLevel = true) {
-  const overlay = document.getElementById('level-up-overlay');
-  if (resetLevel && pendingLevelUp) {
-    suppressLevelUpPrompt = true;
-    document.getElementById('sf-level').value = pendingLevelUp.fromLevel;
-    suppressLevelUpPrompt = false;
+  ABILITIES.forEach((ability) => document.getElementById(`sf-${ability}`).addEventListener("input", () => {
+    const spellAbility = document.getElementById("sf-spell-ability").value.toLowerCase();
+    if (ability === "con") refreshNewCharacterHitPoints();
+    refreshCharacterCalculations(true, ability === spellAbility);
+  }));
+  document.getElementById("sf-level").addEventListener("input", () => {
     refreshCharacterCalculations(true, true);
+    syncAutomaticClassFeatures(true);
+    renderSpellListEditor();
+  });
+  document.getElementById("sf-initiative").addEventListener("input", () => {
+    initiativeManuallyEdited = true;
+  });
+  ABILITIES.forEach((ability) => document.getElementById(`sf-save-${ability}-prof`).addEventListener("change", () => refreshCharacterCalculations(true)));
+  Object.keys(SKILL_ABILITIES).forEach((skill) => document.getElementById(`sf-skill-${skill}-prof`).addEventListener("change", () => refreshCharacterCalculations(true)));
+  document.getElementById("sf-spell-ability").addEventListener("change", () => refreshCharacterCalculations(false, true));
+  document.getElementById("sf-ac-method").addEventListener("change", () => {
+    acMethodManuallySelected = true;
+    refreshArmorClass();
+  });
+  document.getElementById("sf-ac-base").addEventListener("input", refreshArmorClass);
+  document.getElementById("sf-ac-bonus").addEventListener("input", refreshArmorClass);
+  function formatSpellSlots(slots) {
+    const parts = slots.map((count, index) => count ? `${index + 1}st${index ? "" : ""}: ${count}` : "").filter(Boolean);
+    return parts.length ? parts.join(", ").replace(/2st/g, "2nd").replace(/3st/g, "3rd").replace(/([4-9])st/g, "$1th") : "none";
   }
-  syncAutomaticClassFeatures(true);
-  pendingLevelUp = null;
-  overlay.classList.add('hidden');
-  overlay.setAttribute('aria-hidden', 'true');
-}
-
-function renderLevelUpDialog() {
-  if (!pendingLevelUp) return;
-  const { fromLevel, toLevel, className, subclass, species } = pendingLevelUp;
-  const hitDie = characterRules.hitDieFor(className);
-  const average = characterRules.averageHitDieRoll(className);
-  const constitutionModifier = characterRules.abilityModifier(document.getElementById('sf-con').value);
-  const gains = characterRules.levelUpGains({ className, subclass, species, fromLevel, toLevel });
-
-  document.getElementById('level-up-title').textContent = `${className} level ${fromLevel} → ${toLevel}`;
-  document.getElementById('level-up-intro').textContent = `Complete the choices below, then apply the milestone level-up. No experience points are required.`;
-
-  const hpContainer = document.getElementById('level-up-hp-rows');
-  hpContainer.innerHTML = gains.map(gain => `
+  function abilitySelectMarkup(className) {
+    return `<select class="${className}"><option value="">Choose an ability...</option>${ABILITIES.map(
+      (ability) => `<option value="${ability}">${ABILITY_LABELS[ability]} (${document.getElementById(`sf-${ability}`).value})</option>`
+    ).join("")}</select>`;
+  }
+  function closeLevelUpDialog(resetLevel = true) {
+    const overlay = document.getElementById("level-up-overlay");
+    if (resetLevel && pendingLevelUp) {
+      suppressLevelUpPrompt = true;
+      document.getElementById("sf-level").value = pendingLevelUp.fromLevel;
+      suppressLevelUpPrompt = false;
+      refreshCharacterCalculations(true, true);
+    }
+    syncAutomaticClassFeatures(true);
+    pendingLevelUp = null;
+    overlay.classList.add("hidden");
+    overlay.setAttribute("aria-hidden", "true");
+  }
+  function renderLevelUpDialog() {
+    if (!pendingLevelUp) return;
+    const { fromLevel, toLevel, className, subclass, species } = pendingLevelUp;
+    const hitDie = characterRules.hitDieFor(className);
+    const average = characterRules.averageHitDieRoll(className);
+    const constitutionModifier = characterRules.abilityModifier(document.getElementById("sf-con").value);
+    const gains = characterRules.levelUpGains({ className, subclass, species, fromLevel, toLevel });
+    document.getElementById("level-up-title").textContent = `${className} level ${fromLevel} \u2192 ${toLevel}`;
+    document.getElementById("level-up-intro").textContent = `Complete the choices below, then apply the milestone level-up. No experience points are required.`;
+    const hpContainer = document.getElementById("level-up-hp-rows");
+    hpContainer.innerHTML = gains.map((gain) => `
     <div class="level-up-hp-row" data-level="${gain.level}">
       <strong>Level ${gain.level}</strong>
       <label><input type="radio" name="hp-method-${gain.level}" value="average" checked> Fixed ${average} ${signed(constitutionModifier)} CON</label>
@@ -4136,21 +4045,22 @@ function renderLevelUpDialog() {
       <input class="level-up-hp-roll" type="number" min="1" max="${hitDie}" placeholder="1-${hitDie}" aria-label="Hit die result for level ${gain.level}">
       <button type="button" class="btn-ghost level-up-roll-btn">Roll d${hitDie}</button>
     </div>
-  `).join('');
-  hpContainer.querySelectorAll('.level-up-hp-row').forEach(row => {
-    const rollInput = row.querySelector('.level-up-hp-roll');
-    row.querySelector('.level-up-roll-btn').addEventListener('click', () => {
-      rollInput.value = Math.floor(Math.random() * hitDie) + 1;
-      row.querySelector('input[value="roll"]').checked = true;
+  `).join("");
+    hpContainer.querySelectorAll(".level-up-hp-row").forEach((row) => {
+      const rollInput = row.querySelector(".level-up-hp-roll");
+      row.querySelector(".level-up-roll-btn").addEventListener("click", () => {
+        rollInput.value = Math.floor(Math.random() * hitDie) + 1;
+        row.querySelector('input[value="roll"]').checked = true;
+      });
+      rollInput.addEventListener("input", () => {
+        row.querySelector('input[value="roll"]').checked = true;
+      });
     });
-    rollInput.addEventListener('input', () => { row.querySelector('input[value="roll"]').checked = true; });
-  });
-
-  const asiLevels = gains.filter(gain => gain.asi).map(gain => gain.level);
-  const asiCard = document.getElementById('level-up-asi-card');
-  const asiContainer = document.getElementById('level-up-asi-rows');
-  asiCard.classList.toggle('hidden', !asiLevels.length);
-  asiContainer.innerHTML = asiLevels.map(level => `
+    const asiLevels = gains.filter((gain) => gain.asi).map((gain) => gain.level);
+    const asiCard = document.getElementById("level-up-asi-card");
+    const asiContainer = document.getElementById("level-up-asi-rows");
+    asiCard.classList.toggle("hidden", !asiLevels.length);
+    asiContainer.innerHTML = asiLevels.map((level) => `
     <div class="level-up-asi-row" data-level="${level}">
       <div class="level-up-asi-row-header"><strong>Level ${level}</strong><span>Ability Score Improvement</span></div>
       <select class="level-up-asi-mode">
@@ -4159,1493 +4069,1344 @@ function renderLevelUpDialog() {
         <option value="split">+1 to two abilities</option>
         <option value="feat">Take a feat instead</option>
       </select>
-      <div class="level-up-asi-controls single hidden" data-asi-controls="plus-two">${abilitySelectMarkup('level-up-asi-plus-two')}</div>
-      <div class="level-up-asi-controls hidden" data-asi-controls="split">${abilitySelectMarkup('level-up-asi-plus-one-a')}${abilitySelectMarkup('level-up-asi-plus-one-b')}</div>
+      <div class="level-up-asi-controls single hidden" data-asi-controls="plus-two">${abilitySelectMarkup("level-up-asi-plus-two")}</div>
+      <div class="level-up-asi-controls hidden" data-asi-controls="split">${abilitySelectMarkup("level-up-asi-plus-one-a")}${abilitySelectMarkup("level-up-asi-plus-one-b")}</div>
       <div class="level-up-asi-controls single hidden" data-asi-controls="feat"><input type="text" class="level-up-feat-name" placeholder="Feat name"></div>
     </div>
-  `).join('');
-  asiContainer.querySelectorAll('.level-up-asi-row').forEach(row => {
-    const mode = row.querySelector('.level-up-asi-mode');
-    mode.addEventListener('change', () => {
-      row.querySelectorAll('[data-asi-controls]').forEach(control => {
-        control.classList.toggle('hidden', control.dataset.asiControls !== mode.value);
+  `).join("");
+    asiContainer.querySelectorAll(".level-up-asi-row").forEach((row) => {
+      const mode = row.querySelector(".level-up-asi-mode");
+      mode.addEventListener("change", () => {
+        row.querySelectorAll("[data-asi-controls]").forEach((control) => {
+          control.classList.toggle("hidden", control.dataset.asiControls !== mode.value);
+        });
       });
     });
-  });
-
-  const summary = document.getElementById('level-up-summary');
-  summary.innerHTML = gains.map(gain => {
-    const items = ['Increase maximum HP and gain one Hit Die'];
-    if (gain.asi) {
-      items.push('Choose an Ability Score Improvement or a feat');
-      if (characterRules.spellcastingAbilityFor(className, subclass)) items.push('A class cantrip may be replaced with another cantrip from the same class');
+    const summary = document.getElementById("level-up-summary");
+    summary.innerHTML = gains.map((gain) => {
+      const items = ["Increase maximum HP and gain one Hit Die"];
+      if (gain.asi) {
+        items.push("Choose an Ability Score Improvement or a feat");
+        if (characterRules.spellcastingAbilityFor(className, subclass)) items.push("A class cantrip may be replaced with another cantrip from the same class");
+      }
+      if (gain.proficiencyIncrease) items.push(`Proficiency bonus increases to +${characterRules.proficiencyBonus(gain.level)}`);
+      items.push(...gain.classFeatures.map((feature) => `Class: ${feature}`));
+      items.push(...gain.subclassFeatures.map((feature) => `Subclass: ${feature}`));
+      items.push(...gain.speciesFeatures.map((feature) => `Species: ${feature}`));
+      if (gain.cantripIncrease) items.push("Damaging cantrips gain another damage die where their spell description says so");
+      if (characterRules.spellcastingAbilityFor(className, subclass)) items.push("Review spells known or prepared and any spell replacement allowed at this class level");
+      if (className === "Wizard") items.push("Add two wizard spells to the spellbook");
+      items.push("Confirm class-table resource counts and scaling values for this level");
+      return `<article class="level-up-summary-level"><h4>Level ${gain.level}</h4><ul>${items.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul></article>`;
+    }).join("");
+    const oldSlots = characterRules.spellSlotsFor(className, subclass, fromLevel);
+    const newSlots = characterRules.spellSlotsFor(className, subclass, toLevel);
+    const slotsChanged = oldSlots.some((count, index) => count !== newSlots[index]);
+    const automaticParts = [
+      "Proficiency bonus, proficient saves and skills, initiative, passive Perception, spell attack, and spell save DC will recalculate.",
+      `Hit Dice become ${toLevel}d${hitDie}.`
+    ];
+    if (slotsChanged) automaticParts.push(`Spell slots change from ${formatSpellSlots(oldSlots)} to ${formatSpellSlots(newSlots)}.`);
+    if (characterRules.preparedSpellCount(className, toLevel, 10) !== null) automaticParts.push("The prepared-spell limit will recalculate from the final spellcasting ability score.");
+    automaticParts.push("AC will recalculate only when an automatic AC method is selected on the sheet.");
+    document.getElementById("level-up-automatic-summary").textContent = automaticParts.join(" ");
+    const overlay = document.getElementById("level-up-overlay");
+    overlay.classList.remove("hidden");
+    overlay.setAttribute("aria-hidden", "false");
+  }
+  function requestLevelUp(targetLevel) {
+    if (suppressLevelUpPrompt || !editingCanEdit) return;
+    const target = Math.max(1, Math.min(20, Number(targetLevel) || editingBaseLevel));
+    if (target <= editingBaseLevel) return;
+    const className = characterRules.canonicalClass(document.getElementById("sf-class").value);
+    if (!className) {
+      document.getElementById("sf-level").value = editingBaseLevel;
+      refreshCharacterCalculations(true, true);
+      return showToast("Choose a class before leveling up.");
     }
-    if (gain.proficiencyIncrease) items.push(`Proficiency bonus increases to +${characterRules.proficiencyBonus(gain.level)}`);
-    items.push(...gain.classFeatures.map(feature => `Class: ${feature}`));
-    items.push(...gain.subclassFeatures.map(feature => `Subclass: ${feature}`));
-    items.push(...gain.speciesFeatures.map(feature => `Species: ${feature}`));
-    if (gain.cantripIncrease) items.push('Damaging cantrips gain another damage die where their spell description says so');
-    if (characterRules.spellcastingAbilityFor(className, subclass)) items.push('Review spells known or prepared and any spell replacement allowed at this class level');
-    if (className === 'Wizard') items.push('Add two wizard spells to the spellbook');
-    items.push('Confirm class-table resource counts and scaling values for this level');
-    return `<article class="level-up-summary-level"><h4>Level ${gain.level}</h4><ul>${items.map(item => `<li>${escapeHtml(item)}</li>`).join('')}</ul></article>`;
-  }).join('');
-
-  const oldSlots = characterRules.spellSlotsFor(className, subclass, fromLevel);
-  const newSlots = characterRules.spellSlotsFor(className, subclass, toLevel);
-  const slotsChanged = oldSlots.some((count, index) => count !== newSlots[index]);
-  const automaticParts = [
-    'Proficiency bonus, proficient saves and skills, initiative, passive Perception, spell attack, and spell save DC will recalculate.',
-    `Hit Dice become ${toLevel}d${hitDie}.`
-  ];
-  if (slotsChanged) automaticParts.push(`Spell slots change from ${formatSpellSlots(oldSlots)} to ${formatSpellSlots(newSlots)}.`);
-  if (characterRules.preparedSpellCount(className, toLevel, 10) !== null) automaticParts.push('The prepared-spell limit will recalculate from the final spellcasting ability score.');
-  automaticParts.push('AC will recalculate only when an automatic AC method is selected on the sheet.');
-  document.getElementById('level-up-automatic-summary').textContent = automaticParts.join(' ');
-
-  const overlay = document.getElementById('level-up-overlay');
-  overlay.classList.remove('hidden');
-  overlay.setAttribute('aria-hidden', 'false');
-}
-
-function requestLevelUp(targetLevel) {
-  if (suppressLevelUpPrompt || !editingCanEdit) return;
-  const target = Math.max(1, Math.min(20, Number(targetLevel) || editingBaseLevel));
-  if (target <= editingBaseLevel) return;
-  const className = characterRules.canonicalClass(document.getElementById('sf-class').value);
-  if (!className) {
-    document.getElementById('sf-level').value = editingBaseLevel;
-    refreshCharacterCalculations(true, true);
-    return showToast('Choose a class before leveling up.');
-  }
-  pendingLevelUp = {
-    fromLevel: editingBaseLevel,
-    toLevel: target,
-    className,
-    subclass: document.getElementById('sf-subclass').value,
-    species: document.getElementById('sf-species').value,
-    oldConstitution: Number(document.getElementById('sf-con').value) || 10,
-    oldMaximumHp: Number(document.getElementById('sf-maxhp').value) || 0,
-    oldCurrentHp: Number(document.getElementById('sf-hp').value) || 0,
-    oldHitDiceLeft: Math.max(0, Number(document.getElementById('sf-hitdice-left').value) || 0)
-  };
-  renderLevelUpDialog();
-}
-
-function collectLevelUpAbilityChoices() {
-  const scores = Object.fromEntries(ABILITIES.map(ability => [ability, Number(document.getElementById(`sf-${ability}`).value) || 10]));
-  const feats = [];
-  for (const row of document.querySelectorAll('.level-up-asi-row')) {
-    const level = Number(row.dataset.level);
-    const mode = row.querySelector('.level-up-asi-mode').value;
-    if (!mode) return { error: `Choose the improvement for level ${level}.` };
-    if (mode === 'plus-two') {
-      const ability = row.querySelector('.level-up-asi-plus-two').value;
-      if (!ability) return { error: `Choose an ability for the level ${level} improvement.` };
-      if (scores[ability] >= 20) return { error: `${ABILITY_LABELS[ability]} is already 20.` };
-      scores[ability] = Math.min(20, scores[ability] + 2);
-    } else if (mode === 'split') {
-      const first = row.querySelector('.level-up-asi-plus-one-a').value;
-      const second = row.querySelector('.level-up-asi-plus-one-b').value;
-      if (!first || !second) return { error: `Choose two abilities for the level ${level} improvement.` };
-      if (first === second) return { error: `Choose two different abilities at level ${level}.` };
-      if (scores[first] >= 20 || scores[second] >= 20) return { error: 'An ability score cannot be increased above 20.' };
-      scores[first] += 1;
-      scores[second] += 1;
-    } else {
-      const feat = row.querySelector('.level-up-feat-name').value.trim();
-      if (!feat) return { error: `Enter the feat chosen at level ${level}.` };
-      feats.push(feat);
-    }
-  }
-  return { scores, feats };
-}
-
-function applyLevelUp() {
-  if (!pendingLevelUp) return;
-  const { className, fromLevel, toLevel, oldConstitution, oldMaximumHp, oldCurrentHp, oldHitDiceLeft } = pendingLevelUp;
-  const hitDie = characterRules.hitDieFor(className);
-  const average = characterRules.averageHitDieRoll(className);
-  const hitDieResults = [];
-  for (const row of document.querySelectorAll('.level-up-hp-row')) {
-    const method = row.querySelector('input[type="radio"]:checked')?.value || 'average';
-    const result = method === 'average' ? average : Number(row.querySelector('.level-up-hp-roll').value);
-    if (!Number.isInteger(result) || result < 1 || result > hitDie) {
-      return showToast(`Enter a d${hitDie} result from 1 to ${hitDie} for level ${row.dataset.level}.`);
-    }
-    hitDieResults.push(result);
-  }
-
-  const choices = collectLevelUpAbilityChoices();
-  if (choices.error) return showToast(choices.error);
-  ABILITIES.forEach(ability => { document.getElementById(`sf-${ability}`).value = choices.scores[ability]; });
-  if (choices.feats.length) {
-    const featField = document.getElementById('sf-feats');
-    const existing = featField.value.trim();
-    const additions = choices.feats.filter(feat => !new RegExp(`(^|\\n)${feat.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(\\n|$)`, 'i').test(existing));
-    featField.value = [existing, additions.join('\n\n')].filter(Boolean).join('\n\n');
-  }
-
-  const hpIncrease = characterRules.levelUpHitPointIncrease(
-    className,
-    oldConstitution,
-    choices.scores.con,
-    toLevel,
-    hitDieResults
-  );
-  const newMaximumHp = Math.max(1, oldMaximumHp + hpIncrease);
-  document.getElementById('sf-maxhp').value = newMaximumHp;
-  document.getElementById('sf-hp').value = document.getElementById('level-up-current-hp').checked
-    ? Math.min(newMaximumHp, oldCurrentHp + hpIncrease)
-    : Math.min(newMaximumHp, oldCurrentHp);
-  document.getElementById('sf-hitdice').value = `${toLevel}d${hitDie}`;
-  document.getElementById('sf-hitdice-left').value = Math.min(toLevel, oldHitDiceLeft + (toLevel - fromLevel));
-  document.getElementById('sf-level').value = toLevel;
-
-  updateSpellSlotsForLevel();
-  initiativeManuallyEdited = false;
-  refreshCharacterCalculations(true, true);
-  editingBaseLevel = toLevel;
-  closeLevelUpDialog(false);
-  showToast(`Level ${toLevel} applied. Review the listed features and save the character.`);
-}
-
-document.getElementById('sf-level').addEventListener('change', () => requestLevelUp(document.getElementById('sf-level').value));
-document.getElementById('level-up-btn').addEventListener('click', () => {
-  if (editingBaseLevel >= 20) return showToast('This character is already level 20.');
-  const target = Math.max(editingBaseLevel + 1, Number(document.getElementById('sf-level').value) || editingBaseLevel + 1);
-  document.getElementById('sf-level').value = Math.min(20, target);
-  requestLevelUp(document.getElementById('sf-level').value);
-});
-document.getElementById('level-up-close-btn').addEventListener('click', () => closeLevelUpDialog(true));
-document.getElementById('level-up-cancel-btn').addEventListener('click', () => closeLevelUpDialog(true));
-document.getElementById('level-up-apply-btn').addEventListener('click', applyLevelUp);
-
-// ================= JUKEBOX =================
-const audioEl = document.getElementById('audio-el');
-const trackPresetSelect = document.getElementById('track-preset-select');
-const trackTitleInput = document.getElementById('track-title');
-const trackUrlInput = document.getElementById('track-url');
-const trackFileInput = document.getElementById('track-file');
-const addTrackButton = document.getElementById('add-track-btn');
-let availableMusicTracks = [];
-
-function renderMusicTrackOptions() {
-  trackPresetSelect.innerHTML = '<option value="">Choose an existing track…</option>';
-  availableMusicTracks.forEach((track, index) => {
-    const option = document.createElement('option');
-    option.value = String(index);
-    option.textContent = `${track.title} · ${track.source}`;
-    trackPresetSelect.appendChild(option);
-  });
-}
-
-async function loadMusicTracks() {
-  try {
-    const response = await fetch('/api/music');
-    if (!response.ok) throw new Error('Music list unavailable');
-    const payload = await response.json();
-    availableMusicTracks = Array.isArray(payload.tracks) ? payload.tracks : [];
-    renderMusicTrackOptions();
-  } catch (error) {
-    availableMusicTracks = [];
-    renderMusicTrackOptions();
-  }
-}
-
-trackPresetSelect.onchange = () => {
-  if (!trackPresetSelect.value) return;
-  const track = availableMusicTracks[Number(trackPresetSelect.value)];
-  if (!track) return;
-  trackTitleInput.value = track.title;
-  trackUrlInput.value = track.url;
-  trackFileInput.value = '';
-};
-
-trackFileInput.onchange = () => {
-  const file = trackFileInput.files[0];
-  if (!file) return;
-  const selectedPreset = trackPresetSelect.value
-    ? availableMusicTracks[Number(trackPresetSelect.value)]
-    : null;
-  trackPresetSelect.value = '';
-  trackUrlInput.value = '';
-  if (!trackTitleInput.value.trim() || selectedPreset?.title === trackTitleInput.value.trim()) {
-    trackTitleInput.value = file.name.replace(/\.mp3$/i, '').replace(/[_-]+/g, ' ');
-  }
-};
-
-addTrackButton.onclick = async () => {
-  const file = trackFileInput.files[0];
-  let title = trackTitleInput.value.trim();
-  let url = trackUrlInput.value.trim();
-  if (!file && !url) return alert('Choose an existing track, upload an MP3, or add an audio URL.');
-  addTrackButton.disabled = true;
-  try {
-    if (file) {
-      const uploaded = await uploadAudioFile(file);
-      url = uploaded.url;
-      if (!title) title = uploaded.name.replace(/\.mp3$/i, '').replace(/[_-]+/g, ' ');
-    }
-    if (!title) return alert('Give the track a name.');
-    const existingIndex = state.jukebox.playlist.findIndex(track => track.url === url);
-    const playlist = existingIndex === -1
-      ? [...state.jukebox.playlist, { id: 'm' + Date.now(), title, url }]
-      : state.jukebox.playlist.map((track, index) => index === existingIndex ? { ...track, title } : track);
-    socket.emit('jukebox:setPlaylist', playlist);
-    trackTitleInput.value = '';
-    trackUrlInput.value = '';
-    trackFileInput.value = '';
-    trackPresetSelect.value = '';
-    if (file) {
-      await loadMusicTracks();
-      showToast(existingIndex === -1 ? 'Track saved on the server.' : 'Server track restored.');
-    }
-  } catch (error) {
-    alert(error.message || 'The MP3 could not be uploaded.');
-  } finally {
-    addTrackButton.disabled = false;
-  }
-};
-
-loadMusicTracks();
-
-document.getElementById('jb-playpause').onclick = () => {
-  if (state.jukebox.isPlaying) {
-    socket.emit('jukebox:pause');
-  } else if (state.jukebox.currentIndex === -1 && state.jukebox.playlist.length) {
-    socket.emit('jukebox:play', { index: 0 });
-  } else {
-    socket.emit('jukebox:resume');
-  }
-};
-document.getElementById('jb-next').onclick = () => {
-  const next = (state.jukebox.currentIndex + 1) % Math.max(1, state.jukebox.playlist.length);
-  socket.emit('jukebox:play', { index: next });
-};
-document.getElementById('jb-prev').onclick = () => {
-  const prev = (state.jukebox.currentIndex - 1 + state.jukebox.playlist.length) % Math.max(1, state.jukebox.playlist.length);
-  socket.emit('jukebox:play', { index: prev });
-};
-
-function renderJukebox() {
-  const j = state.jukebox;
-  const list = document.getElementById('playlist');
-  list.innerHTML = '';
-  j.playlist.forEach((track, i) => {
-    const row = document.createElement('div');
-    row.className = 'playlist-item' + (i === j.currentIndex ? ' playing' : '');
-    row.innerHTML = `<span>${i === j.currentIndex ? '🎶 ' : ''}${escapeHtml(track.title)}</span><span class="del dm-only">×</span>`;
-    row.querySelector('span').onclick = () => socket.emit('jukebox:play', { index: i });
-    row.querySelector('.del').onclick = (e) => {
-      e.stopPropagation();
-      const playlist = j.playlist.filter((_, idx) => idx !== i);
-      socket.emit('jukebox:setPlaylist', playlist);
+    pendingLevelUp = {
+      fromLevel: editingBaseLevel,
+      toLevel: target,
+      className,
+      subclass: document.getElementById("sf-subclass").value,
+      species: document.getElementById("sf-species").value,
+      oldConstitution: Number(document.getElementById("sf-con").value) || 10,
+      oldMaximumHp: Number(document.getElementById("sf-maxhp").value) || 0,
+      oldCurrentHp: Number(document.getElementById("sf-hp").value) || 0,
+      oldHitDiceLeft: Math.max(0, Number(document.getElementById("sf-hitdice-left").value) || 0)
     };
-    list.appendChild(row);
-  });
-
-  const current = j.playlist[j.currentIndex];
-  document.getElementById('now-playing').textContent = current ? current.title : 'Nothing playing';
-  document.getElementById('now-playing-sub').textContent = current ? 'from the Humblewood jukebox' : 'add a track below to begin';
-  document.getElementById('jukebox-art').classList.toggle('spinning', j.isPlaying);
-  document.getElementById('jb-playpause').textContent = j.isPlaying ? '⏸' : '▶';
-
-  if (current) {
-    if (audioEl.src !== location.origin + current.url && audioEl.src !== current.url) {
-      audioEl.src = current.url;
+    renderLevelUpDialog();
+  }
+  function collectLevelUpAbilityChoices() {
+    const scores = Object.fromEntries(ABILITIES.map((ability) => [ability, Number(document.getElementById(`sf-${ability}`).value) || 10]));
+    const feats = [];
+    for (const row of document.querySelectorAll(".level-up-asi-row")) {
+      const level = Number(row.dataset.level);
+      const mode = row.querySelector(".level-up-asi-mode").value;
+      if (!mode) return { error: `Choose the improvement for level ${level}.` };
+      if (mode === "plus-two") {
+        const ability = row.querySelector(".level-up-asi-plus-two").value;
+        if (!ability) return { error: `Choose an ability for the level ${level} improvement.` };
+        if (scores[ability] >= 20) return { error: `${ABILITY_LABELS[ability]} is already 20.` };
+        scores[ability] = Math.min(20, scores[ability] + 2);
+      } else if (mode === "split") {
+        const first = row.querySelector(".level-up-asi-plus-one-a").value;
+        const second = row.querySelector(".level-up-asi-plus-one-b").value;
+        if (!first || !second) return { error: `Choose two abilities for the level ${level} improvement.` };
+        if (first === second) return { error: `Choose two different abilities at level ${level}.` };
+        if (scores[first] >= 20 || scores[second] >= 20) return { error: "An ability score cannot be increased above 20." };
+        scores[first] += 1;
+        scores[second] += 1;
+      } else {
+        const feat = row.querySelector(".level-up-feat-name").value.trim();
+        if (!feat) return { error: `Enter the feat chosen at level ${level}.` };
+        feats.push(feat);
+      }
     }
-    const elapsed = j.isPlaying ? (Date.now() - j.startedAt) / 1000 : j.seek;
-    if (Math.abs((audioEl.currentTime || 0) - elapsed) > 1.5) {
-      audioEl.currentTime = elapsed;
+    return { scores, feats };
+  }
+  function applyLevelUp() {
+    if (!pendingLevelUp) return;
+    const { className, fromLevel, toLevel, oldConstitution, oldMaximumHp, oldCurrentHp, oldHitDiceLeft } = pendingLevelUp;
+    const hitDie = characterRules.hitDieFor(className);
+    const average = characterRules.averageHitDieRoll(className);
+    const hitDieResults = [];
+    for (const row of document.querySelectorAll(".level-up-hp-row")) {
+      const method = row.querySelector('input[type="radio"]:checked')?.value || "average";
+      const result = method === "average" ? average : Number(row.querySelector(".level-up-hp-roll").value);
+      if (!Number.isInteger(result) || result < 1 || result > hitDie) {
+        return showToast(`Enter a d${hitDie} result from 1 to ${hitDie} for level ${row.dataset.level}.`);
+      }
+      hitDieResults.push(result);
     }
-    if (j.isPlaying) audioEl.play().catch(() => {}); else audioEl.pause();
-  } else {
-    audioEl.pause();
-    audioEl.removeAttribute('src');
+    const choices = collectLevelUpAbilityChoices();
+    if (choices.error) return showToast(choices.error);
+    ABILITIES.forEach((ability) => {
+      document.getElementById(`sf-${ability}`).value = choices.scores[ability];
+    });
+    if (choices.feats.length) {
+      const featField = document.getElementById("sf-feats");
+      const existing = featField.value.trim();
+      const additions = choices.feats.filter((feat) => !new RegExp(`(^|\\n)${feat.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(\\n|$)`, "i").test(existing));
+      featField.value = [existing, additions.join("\n\n")].filter(Boolean).join("\n\n");
+    }
+    const hpIncrease = characterRules.levelUpHitPointIncrease(
+      className,
+      oldConstitution,
+      choices.scores.con,
+      toLevel,
+      hitDieResults
+    );
+    const newMaximumHp = Math.max(1, oldMaximumHp + hpIncrease);
+    document.getElementById("sf-maxhp").value = newMaximumHp;
+    document.getElementById("sf-hp").value = document.getElementById("level-up-current-hp").checked ? Math.min(newMaximumHp, oldCurrentHp + hpIncrease) : Math.min(newMaximumHp, oldCurrentHp);
+    document.getElementById("sf-hitdice").value = `${toLevel}d${hitDie}`;
+    document.getElementById("sf-hitdice-left").value = Math.min(toLevel, oldHitDiceLeft + (toLevel - fromLevel));
+    document.getElementById("sf-level").value = toLevel;
+    updateSpellSlotsForLevel();
+    initiativeManuallyEdited = false;
+    refreshCharacterCalculations(true, true);
+    editingBaseLevel = toLevel;
+    closeLevelUpDialog(false);
+    showToast(`Level ${toLevel} applied. Review the listed features and save the character.`);
   }
-}
-
-audioEl.onended = () => {
-  if (state.jukebox.playlist.length > 1) {
-    document.getElementById('jb-next').click();
-  } else {
-    socket.emit('jukebox:pause');
-  }
-};
-
-// ================= DICE =================
-document.getElementById('dm-private-roll-toggle').onclick = () => {
-  if (myRole !== 'dm') return;
-  dmPrivateRollsEnabled = !dmPrivateRollsEnabled;
-  renderDmPrivateRollMode();
-  showToast(dmPrivateRollsEnabled
-    ? 'Private DM mode is on. Rolls on this screen are hidden from players.'
-    : 'Shared rolls are on. New rolls on this screen will be visible to everyone.');
-};
-
-function renderDmPrivateRollMode() {
-  const active = myRole === 'dm' && dmPrivateRollsEnabled;
-  const toggle = document.getElementById('dm-private-roll-toggle');
-  const banner = document.getElementById('dm-private-roll-banner');
-  const panel = document.querySelector('.dice-panel');
-  if (toggle) {
-    toggle.classList.toggle('active', active);
-    toggle.setAttribute('aria-pressed', String(active));
-    toggle.textContent = active ? '🔒 DM mode: private' : 'Shared rolls';
-  }
-  if (banner) banner.classList.toggle('hidden', !active);
-  if (panel) panel.classList.toggle('dm-private-mode', active);
-}
-
-function privateDiceRollActive() {
-  return myRole === 'dm' && dmPrivateRollsEnabled &&
-    document.getElementById('view-dice')?.classList.contains('active');
-}
-
-function setPendingDiceRollMode(mode = 'normal') {
-  pendingDiceRollMode = ['advantage', 'disadvantage'].includes(mode) ? mode : 'normal';
-  document.querySelectorAll('.dice-roll-mode-btn').forEach(button => {
-    const active = button.dataset.mode === pendingDiceRollMode;
-    button.classList.toggle('active', active);
-    button.setAttribute('aria-pressed', String(active));
+  document.getElementById("sf-level").addEventListener("change", () => requestLevelUp(document.getElementById("sf-level").value));
+  document.getElementById("level-up-btn").addEventListener("click", () => {
+    if (editingBaseLevel >= 20) return showToast("This character is already level 20.");
+    const target = Math.max(editingBaseLevel + 1, Number(document.getElementById("sf-level").value) || editingBaseLevel + 1);
+    document.getElementById("sf-level").value = Math.min(20, target);
+    requestLevelUp(document.getElementById("sf-level").value);
   });
-  const hint = document.getElementById('dice-roll-mode-hint');
-  if (hint) {
-    hint.textContent = pendingDiceRollMode === 'normal'
-      ? 'Choose one for your next roll.'
-      : `${pendingDiceRollMode === 'advantage' ? 'Advantage' : 'Disadvantage'} is on for one roll.`;
+  document.getElementById("level-up-close-btn").addEventListener("click", () => closeLevelUpDialog(true));
+  document.getElementById("level-up-cancel-btn").addEventListener("click", () => closeLevelUpDialog(true));
+  document.getElementById("level-up-apply-btn").addEventListener("click", applyLevelUp);
+  const audioEl = document.getElementById("audio-el");
+  const trackPresetSelect = document.getElementById("track-preset-select");
+  const trackTitleInput = document.getElementById("track-title");
+  const trackUrlInput = document.getElementById("track-url");
+  const trackFileInput = document.getElementById("track-file");
+  const addTrackButton = document.getElementById("add-track-btn");
+  let availableMusicTracks = [];
+  function renderMusicTrackOptions() {
+    trackPresetSelect.innerHTML = '<option value="">Choose an existing track\u2026</option>';
+    availableMusicTracks.forEach((track, index) => {
+      const option = document.createElement("option");
+      option.value = String(index);
+      option.textContent = `${track.title} \xB7 ${track.source}`;
+      trackPresetSelect.appendChild(option);
+    });
   }
-}
-
-function consumePendingDiceRollMode() {
-  const mode = pendingDiceRollMode;
-  setPendingDiceRollMode('normal');
-  return mode;
-}
-
-document.querySelectorAll('.dice-roll-mode-btn').forEach(button => {
-  button.onclick = () => {
-    const requested = button.dataset.mode;
-    setPendingDiceRollMode(pendingDiceRollMode === requested ? 'normal' : requested);
+  async function loadMusicTracks() {
+    try {
+      const response = await fetch("/api/music");
+      if (!response.ok) throw new Error("Music list unavailable");
+      const payload = await response.json();
+      availableMusicTracks = Array.isArray(payload.tracks) ? payload.tracks : [];
+      renderMusicTrackOptions();
+    } catch (error) {
+      availableMusicTracks = [];
+      renderMusicTrackOptions();
+    }
+  }
+  trackPresetSelect.onchange = () => {
+    if (!trackPresetSelect.value) return;
+    const track = availableMusicTracks[Number(trackPresetSelect.value)];
+    if (!track) return;
+    trackTitleInput.value = track.title;
+    trackUrlInput.value = track.url;
+    trackFileInput.value = "";
   };
-});
-
-function rollDiceFromDiceScreen(count, sides, modifier, options = {}) {
-  rollDice(count, sides, modifier, {
-    ...options,
-    mode: consumePendingDiceRollMode()
-  });
-}
-
-document.querySelectorAll('.die-btn').forEach(btn => {
-  btn.onclick = () => rollDiceFromDiceScreen(1, Number(btn.dataset.sides), 0, { label: `Quick d${btn.dataset.sides}` });
-});
-document.getElementById('roll-custom-btn').onclick = () => {
-  rollDiceFromDiceScreen(
-    Number(document.getElementById('dice-count').value) || 1,
-    Number(document.getElementById('dice-sides').value) || 20,
-    Number(document.getElementById('dice-mod').value) || 0,
-    { label: 'Custom roll' }
-  );
-};
-
-function rollDice(count, sides, modifier, options = {}) {
-  socket.emit('roll:make', {
-    name: options.name || myName,
-    count,
-    sides,
-    modifier,
-    mode: options.mode || 'normal',
-    label: options.label || '',
-    characterName: options.characterName || null,
-    npcId: options.npcId || null,
-    initiativeName: options.initiativeName || null,
-    tokenId: options.tokenId || null,
-    targetDc: options.targetDc || null,
-    concentrationFor: options.concentrationFor || null,
-    private: options.private ?? privateDiceRollActive()
-  });
-}
-
-socket.on('roll:made', (entry) => {
-  if (!state.rollLog) state.rollLog = [];
-  state.rollLog.unshift(entry);
-  if (entry.characterName && entry.targetDc) pendingConcentrationChecks.delete(entry.characterName);
-  renderRollLog();
-  const showOutcome = entry.targetDc && !/\b(?:attack|damage)\b/i.test(entry.label || '');
-  const outcome = showOutcome ? (entry.success ? ' — success' : ' — failed') : '';
-  showToast(`${entry.label || entry.expression}: ${entry.total}${outcome}`);
-});
-
-socket.on('roll:private', (entry) => {
-  if (myRole !== 'dm') return;
-  privateRollLog.unshift({ ...entry, private: true });
-  privateRollLog = privateRollLog.slice(0, 50);
-  renderRollLog();
-  const showOutcome = entry.targetDc && !/\b(?:attack|damage)\b/i.test(entry.label || '');
-  const outcome = showOutcome ? (entry.success ? ' — success' : ' — failed') : '';
-  showToast(`🔒 ${entry.label || entry.expression}: ${entry.total}${outcome}`);
-});
-
-function rollBreakdownText(entry) {
-  const modifier = entry.modifier
-    ? ` ${entry.modifier > 0 ? '+' : ''}${entry.modifier}`
-    : '';
-  if (entry.mode && entry.mode !== 'normal' && Array.isArray(entry.rollSets) && entry.rollSets.length === 2) {
-    const sets = entry.rollSets.map(set => `[${set.join(', ')}]`);
-    const keptRolls = Array.isArray(entry.keptRolls)
-      ? entry.keptRolls
-      : entry.rollSets[Number(entry.keptSetIndex) || 0];
-    return `${sets[0]} vs ${sets[1]} → kept [${keptRolls.join(', ')}]${modifier}`;
+  trackFileInput.onchange = () => {
+    const file = trackFileInput.files[0];
+    if (!file) return;
+    const selectedPreset = trackPresetSelect.value ? availableMusicTracks[Number(trackPresetSelect.value)] : null;
+    trackPresetSelect.value = "";
+    trackUrlInput.value = "";
+    if (!trackTitleInput.value.trim() || selectedPreset?.title === trackTitleInput.value.trim()) {
+      trackTitleInput.value = file.name.replace(/\.mp3$/i, "").replace(/[_-]+/g, " ");
+    }
+  };
+  addTrackButton.onclick = async () => {
+    const file = trackFileInput.files[0];
+    let title = trackTitleInput.value.trim();
+    let url = trackUrlInput.value.trim();
+    if (!file && !url) return alert("Choose an existing track, upload an MP3, or add an audio URL.");
+    addTrackButton.disabled = true;
+    try {
+      if (file) {
+        const uploaded = await uploadAudioFile(file);
+        url = uploaded.url;
+        if (!title) title = uploaded.name.replace(/\.mp3$/i, "").replace(/[_-]+/g, " ");
+      }
+      if (!title) return alert("Give the track a name.");
+      const existingIndex = state.jukebox.playlist.findIndex((track) => track.url === url);
+      const playlist = existingIndex === -1 ? [...state.jukebox.playlist, { id: "m" + Date.now(), title, url }] : state.jukebox.playlist.map((track, index) => index === existingIndex ? { ...track, title } : track);
+      socket.emit("jukebox:setPlaylist", playlist);
+      trackTitleInput.value = "";
+      trackUrlInput.value = "";
+      trackFileInput.value = "";
+      trackPresetSelect.value = "";
+      if (file) {
+        await loadMusicTracks();
+        showToast(existingIndex === -1 ? "Track saved on the server." : "Server track restored.");
+      }
+    } catch (error) {
+      alert(error.message || "The MP3 could not be uploaded.");
+    } finally {
+      addTrackButton.disabled = false;
+    }
+  };
+  loadMusicTracks();
+  document.getElementById("jb-playpause").onclick = () => {
+    if (state.jukebox.isPlaying) {
+      socket.emit("jukebox:pause");
+    } else if (state.jukebox.currentIndex === -1 && state.jukebox.playlist.length) {
+      socket.emit("jukebox:play", { index: 0 });
+    } else {
+      socket.emit("jukebox:resume");
+    }
+  };
+  document.getElementById("jb-next").onclick = () => {
+    const next = (state.jukebox.currentIndex + 1) % Math.max(1, state.jukebox.playlist.length);
+    socket.emit("jukebox:play", { index: next });
+  };
+  document.getElementById("jb-prev").onclick = () => {
+    const prev = (state.jukebox.currentIndex - 1 + state.jukebox.playlist.length) % Math.max(1, state.jukebox.playlist.length);
+    socket.emit("jukebox:play", { index: prev });
+  };
+  function renderJukebox() {
+    const j = state.jukebox;
+    const list = document.getElementById("playlist");
+    list.innerHTML = "";
+    j.playlist.forEach((track, i) => {
+      const row = document.createElement("div");
+      row.className = "playlist-item" + (i === j.currentIndex ? " playing" : "");
+      row.innerHTML = `<span>${i === j.currentIndex ? "\u{1F3B6} " : ""}${escapeHtml(track.title)}</span><span class="del dm-only">\xD7</span>`;
+      row.querySelector("span").onclick = () => socket.emit("jukebox:play", { index: i });
+      row.querySelector(".del").onclick = (e) => {
+        e.stopPropagation();
+        const playlist = j.playlist.filter((_, idx) => idx !== i);
+        socket.emit("jukebox:setPlaylist", playlist);
+      };
+      list.appendChild(row);
+    });
+    const current = j.playlist[j.currentIndex];
+    document.getElementById("now-playing").textContent = current ? current.title : "Nothing playing";
+    document.getElementById("now-playing-sub").textContent = current ? "from the Humblewood jukebox" : "add a track below to begin";
+    document.getElementById("jukebox-art").classList.toggle("spinning", j.isPlaying);
+    document.getElementById("jb-playpause").textContent = j.isPlaying ? "\u23F8" : "\u25B6";
+    if (current) {
+      if (audioEl.src !== location.origin + current.url && audioEl.src !== current.url) {
+        audioEl.src = current.url;
+      }
+      const elapsed = j.isPlaying ? (Date.now() - j.startedAt) / 1e3 : j.seek;
+      if (Math.abs((audioEl.currentTime || 0) - elapsed) > 1.5) {
+        audioEl.currentTime = elapsed;
+      }
+      if (j.isPlaying) audioEl.play().catch(() => {
+      });
+      else audioEl.pause();
+    } else {
+      audioEl.pause();
+      audioEl.removeAttribute("src");
+    }
   }
-  const rolls = Array.isArray(entry.rolls) ? entry.rolls : [];
-  const kept = Number.isFinite(Number(entry.kept)) ? Number(entry.kept) : (rolls.length === 1 ? rolls[0] : null);
-  return `[${rolls.join(', ')}]${entry.mode && entry.mode !== 'normal' ? ` → kept ${kept}` : ''}${modifier}`;
-}
-
-function renderRollLog() {
-  const log = document.getElementById('roll-log');
-  if (!log) return;
-  log.innerHTML = '';
-  const entries = [
-    ...((state && state.rollLog) || []),
-    ...(myRole === 'dm' ? privateRollLog : [])
-  ].sort((a, b) => Number(b.ts) - Number(a.ts));
-  entries.forEach(entry => {
-    const row = document.createElement('div');
+  audioEl.onended = () => {
+    if (state.jukebox.playlist.length > 1) {
+      document.getElementById("jb-next").click();
+    } else {
+      socket.emit("jukebox:pause");
+    }
+  };
+  document.getElementById("dm-private-roll-toggle").onclick = () => {
+    if (myRole !== "dm") return;
+    dmPrivateRollsEnabled = !dmPrivateRollsEnabled;
+    renderDmPrivateRollMode();
+    showToast(dmPrivateRollsEnabled ? "Private DM mode is on. Rolls on this screen are hidden from players." : "Shared rolls are on. New rolls on this screen will be visible to everyone.");
+  };
+  function renderDmPrivateRollMode() {
+    const active = myRole === "dm" && dmPrivateRollsEnabled;
+    const toggle = document.getElementById("dm-private-roll-toggle");
+    const banner = document.getElementById("dm-private-roll-banner");
+    const panel = document.querySelector(".dice-panel");
+    if (toggle) {
+      toggle.classList.toggle("active", active);
+      toggle.setAttribute("aria-pressed", String(active));
+      toggle.textContent = active ? "\u{1F512} DM mode: private" : "Shared rolls";
+    }
+    if (banner) banner.classList.toggle("hidden", !active);
+    if (panel) panel.classList.toggle("dm-private-mode", active);
+  }
+  function privateDiceRollActive() {
+    return myRole === "dm" && dmPrivateRollsEnabled && document.getElementById("view-dice")?.classList.contains("active");
+  }
+  function setPendingDiceRollMode(mode = "normal") {
+    pendingDiceRollMode = ["advantage", "disadvantage"].includes(mode) ? mode : "normal";
+    document.querySelectorAll(".dice-roll-mode-btn").forEach((button) => {
+      const active = button.dataset.mode === pendingDiceRollMode;
+      button.classList.toggle("active", active);
+      button.setAttribute("aria-pressed", String(active));
+    });
+    const hint = document.getElementById("dice-roll-mode-hint");
+    if (hint) {
+      hint.textContent = pendingDiceRollMode === "normal" ? "Choose one for your next roll." : `${pendingDiceRollMode === "advantage" ? "Advantage" : "Disadvantage"} is on for one roll.`;
+    }
+  }
+  function consumePendingDiceRollMode() {
+    const mode = pendingDiceRollMode;
+    setPendingDiceRollMode("normal");
+    return mode;
+  }
+  document.querySelectorAll(".dice-roll-mode-btn").forEach((button) => {
+    button.onclick = () => {
+      const requested = button.dataset.mode;
+      setPendingDiceRollMode(pendingDiceRollMode === requested ? "normal" : requested);
+    };
+  });
+  function rollDiceFromDiceScreen(count, sides, modifier, options = {}) {
+    rollDice(count, sides, modifier, {
+      ...options,
+      mode: consumePendingDiceRollMode()
+    });
+  }
+  document.querySelectorAll(".die-btn").forEach((btn) => {
+    btn.onclick = () => rollDiceFromDiceScreen(1, Number(btn.dataset.sides), 0, { label: `Quick d${btn.dataset.sides}` });
+  });
+  document.getElementById("roll-custom-btn").onclick = () => {
+    rollDiceFromDiceScreen(
+      Number(document.getElementById("dice-count").value) || 1,
+      Number(document.getElementById("dice-sides").value) || 20,
+      Number(document.getElementById("dice-mod").value) || 0,
+      { label: "Custom roll" }
+    );
+  };
+  function rollDice(count, sides, modifier, options = {}) {
+    socket.emit("roll:make", {
+      name: options.name || myName,
+      count,
+      sides,
+      modifier,
+      mode: options.mode || "normal",
+      label: options.label || "",
+      characterName: options.characterName || null,
+      npcId: options.npcId || null,
+      initiativeName: options.initiativeName || null,
+      tokenId: options.tokenId || null,
+      targetDc: options.targetDc || null,
+      concentrationFor: options.concentrationFor || null,
+      private: options.private ?? privateDiceRollActive()
+    });
+  }
+  socket.on("roll:made", (entry) => {
+    if (!state.rollLog) state.rollLog = [];
+    state.rollLog.unshift(entry);
+    if (entry.characterName && entry.targetDc) pendingConcentrationChecks.delete(entry.characterName);
+    renderRollLog();
+    const showOutcome = entry.targetDc && !/\b(?:attack|damage)\b/i.test(entry.label || "");
+    const outcome = showOutcome ? entry.success ? " \u2014 success" : " \u2014 failed" : "";
+    showToast(`${entry.label || entry.expression}: ${entry.total}${outcome}`);
+  });
+  socket.on("roll:private", (entry) => {
+    if (myRole !== "dm") return;
+    privateRollLog.unshift({ ...entry, private: true });
+    privateRollLog = privateRollLog.slice(0, 50);
+    renderRollLog();
+    const showOutcome = entry.targetDc && !/\b(?:attack|damage)\b/i.test(entry.label || "");
+    const outcome = showOutcome ? entry.success ? " \u2014 success" : " \u2014 failed" : "";
+    showToast(`\u{1F512} ${entry.label || entry.expression}: ${entry.total}${outcome}`);
+  });
+  function rollBreakdownText(entry) {
+    const modifier = entry.modifier ? ` ${entry.modifier > 0 ? "+" : ""}${entry.modifier}` : "";
+    if (entry.mode && entry.mode !== "normal" && Array.isArray(entry.rollSets) && entry.rollSets.length === 2) {
+      const sets = entry.rollSets.map((set) => `[${set.join(", ")}]`);
+      const keptRolls = Array.isArray(entry.keptRolls) ? entry.keptRolls : entry.rollSets[Number(entry.keptSetIndex) || 0];
+      return `${sets[0]} vs ${sets[1]} \u2192 kept [${keptRolls.join(", ")}]${modifier}`;
+    }
     const rolls = Array.isArray(entry.rolls) ? entry.rolls : [];
-    const kept = Number.isFinite(Number(entry.kept)) ? Number(entry.kept) : (rolls.length === 1 ? rolls[0] : null);
-    const keptDice = Array.isArray(entry.keptRolls) && entry.keptRolls.length
-      ? entry.keptRolls
-      : (rolls.length === 1 ? rolls : [kept]);
-    const isSingleD20 = (Number(entry.count) === 1 && Number(entry.sides) === 20) ||
-      (!entry.count && /(?:^|\()1d20\b|^2d20/.test(entry.expression || ''));
-    const isCrit = isSingleD20 && keptDice.length === 1 && keptDice[0] === 20;
-    const isFumble = isSingleD20 && keptDice.length === 1 && keptDice[0] === 1;
-    row.className = 'roll-entry' + (entry.private ? ' private' : '') + (isCrit ? ' crit' : '') + (isFumble ? ' fumble' : '');
-    row.innerHTML = `
+    const kept = Number.isFinite(Number(entry.kept)) ? Number(entry.kept) : rolls.length === 1 ? rolls[0] : null;
+    return `[${rolls.join(", ")}]${entry.mode && entry.mode !== "normal" ? ` \u2192 kept ${kept}` : ""}${modifier}`;
+  }
+  function renderRollLog() {
+    const log = document.getElementById("roll-log");
+    if (!log) return;
+    log.innerHTML = "";
+    const entries = [
+      ...state && state.rollLog || [],
+      ...myRole === "dm" ? privateRollLog : []
+    ].sort((a, b) => Number(b.ts) - Number(a.ts));
+    entries.forEach((entry) => {
+      const row = document.createElement("div");
+      const rolls = Array.isArray(entry.rolls) ? entry.rolls : [];
+      const kept = Number.isFinite(Number(entry.kept)) ? Number(entry.kept) : rolls.length === 1 ? rolls[0] : null;
+      const keptDice = Array.isArray(entry.keptRolls) && entry.keptRolls.length ? entry.keptRolls : rolls.length === 1 ? rolls : [kept];
+      const isSingleD20 = Number(entry.count) === 1 && Number(entry.sides) === 20 || !entry.count && /(?:^|\()1d20\b|^2d20/.test(entry.expression || "");
+      const isCrit = isSingleD20 && keptDice.length === 1 && keptDice[0] === 20;
+      const isFumble = isSingleD20 && keptDice.length === 1 && keptDice[0] === 1;
+      row.className = "roll-entry" + (entry.private ? " private" : "") + (isCrit ? " crit" : "") + (isFumble ? " fumble" : "");
+      row.innerHTML = `
       <div>
-        <span class="who">${escapeHtml(entry.name)}</span>${entry.private ? '<span class="private-roll-badge">DM only</span>' : ''}
-        <span class="expr">${entry.label ? escapeHtml(entry.label) + ' · ' : ''}${escapeHtml(entry.expression)}</span><br>
+        <span class="who">${escapeHtml(entry.name)}</span>${entry.private ? '<span class="private-roll-badge">DM only</span>' : ""}
+        <span class="expr">${entry.label ? escapeHtml(entry.label) + " \xB7 " : ""}${escapeHtml(entry.expression)}</span><br>
         <span class="breakdown">${escapeHtml(rollBreakdownText(entry))}</span>
-        ${entry.targetDc && !/\b(?:attack|damage)\b/i.test(entry.label || '') ? `<span class="roll-outcome ${entry.success ? 'success' : 'failure'}">DC ${entry.targetDc} · ${entry.success ? 'Success' : 'Failure'}</span>` : ''}
+        ${entry.targetDc && !/\b(?:attack|damage)\b/i.test(entry.label || "") ? `<span class="roll-outcome ${entry.success ? "success" : "failure"}">DC ${entry.targetDc} \xB7 ${entry.success ? "Success" : "Failure"}</span>` : ""}
       </div>
       <div class="total">${entry.total}</div>
     `;
-    log.appendChild(row);
-  });
-}
-
-document.getElementById('dice-character').onchange = renderCharacterRollOptions;
-
-function rollableCharacters() {
-  const all = Object.values(state?.characters || {}).sort((a, b) => a.name.localeCompare(b.name));
-  if (myRole === 'dm') return all;
-  return all.filter(character => character.canManage);
-}
-
-function openCharacterRoller(name) {
-  switchView('dice');
-  refreshCharacterRoller(name);
-  document.getElementById('character-roller-title').scrollIntoView({ behavior: 'smooth', block: 'start' });
-}
-
-function refreshCharacterRoller(preferredName) {
-  if (!state) return;
-  const select = document.getElementById('dice-character');
-  const characters = rollableCharacters();
-  const npcs = myRole === 'dm'
-    ? Object.values(state.npcs || {}).sort((a, b) => a.name.localeCompare(b.name))
-    : [];
-  const previous = preferredName || select.value;
-  select.innerHTML = '';
-  if (characters.length) {
-    const group = document.createElement('optgroup');
-    group.label = 'Characters';
-    characters.forEach(character => {
-      const option = document.createElement('option');
-      option.value = character.name;
-      option.textContent = `${character.name} · Level ${character.level || 1} ${character.charClass || ''}`.trim();
-      group.appendChild(option);
+      log.appendChild(row);
     });
-    select.appendChild(group);
   }
-  if (npcs.length) {
-    const group = document.createElement('optgroup');
-    group.label = 'NPCs';
-    npcs.forEach(npc => {
-      const option = document.createElement('option');
-      option.value = `npc:${npc.id}`;
-      option.textContent = npc.name;
-      group.appendChild(option);
-    });
-    select.appendChild(group);
+  document.getElementById("dice-character").onchange = renderCharacterRollOptions;
+  function rollableCharacters() {
+    const all = Object.values(state?.characters || {}).sort((a, b) => a.name.localeCompare(b.name));
+    if (myRole === "dm") return all;
+    return all.filter((character) => character.canManage);
   }
-  const validSelections = [
-    ...characters.map(character => character.name),
-    ...npcs.map(npc => `npc:${npc.id}`)
-  ];
-  if (validSelections.includes(previous)) select.value = previous;
-  renderCharacterRollOptions();
-}
-
-function renderCharacterRollOptions() {
-  const container = document.getElementById('character-roll-options');
-  container.innerHTML = '';
-  const selected = document.getElementById('dice-character').value;
-  if (myRole === 'dm' && selected.startsWith('npc:')) {
-    const npc = state?.npcs?.[selected.slice(4)];
-    if (npc) return renderNpcRollOptions(container, npc);
+  function openCharacterRoller(name) {
+    switchView("dice");
+    refreshCharacterRoller(name);
+    document.getElementById("character-roller-title").scrollIntoView({ behavior: "smooth", block: "start" });
   }
-  const character = state?.characters?.[selected];
-  if (!character) {
-    container.innerHTML = '<p class="empty-roll-options">Create or claim a character sheet, or create an NPC, to use automatic modifiers.</p>';
-    return;
-  }
-
-  const combatButtons = createDiceRollGroup(container, 'Combat');
-  appendRollButton(combatButtons, 'Initiative', characterInitiativeModifier(character), () => rollCharacterInitiative(character));
-  const spellAttack = character.spellcasting?.attackBonus ?? character.fields?.['spell-attack'];
-  if (spellAttack !== '' && spellAttack !== undefined && spellAttack !== null) {
-    appendRollButton(combatButtons, 'Spell attack', Number(spellAttack) || 0, () => rollCharacterD20(character, 'Spell attack', Number(spellAttack) || 0));
-  }
-  (character.attacks || []).forEach(attack => {
-    const bonusMatch = String(attack.bonus || '').match(/[+-]?\d+/);
-    if (attack.name && bonusMatch) {
-      appendRollButton(combatButtons, `${attack.name} to hit`, Number(bonusMatch[0]), () => rollCharacterD20(character, `${attack.name} attack`, Number(bonusMatch[0])));
+  function refreshCharacterRoller(preferredName = "") {
+    if (!state) return;
+    const select = document.getElementById("dice-character");
+    const characters = rollableCharacters();
+    const npcs = myRole === "dm" ? Object.values(state.npcs || {}).sort((a, b) => a.name.localeCompare(b.name)) : [];
+    const previous = preferredName || select.value;
+    select.innerHTML = "";
+    if (characters.length) {
+      const group = document.createElement("optgroup");
+      group.label = "Characters";
+      characters.forEach((character) => {
+        const option = document.createElement("option");
+        option.value = character.name;
+        option.textContent = `${character.name} \xB7 Level ${character.level || 1} ${character.charClass || ""}`.trim();
+        group.appendChild(option);
+      });
+      select.appendChild(group);
     }
-    const damage = parseDiceExpression(attack.damage);
-    if (attack.name && damage) {
-      appendRollButton(combatButtons, `${attack.name} damage`, damage.modifier, () => {
-        rollDiceFromDiceScreen(damage.count, damage.sides, damage.modifier, {
-          name: characterRollName(character),
-          characterName: character.name,
-          label: `${attack.name} damage`
-        });
-      }, true, damage.expression);
+    if (npcs.length) {
+      const group = document.createElement("optgroup");
+      group.label = "NPCs";
+      npcs.forEach((npc) => {
+        const option = document.createElement("option");
+        option.value = `npc:${npc.id}`;
+        option.textContent = npc.name;
+        group.appendChild(option);
+      });
+      select.appendChild(group);
     }
-  });
-
-  const abilityButtons = createDiceRollGroup(container, 'Ability checks');
-  ABILITIES.forEach(ability => {
-    const modifier = abilityModifier(character.abilities?.[ability]);
-    appendRollButton(abilityButtons, ABILITY_LABELS[ability], modifier, () => rollCharacterD20(character, `${ABILITY_LABELS[ability]} check`, modifier));
-  });
-
-  const saveButtons = createDiceRollGroup(container, 'Saving throws');
-  ABILITIES.forEach(ability => {
-    const modifier = characterSaveModifier(character, ability);
-    appendRollButton(saveButtons, ABILITY_LABELS[ability], modifier, () => rollCharacterD20(character, `${ABILITY_LABELS[ability]} save`, modifier));
-  });
-
-  const skillButtons = createDiceRollGroup(container, 'Skills');
-  Object.keys(SKILL_ABILITIES).forEach(skill => {
-    const modifier = characterSkillModifier(character, skill);
-    appendRollButton(skillButtons, SKILL_LABELS[skill], modifier, () => rollCharacterD20(character, `${SKILL_LABELS[skill]} check`, modifier));
-  });
-
-}
-
-function renderNpcRollOptions(container, npc) {
-  const combatButtons = createDiceRollGroup(container, 'Combat');
-  appendRollButton(combatButtons, 'Initiative', Number(npc.initiativeModifier) || 0, () => rollNpcSheetInitiative(npc));
-  const spellAttack = npc.spellcasting?.attackBonus ?? npc.sheet?.spellcasting?.attackBonus ?? npc.sheet?.fields?.['spell-attack'];
-  const hasSpellAttack = spellAttack !== '' && spellAttack !== undefined && spellAttack !== null;
-  if (hasSpellAttack) {
-    appendRollButton(combatButtons, 'Spell attack', Number(spellAttack) || 0, () => (
-      rollNpcSheetD20(npc, 'Spell attack', Number(spellAttack) || 0)
-    ));
+    const validSelections = [
+      ...characters.map((character) => character.name),
+      ...npcs.map((npc) => `npc:${npc.id}`)
+    ];
+    if (validSelections.includes(previous)) select.value = previous;
+    renderCharacterRollOptions();
   }
-  (npc.attacks || []).forEach(attack => {
-    const bonusMatch = String(attack.bonus || '').match(/[+-]?\d+/);
-    if (attack.name && bonusMatch) {
-      const modifier = Number(bonusMatch[0]);
-      appendRollButton(combatButtons, `${attack.name} to hit`, modifier, () => (
-        rollNpcSheetD20(npc, `${attack.name} attack`, modifier)
-      ));
+  function renderCharacterRollOptions() {
+    const container = document.getElementById("character-roll-options");
+    container.innerHTML = "";
+    const selected = document.getElementById("dice-character").value;
+    if (myRole === "dm" && selected.startsWith("npc:")) {
+      const npc = state?.npcs?.[selected.slice(4)];
+      if (npc) return renderNpcRollOptions(container, npc);
     }
-    const damage = parseDiceExpression(attack.damage);
-    if (attack.name && damage) {
-      appendRollButton(combatButtons, `${attack.name} damage`, damage.modifier, () => {
-        rollDiceFromDiceScreen(damage.count, damage.sides, damage.modifier, {
-          npcId: npc.id,
-          label: `${attack.name} damage`
-        });
-      }, true, damage.expression);
+    const character = state?.characters?.[selected];
+    if (!character) {
+      container.innerHTML = '<p class="empty-roll-options">Create or claim a character sheet, or create an NPC, to use automatic modifiers.</p>';
+      return;
     }
-  });
-
-  const spells = normalizeSpellList(npc.spells || npc.sheet?.spells);
-  if (spells.length) {
-    const spellButtons = createDiceRollGroup(container, 'Spells');
-    spells.forEach(spell => {
-      if (hasSpellAttack && /\bspell attack\b/i.test(spell.attack || '')) {
-        const modifier = Number(spellAttack) || 0;
-        appendRollButton(spellButtons, `${spell.name} attack`, modifier, () => (
-          rollNpcSheetD20(npc, `${spell.name} spell attack`, modifier)
-        ));
+    const combatButtons = createDiceRollGroup(container, "Combat");
+    appendRollButton(combatButtons, "Initiative", characterInitiativeModifier(character), () => rollCharacterInitiative(character));
+    const spellAttack = character.spellcasting?.attackBonus ?? character.fields?.["spell-attack"];
+    if (spellAttack !== "" && spellAttack !== void 0 && spellAttack !== null) {
+      appendRollButton(combatButtons, "Spell attack", Number(spellAttack) || 0, () => rollCharacterD20(character, "Spell attack", Number(spellAttack) || 0));
+    }
+    (character.attacks || []).forEach((attack) => {
+      const bonusMatch = String(attack.bonus || "").match(/[+-]?\d+/);
+      if (attack.name && bonusMatch) {
+        appendRollButton(combatButtons, `${attack.name} to hit`, Number(bonusMatch[0]), () => rollCharacterD20(character, `${attack.name} attack`, Number(bonusMatch[0])));
       }
-      const damage = parseDiceExpression(spell.damage || spell.effect || spell.name);
-      if (damage) {
-        appendRollButton(spellButtons, `${spell.name} damage`, damage.modifier, () => {
+      const damage = parseDiceExpression(attack.damage);
+      if (attack.name && damage) {
+        appendRollButton(combatButtons, `${attack.name} damage`, damage.modifier, () => {
           rollDiceFromDiceScreen(damage.count, damage.sides, damage.modifier, {
-            npcId: npc.id,
-            label: `${spell.name} damage`
+            name: characterRollName(character),
+            characterName: character.name,
+            label: `${attack.name} damage`
           });
         }, true, damage.expression);
       }
     });
-    if (!spellButtons.children.length) {
-      spellButtons.innerHTML = '<span class="empty-roll-options">No spell attack or damage dice are configured.</span>';
+    const abilityButtons = createDiceRollGroup(container, "Ability checks");
+    ABILITIES.forEach((ability) => {
+      const modifier = abilityModifier(character.abilities?.[ability]);
+      appendRollButton(abilityButtons, ABILITY_LABELS[ability], modifier, () => rollCharacterD20(character, `${ABILITY_LABELS[ability]} check`, modifier));
+    });
+    const saveButtons = createDiceRollGroup(container, "Saving throws");
+    ABILITIES.forEach((ability) => {
+      const modifier = characterSaveModifier(character, ability);
+      appendRollButton(saveButtons, ABILITY_LABELS[ability], modifier, () => rollCharacterD20(character, `${ABILITY_LABELS[ability]} save`, modifier));
+    });
+    const skillButtons = createDiceRollGroup(container, "Skills");
+    Object.keys(SKILL_ABILITIES).forEach((skill) => {
+      const modifier = characterSkillModifier(character, skill);
+      appendRollButton(skillButtons, SKILL_LABELS[skill], modifier, () => rollCharacterD20(character, `${SKILL_LABELS[skill]} check`, modifier));
+    });
+  }
+  function renderNpcRollOptions(container, npc) {
+    const combatButtons = createDiceRollGroup(container, "Combat");
+    appendRollButton(combatButtons, "Initiative", Number(npc.initiativeModifier) || 0, () => rollNpcSheetInitiative(npc));
+    const spellAttack = npc.spellcasting?.attackBonus ?? npc.sheet?.spellcasting?.attackBonus ?? npc.sheet?.fields?.["spell-attack"];
+    const hasSpellAttack = spellAttack !== "" && spellAttack !== void 0 && spellAttack !== null;
+    if (hasSpellAttack) {
+      appendRollButton(combatButtons, "Spell attack", Number(spellAttack) || 0, () => rollNpcSheetD20(npc, "Spell attack", Number(spellAttack) || 0));
     }
+    (npc.attacks || []).forEach((attack) => {
+      const bonusMatch = String(attack.bonus || "").match(/[+-]?\d+/);
+      if (attack.name && bonusMatch) {
+        const modifier = Number(bonusMatch[0]);
+        appendRollButton(combatButtons, `${attack.name} to hit`, modifier, () => rollNpcSheetD20(npc, `${attack.name} attack`, modifier));
+      }
+      const damage = parseDiceExpression(attack.damage);
+      if (attack.name && damage) {
+        appendRollButton(combatButtons, `${attack.name} damage`, damage.modifier, () => {
+          rollDiceFromDiceScreen(damage.count, damage.sides, damage.modifier, {
+            npcId: npc.id,
+            label: `${attack.name} damage`
+          });
+        }, true, damage.expression);
+      }
+    });
+    const spells = normalizeSpellList(npc.spells || npc.sheet?.spells);
+    if (spells.length) {
+      const spellButtons = createDiceRollGroup(container, "Spells");
+      spells.forEach((spell) => {
+        if (hasSpellAttack && /\bspell attack\b/i.test(spell.attack || "")) {
+          const modifier = Number(spellAttack) || 0;
+          appendRollButton(spellButtons, `${spell.name} attack`, modifier, () => rollNpcSheetD20(npc, `${spell.name} spell attack`, modifier));
+        }
+        const damage = parseDiceExpression(spell.damage || spell.effect || spell.name);
+        if (damage) {
+          appendRollButton(spellButtons, `${spell.name} damage`, damage.modifier, () => {
+            rollDiceFromDiceScreen(damage.count, damage.sides, damage.modifier, {
+              npcId: npc.id,
+              label: `${spell.name} damage`
+            });
+          }, true, damage.expression);
+        }
+      });
+      if (!spellButtons.children.length) {
+        spellButtons.innerHTML = '<span class="empty-roll-options">No spell attack or damage dice are configured.</span>';
+      }
+    }
+    const abilityButtons = createDiceRollGroup(container, "Ability checks");
+    ABILITIES.forEach((ability) => {
+      const modifier = abilityModifier(npcAbilityScore(npc, ability));
+      appendRollButton(abilityButtons, ABILITY_LABELS[ability], modifier, () => rollNpcSheetD20(npc, `${ABILITY_LABELS[ability]} check`, modifier));
+    });
+    const saveButtons = createDiceRollGroup(container, "Saving throws");
+    ABILITIES.forEach((ability) => {
+      const modifier = npcSaveModifier(npc, ability);
+      appendRollButton(saveButtons, ABILITY_LABELS[ability], modifier, () => rollNpcSheetD20(npc, `${ABILITY_LABELS[ability]} save`, modifier));
+    });
+    const skillButtons = createDiceRollGroup(container, "Skills");
+    Object.keys(SKILL_ABILITIES).forEach((skill) => {
+      const modifier = npcSkillModifier(npc, skill);
+      appendRollButton(skillButtons, SKILL_LABELS[skill], modifier, () => rollNpcSheetD20(npc, `${SKILL_LABELS[skill]} check`, modifier));
+    });
   }
-
-  const abilityButtons = createDiceRollGroup(container, 'Ability checks');
-  ABILITIES.forEach(ability => {
-    const modifier = abilityModifier(npcAbilityScore(npc, ability));
-    appendRollButton(abilityButtons, ABILITY_LABELS[ability], modifier, () => (
-      rollNpcSheetD20(npc, `${ABILITY_LABELS[ability]} check`, modifier)
-    ));
-  });
-
-  const saveButtons = createDiceRollGroup(container, 'Saving throws');
-  ABILITIES.forEach(ability => {
-    const modifier = npcSaveModifier(npc, ability);
-    appendRollButton(saveButtons, ABILITY_LABELS[ability], modifier, () => (
-      rollNpcSheetD20(npc, `${ABILITY_LABELS[ability]} save`, modifier)
-    ));
-  });
-
-  const skillButtons = createDiceRollGroup(container, 'Skills');
-  Object.keys(SKILL_ABILITIES).forEach(skill => {
-    const modifier = npcSkillModifier(npc, skill);
-    appendRollButton(skillButtons, SKILL_LABELS[skill], modifier, () => (
-      rollNpcSheetD20(npc, `${SKILL_LABELS[skill]} check`, modifier)
-    ));
-  });
-}
-
-function createDiceRollGroup(container, title) {
-  const group = document.createElement('section');
-  group.className = 'roll-group';
-  const heading = document.createElement('h4');
-  heading.textContent = title;
-  const buttons = document.createElement('div');
-  buttons.className = 'modifier-buttons';
-  group.append(heading, buttons);
-  container.appendChild(group);
-  return buttons;
-}
-
-function appendRollButton(container, label, modifier, onclick, damage = false, valueLabel = null) {
-  const button = document.createElement('button');
-  button.type = 'button';
-  button.className = 'modifier-roll-btn' + (damage ? ' damage' : '');
-  button.innerHTML = `${escapeHtml(label)} <strong>${escapeHtml(valueLabel || signed(Number(modifier) || 0))}</strong>`;
-  button.onclick = onclick;
-  container.appendChild(button);
-}
-
-function characterRollName(character) {
-  return myName === character.name ? character.name : `${myName} as ${character.name}`;
-}
-
-function rollCharacterD20(character, label, modifier, extra = {}) {
-  const mode = extra.mode || consumePendingDiceRollMode();
-  rollDice(1, 20, modifier, {
-    name: characterRollName(character),
-    characterName: character.name,
-    label,
-    mode,
-    ...extra
-  });
-}
-
-function rollCharacterInitiative(character, forcedMode) {
-  const token = state.tokens.find(entry => entry.label.toLowerCase() === character.name.toLowerCase());
-  rollDice(1, 20, characterInitiativeModifier(character), {
-    name: characterRollName(character),
-    characterName: character.name,
-    label: `${character.name} initiative`,
-    mode: forcedMode || consumePendingDiceRollMode(),
-    initiativeName: character.name,
-    tokenId: token?.id || null
-  });
-}
-
-function rollNpcD20(token, label, modifier, mode = 'normal', extra = {}) {
-  rollDice(1, 20, modifier, {
-    name: `${myName} as ${token.label}`,
-    tokenId: token.id,
-    label,
-    mode,
-    ...extra
-  });
-}
-
-function rollNpcInitiative(token, mode = 'normal') {
-  const modifier = Number(token.initiativeModifier) || 0;
-  rollNpcD20(token, `${token.label} initiative`, modifier, mode, {
-    initiativeName: token.label
-  });
-}
-
-function rollNpcSheetD20(npc, label, modifier, extra = {}) {
-  const mode = extra.mode || consumePendingDiceRollMode();
-  rollDice(1, 20, modifier, {
-    npcId: npc.id,
-    label,
-    mode,
-    ...extra
-  });
-}
-
-function rollNpcSheetInitiative(npc) {
-  const modifier = Number(npc.initiativeModifier) || 0;
-  rollNpcSheetD20(npc, `${npc.name} initiative`, modifier, {
-    initiativeName: npc.name
-  });
-}
-
-function characterInitiativeModifier(character) {
-  const stored = character.initiativeModifier ?? character.fields?.initiative;
-  if (stored !== '' && stored !== undefined && stored !== null) return Number(stored) || 0;
-  return abilityModifier(character.abilities?.dex);
-}
-
-function characterSaveModifier(character, ability) {
-  const saved = character.saves?.[ability]?.modifier ?? character.fields?.[`save-${ability}`];
-  if (saved !== '' && saved !== undefined && saved !== null) return Number(saved) || 0;
-  return abilityModifier(character.abilities?.[ability]) + (character.saves?.[ability]?.proficient ? proficiencyBonus(character.level) : 0);
-}
-
-function characterSkillModifier(character, skill) {
-  const saved = character.skills?.[skill]?.modifier ?? character.fields?.[`skill-${skill}`];
-  if (saved !== '' && saved !== undefined && saved !== null) return Number(saved) || 0;
-  return abilityModifier(character.abilities?.[SKILL_ABILITIES[skill]]) + (character.skills?.[skill]?.proficient ? proficiencyBonus(character.level) : 0);
-}
-
-function npcAbilityScore(npc, ability) {
-  return Number(npc.sheet?.abilities?.[ability] ?? npc.sheet?.fields?.[ability]) || 10;
-}
-
-function npcSaveModifier(npc, ability) {
-  const saved = npc.sheet?.saves?.[ability]?.modifier ?? npc.sheet?.fields?.[`save-${ability}`];
-  if (saved !== '' && saved !== undefined && saved !== null) return Number(saved) || 0;
-  return abilityModifier(npcAbilityScore(npc, ability));
-}
-
-function npcSkillModifier(npc, skill) {
-  const saved = npc.sheet?.skills?.[skill]?.modifier ?? npc.sheet?.fields?.[`skill-${skill}`];
-  if (saved !== '' && saved !== undefined && saved !== null) return Number(saved) || 0;
-  return abilityModifier(npcAbilityScore(npc, SKILL_ABILITIES[skill]));
-}
-
-function parseDiceExpression(value) {
-  const match = String(value || '').replace(/\s+/g, '').match(/(\d*)d(\d+)([+-]\d+)?/i);
-  if (!match) return null;
-  const count = Math.max(1, Number(match[1]) || 1);
-  const sides = Math.max(2, Number(match[2]) || 20);
-  const modifier = Number(match[3]) || 0;
-  return { count, sides, modifier, expression: `${count}d${sides}${modifier ? signed(modifier) : ''}` };
-}
-
-// ================= QUICK COMBAT =================
-function openCombatManager(name) {
-  const character = state?.characters?.[name];
-  if (!character?.canManage) return showToast('You can only manage combat for your own character.');
-  activeCombatTarget = { type: 'character', id: name };
-  const overlay = document.getElementById('combat-overlay');
-  overlay.classList.remove('hidden');
-  overlay.setAttribute('aria-hidden', 'false');
-  renderCombatManager();
-}
-
-function openNpcCombatManager(id) {
-  const token = state?.tokens?.find(entry => entry.id === id && entry.kind === 'npc');
-  if (myRole !== 'dm' || !token) return showToast('Only the DM can manage NPC combat.');
-  activeCombatTarget = { type: 'npc', id };
-  const overlay = document.getElementById('combat-overlay');
-  overlay.classList.remove('hidden');
-  overlay.setAttribute('aria-hidden', 'false');
-  renderCombatManager();
-}
-
-function closeCombatManager() {
-  activeCombatTarget = null;
-  const overlay = document.getElementById('combat-overlay');
-  overlay.classList.add('hidden');
-  overlay.setAttribute('aria-hidden', 'true');
-}
-
-function combatAction(action, extra = {}) {
-  if (!activeCombatTarget) return;
-  if (action === 'condition:toggle') applyOptimisticConditionToggle(extra.condition);
-  if (activeCombatTarget.type === 'npc') socket.emit('token:combat:update', { id: activeCombatTarget.id, action, ...extra });
-  else socket.emit('character:combat:update', { name: activeCombatTarget.id, action, ...extra });
-}
-
-function activeCombatEntity() {
-  if (!activeCombatTarget) return null;
-  if (activeCombatTarget.type === 'npc') {
-    const token = state?.tokens?.find(entry => entry.id === activeCombatTarget.id && entry.kind === 'npc');
-    return token ? { type: 'npc', entity: token } : null;
+  function createDiceRollGroup(container, title) {
+    const group = document.createElement("section");
+    group.className = "roll-group";
+    const heading = document.createElement("h4");
+    heading.textContent = title;
+    const buttons = document.createElement("div");
+    buttons.className = "modifier-buttons";
+    group.append(heading, buttons);
+    container.appendChild(group);
+    return buttons;
   }
-  const character = state?.characters?.[activeCombatTarget.id];
-  return character ? { type: 'character', entity: character } : null;
-}
-
-function applyOptimisticConditionToggle(condition) {
-  const target = activeCombatEntity();
-  if (!target || !CONDITIONS.includes(condition)) return;
-  const nextConditions = combatState.toggleCondition(target.entity, condition);
-
-  if (target.type === 'npc') {
-    const npc = state?.npcs?.[target.entity.npcId];
-    if (npc) combatState.setConditions(npc, nextConditions);
-  } else {
-    state.tokens
-      .filter(token => token.characterName === target.entity.name)
-      .forEach(token => combatState.setConditionBadges(token, nextConditions));
+  function appendRollButton(container, label, modifier, onclick, damage = false, valueLabel = null) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "modifier-roll-btn" + (damage ? " damage" : "");
+    button.innerHTML = `${escapeHtml(label)} <strong>${escapeHtml(valueLabel || signed(Number(modifier) || 0))}</strong>`;
+    button.onclick = onclick;
+    container.appendChild(button);
   }
-
-  renderCombatManager();
-  renderMapTokens();
-  renderTokenTray();
-  renderCharacters();
-  renderPlayerSidebar();
-  renderNpcRoster();
-  renderDmSidebarSummary();
-}
-
-function renderCombatManager() {
-  const target = activeCombatEntity();
-  if (!target) return closeCombatManager();
-  const { type, entity } = target;
-  const isNpc = type === 'npc';
-  const name = isNpc ? entity.label : entity.name;
-  const combat = entity.combat || { conditions: [], concentration: false, exhaustion: 0, deathSaves: {}, spellSlots: {} };
-  document.getElementById('combat-kicker').textContent = isNpc ? 'NPC combat controls' : 'Character combat controls';
-  document.getElementById('combat-title').textContent = name;
-  const portrait = document.getElementById('combat-portrait');
-  const portraitUrl = isNpc ? entity.imageUrl : entity.portraitUrl;
-  portrait.innerHTML = portraitUrl ? `<img src="${escapeAttr(portraitUrl)}" alt="">` : (isNpc ? '🦊' : '🍃');
-  document.getElementById('combat-hp').textContent = `${Number(entity.hp) || 0} / ${Number(entity.maxHp) || 0}`;
-  document.getElementById('combat-temp-hp').textContent = Number(entity.tempHp) || 0;
-  document.getElementById('combat-ac').textContent = Number(entity.ac) || 0;
-  document.getElementById('combat-life-status').textContent = combat.dead ? 'Dead' : combat.stable ? 'Stable' : entity.hp <= 0 ? 'Down' : 'Ready';
-  const notes = document.getElementById('combat-notes');
-  notes.classList.toggle('hidden', !isNpc || !entity.notes);
-  notes.textContent = isNpc ? (entity.notes || '') : '';
-  document.getElementById('combat-death-section').classList.toggle('hidden', isNpc);
-  const hasSpellSlots = Object.values(combat.spellSlots || {}).some(slot => Number(slot.total) > 0);
-  document.getElementById('combat-spell-slots-section').classList.toggle('hidden', isNpc && !hasSpellSlots);
-  const preparesSpells = !isNpc && characterPreparationDetails(entity) !== null;
-  document.getElementById('combat-long-rest-btn').textContent = isNpc
-    ? 'Restore NPC'
-    : (preparesSpells ? 'Long rest & prepare spells' : 'Complete long rest');
-  renderCombatRolls(entity, isNpc);
-  document.getElementById('combat-concentration').checked = !!combat.concentration;
-  document.getElementById('combat-exhaustion').textContent = Number(combat.exhaustion) || 0;
-  document.getElementById('combat-death-successes').textContent = `${Number(combat.deathSaves?.successes) || 0} / 3`;
-  document.getElementById('combat-death-failures').textContent = `${Number(combat.deathSaves?.failures) || 0} / 3`;
-
-  const conditions = document.getElementById('combat-conditions');
-  conditions.innerHTML = '';
-  CONDITIONS.forEach(condition => {
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.className = 'condition-chip' + ((combat.conditions || []).includes(condition) ? ' active' : '');
-    button.textContent = condition;
-    button.onclick = () => combatAction('condition:toggle', { condition });
-    conditions.appendChild(button);
-  });
-
-  const slots = document.getElementById('combat-spell-slots');
-  slots.innerHTML = '';
-  Object.entries(combat.spellSlots || {}).filter(([, slot]) => Number(slot.total) > 0).forEach(([level, slot]) => {
-    const row = document.createElement('div');
-    row.className = 'combat-slot-row';
-    row.innerHTML = `
+  function characterRollName(character) {
+    return myName === character.name ? character.name : `${myName} as ${character.name}`;
+  }
+  function rollCharacterD20(character, label, modifier, extra = {}) {
+    const mode = extra.mode || consumePendingDiceRollMode();
+    rollDice(1, 20, modifier, {
+      name: characterRollName(character),
+      characterName: character.name,
+      label,
+      mode,
+      ...extra
+    });
+  }
+  function rollCharacterInitiative(character, forcedMode = null) {
+    const token = state.tokens.find((entry) => entry.label.toLowerCase() === character.name.toLowerCase());
+    rollDice(1, 20, characterInitiativeModifier(character), {
+      name: characterRollName(character),
+      characterName: character.name,
+      label: `${character.name} initiative`,
+      mode: forcedMode || consumePendingDiceRollMode(),
+      initiativeName: character.name,
+      tokenId: token?.id || null
+    });
+  }
+  function rollNpcD20(token, label, modifier, mode = "normal", extra = {}) {
+    rollDice(1, 20, modifier, {
+      name: `${myName} as ${token.label}`,
+      tokenId: token.id,
+      label,
+      mode,
+      ...extra
+    });
+  }
+  function rollNpcInitiative(token, mode = "normal") {
+    const modifier = Number(token.initiativeModifier) || 0;
+    rollNpcD20(token, `${token.label} initiative`, modifier, mode, {
+      initiativeName: token.label
+    });
+  }
+  function rollNpcSheetD20(npc, label, modifier, extra = {}) {
+    const mode = extra.mode || consumePendingDiceRollMode();
+    rollDice(1, 20, modifier, {
+      npcId: npc.id,
+      label,
+      mode,
+      ...extra
+    });
+  }
+  function rollNpcSheetInitiative(npc) {
+    const modifier = Number(npc.initiativeModifier) || 0;
+    rollNpcSheetD20(npc, `${npc.name} initiative`, modifier, {
+      initiativeName: npc.name
+    });
+  }
+  function characterInitiativeModifier(character) {
+    const stored = character.initiativeModifier ?? character.fields?.initiative;
+    if (stored !== "" && stored !== void 0 && stored !== null) return Number(stored) || 0;
+    return abilityModifier(character.abilities?.dex);
+  }
+  function characterSaveModifier(character, ability) {
+    const saved = character.saves?.[ability]?.modifier ?? character.fields?.[`save-${ability}`];
+    if (saved !== "" && saved !== void 0 && saved !== null) return Number(saved) || 0;
+    return abilityModifier(character.abilities?.[ability]) + (character.saves?.[ability]?.proficient ? proficiencyBonus(character.level) : 0);
+  }
+  function characterSkillModifier(character, skill) {
+    const saved = character.skills?.[skill]?.modifier ?? character.fields?.[`skill-${skill}`];
+    if (saved !== "" && saved !== void 0 && saved !== null) return Number(saved) || 0;
+    return abilityModifier(character.abilities?.[SKILL_ABILITIES[skill]]) + (character.skills?.[skill]?.proficient ? proficiencyBonus(character.level) : 0);
+  }
+  function npcAbilityScore(npc, ability) {
+    return Number(npc.sheet?.abilities?.[ability] ?? npc.sheet?.fields?.[ability]) || 10;
+  }
+  function npcSaveModifier(npc, ability) {
+    const saved = npc.sheet?.saves?.[ability]?.modifier ?? npc.sheet?.fields?.[`save-${ability}`];
+    if (saved !== "" && saved !== void 0 && saved !== null) return Number(saved) || 0;
+    return abilityModifier(npcAbilityScore(npc, ability));
+  }
+  function npcSkillModifier(npc, skill) {
+    const saved = npc.sheet?.skills?.[skill]?.modifier ?? npc.sheet?.fields?.[`skill-${skill}`];
+    if (saved !== "" && saved !== void 0 && saved !== null) return Number(saved) || 0;
+    return abilityModifier(npcAbilityScore(npc, SKILL_ABILITIES[skill]));
+  }
+  function parseDiceExpression(value) {
+    const match = String(value || "").replace(/\s+/g, "").match(/(\d*)d(\d+)([+-]\d+)?/i);
+    if (!match) return null;
+    const count = Math.max(1, Number(match[1]) || 1);
+    const sides = Math.max(2, Number(match[2]) || 20);
+    const modifier = Number(match[3]) || 0;
+    return { count, sides, modifier, expression: `${count}d${sides}${modifier ? signed(modifier) : ""}` };
+  }
+  function openCombatManager(name) {
+    const character = state?.characters?.[name];
+    if (!character?.canManage) return showToast("You can only manage combat for your own character.");
+    activeCombatTarget = { type: "character", id: name };
+    const overlay = document.getElementById("combat-overlay");
+    overlay.classList.remove("hidden");
+    overlay.setAttribute("aria-hidden", "false");
+    renderCombatManager();
+  }
+  function openNpcCombatManager(id) {
+    const token = state?.tokens?.find((entry) => entry.id === id && entry.kind === "npc");
+    if (myRole !== "dm" || !token) return showToast("Only the DM can manage NPC combat.");
+    activeCombatTarget = { type: "npc", id };
+    const overlay = document.getElementById("combat-overlay");
+    overlay.classList.remove("hidden");
+    overlay.setAttribute("aria-hidden", "false");
+    renderCombatManager();
+  }
+  function closeCombatManager() {
+    activeCombatTarget = null;
+    const overlay = document.getElementById("combat-overlay");
+    overlay.classList.add("hidden");
+    overlay.setAttribute("aria-hidden", "true");
+  }
+  function combatAction(action, extra = {}) {
+    if (!activeCombatTarget) return;
+    if (action === "condition:toggle") applyOptimisticConditionToggle(extra.condition);
+    if (activeCombatTarget.type === "npc") socket.emit("token:combat:update", { id: activeCombatTarget.id, action, ...extra });
+    else socket.emit("character:combat:update", { name: activeCombatTarget.id, action, ...extra });
+  }
+  function activeCombatEntity() {
+    if (!activeCombatTarget) return null;
+    if (activeCombatTarget.type === "npc") {
+      const token = state?.tokens?.find((entry) => entry.id === activeCombatTarget.id && entry.kind === "npc");
+      return token ? { type: "npc", entity: token } : null;
+    }
+    const character = state?.characters?.[activeCombatTarget.id];
+    return character ? { type: "character", entity: character } : null;
+  }
+  function applyOptimisticConditionToggle(condition) {
+    const target = activeCombatEntity();
+    if (!target || !CONDITIONS.includes(condition)) return;
+    const nextConditions = combatState.toggleCondition(target.entity, condition);
+    if (target.type === "npc") {
+      const npc = state?.npcs?.[target.entity.npcId];
+      if (npc) combatState.setConditions(npc, nextConditions);
+    } else {
+      state.tokens.filter((token) => token.characterName === target.entity.name).forEach((token) => combatState.setConditionBadges(token, nextConditions));
+    }
+    renderCombatManager();
+    renderMapTokens();
+    renderTokenTray();
+    renderCharacters();
+    renderPlayerSidebar();
+    renderNpcRoster();
+    renderDmSidebarSummary();
+  }
+  function renderCombatManager() {
+    const target = activeCombatEntity();
+    if (!target) return closeCombatManager();
+    const { type, entity } = target;
+    const isNpc = type === "npc";
+    const name = isNpc ? entity.label : entity.name;
+    const combat = entity.combat || { conditions: [], concentration: false, exhaustion: 0, deathSaves: {}, spellSlots: {} };
+    document.getElementById("combat-kicker").textContent = isNpc ? "NPC combat controls" : "Character combat controls";
+    document.getElementById("combat-title").textContent = name;
+    const portrait = document.getElementById("combat-portrait");
+    const portraitUrl = isNpc ? entity.imageUrl : entity.portraitUrl;
+    portrait.innerHTML = portraitUrl ? `<img src="${escapeAttr(portraitUrl)}" alt="">` : isNpc ? "\u{1F98A}" : "\u{1F343}";
+    document.getElementById("combat-hp").textContent = `${Number(entity.hp) || 0} / ${Number(entity.maxHp) || 0}`;
+    document.getElementById("combat-temp-hp").textContent = Number(entity.tempHp) || 0;
+    document.getElementById("combat-ac").textContent = Number(entity.ac) || 0;
+    document.getElementById("combat-life-status").textContent = combat.dead ? "Dead" : combat.stable ? "Stable" : entity.hp <= 0 ? "Down" : "Ready";
+    const notes = document.getElementById("combat-notes");
+    notes.classList.toggle("hidden", !isNpc || !entity.notes);
+    notes.textContent = isNpc ? entity.notes || "" : "";
+    document.getElementById("combat-death-section").classList.toggle("hidden", isNpc);
+    const hasSpellSlots = Object.values(combat.spellSlots || {}).some((slot) => Number(slot.total) > 0);
+    document.getElementById("combat-spell-slots-section").classList.toggle("hidden", isNpc && !hasSpellSlots);
+    const preparesSpells = !isNpc && characterPreparationDetails(entity) !== null;
+    document.getElementById("combat-long-rest-btn").textContent = isNpc ? "Restore NPC" : preparesSpells ? "Long rest & prepare spells" : "Complete long rest";
+    renderCombatRolls(entity, isNpc);
+    document.getElementById("combat-concentration").checked = !!combat.concentration;
+    document.getElementById("combat-exhaustion").textContent = Number(combat.exhaustion) || 0;
+    document.getElementById("combat-death-successes").textContent = `${Number(combat.deathSaves?.successes) || 0} / 3`;
+    document.getElementById("combat-death-failures").textContent = `${Number(combat.deathSaves?.failures) || 0} / 3`;
+    const conditions = document.getElementById("combat-conditions");
+    conditions.innerHTML = "";
+    CONDITIONS.forEach((condition) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "condition-chip" + ((combat.conditions || []).includes(condition) ? " active" : "");
+      button.textContent = condition;
+      button.onclick = () => combatAction("condition:toggle", { condition });
+      conditions.appendChild(button);
+    });
+    const slots = document.getElementById("combat-spell-slots");
+    slots.innerHTML = "";
+    Object.entries(combat.spellSlots || {}).filter(([, slot]) => Number(slot.total) > 0).forEach(([level, slot]) => {
+      const row = document.createElement("div");
+      row.className = "combat-slot-row";
+      row.innerHTML = `
       <span class="slot-level">Level ${level}</span>
-      <button class="counter-btn recover-slot" type="button" title="Recover one slot">−</button>
+      <button class="counter-btn recover-slot" type="button" title="Recover one slot">\u2212</button>
       <strong>${Number(slot.total) - Number(slot.used)} / ${Number(slot.total)} available</strong>
       <button class="counter-btn use-slot" type="button" title="Use one slot">+</button>
     `;
-    row.querySelector('.recover-slot').onclick = () => combatAction('spellSlot', { level: Number(level), delta: -1 });
-    row.querySelector('.use-slot').onclick = () => combatAction('spellSlot', { level: Number(level), delta: 1 });
-    slots.appendChild(row);
-  });
-  if (!slots.children.length) slots.innerHTML = '<p class="empty-roll-options">No spell slots are configured on this sheet.</p>';
-
-  const check = isNpc ? null : pendingConcentrationChecks.get(entity.name);
-  const checkButton = document.getElementById('combat-concentration-roll');
-  checkButton.classList.toggle('hidden', !check);
-  if (check) checkButton.textContent = `Roll Constitution save · DC ${check.dc}`;
-}
-
-function renderCombatRolls(character, isNpc = false) {
-  const mode = () => document.getElementById('combat-roll-mode').value;
-  const initiativeButton = document.getElementById('combat-initiative-roll');
-  const initiativeModifier = isNpc ? (Number(character.initiativeModifier) || 0) : characterInitiativeModifier(character);
-  initiativeButton.textContent = `Initiative ${signed(initiativeModifier)}`;
-  initiativeButton.onclick = () => isNpc ? rollNpcInitiative(character, mode()) : rollCharacterInitiative(character, mode());
-
-  const spellAttackValue = character.spellcasting?.attackBonus ?? character.fields?.['spell-attack'];
-  const hasSpellAttack = spellAttackValue !== '' && spellAttackValue !== undefined && spellAttackValue !== null;
-  const spellAttackButton = document.getElementById('combat-spell-attack-roll');
-  spellAttackButton.classList.toggle('hidden', !hasSpellAttack);
-  if (hasSpellAttack) {
-    const spellModifier = Number(spellAttackValue) || 0;
-    spellAttackButton.textContent = `Spell attack ${signed(spellModifier)}`;
-    spellAttackButton.onclick = () => {
-      if (isNpc) rollNpcD20(character, 'Spell attack', spellModifier, mode());
-      else rollCharacterD20(character, 'Spell attack', spellModifier, { mode: mode() });
-    };
-  }
-
-  const spellDcValue = character.spellcasting?.saveDc ?? character.fields?.['spell-dc'];
-  const spellDc = document.getElementById('combat-spell-dc');
-  const hasSpellDc = spellDcValue !== '' && spellDcValue !== undefined && spellDcValue !== null;
-  spellDc.classList.toggle('hidden', !hasSpellDc);
-  if (hasSpellDc) spellDc.textContent = `Spell save DC ${Number(spellDcValue) || 0}`;
-
-  const attacks = document.getElementById('combat-attacks');
-  attacks.innerHTML = '';
-  (character.attacks || []).filter(attack => attack.name).forEach(attack => {
-    const row = document.createElement('div');
-    row.className = 'combat-roll-row';
-    const name = document.createElement('span');
-    name.className = 'combat-roll-name';
-    name.textContent = attack.name;
-    if (attack.details) name.title = attack.details;
-    row.appendChild(name);
-    const bonusMatch = String(attack.bonus || '').match(/[+-]?\d+/);
-    if (bonusMatch) {
-      const modifier = Number(bonusMatch[0]);
-      row.appendChild(makeCombatRollButton(`Hit ${signed(modifier)}`, () => {
-        if (isNpc) rollNpcD20(character, `${attack.name} attack`, modifier, mode());
-        else rollCharacterD20(character, `${attack.name} attack`, modifier, { mode: mode() });
-      }));
-    }
-    const damage = parseDiceExpression(attack.damage);
-    if (damage) {
-      row.appendChild(makeCombatRollButton(damage.expression, () => rollDice(damage.count, damage.sides, damage.modifier, {
-        characterName: isNpc ? null : character.name,
-        tokenId: isNpc ? character.id : null,
-        label: `${attack.name} damage`
-      }), true));
-    }
-    attacks.appendChild(row);
-  });
-  if (!attacks.children.length) attacks.innerHTML = '<p class="empty-roll-options">No attacks are configured.</p>';
-
-  const spells = document.getElementById('combat-spells');
-  spells.innerHTML = '';
-  (isNpc ? normalizeSpellList(character.spells) : characterSpellEntries(character)).forEach(spell => {
-    const row = document.createElement('div');
-    row.className = 'combat-roll-row combat-spell-card';
-    const info = document.createElement('div');
-    info.className = 'combat-spell-info';
-    const heading = document.createElement('div');
-    heading.className = 'combat-spell-heading';
-    const name = document.createElement('span');
-    name.className = 'combat-roll-name';
-    name.textContent = spell.name;
-    const level = document.createElement('small');
-    level.textContent = [spell.level === 0 ? 'Cantrip' : `Level ${spell.level}`, spell.school, spell.source].filter(Boolean).join(' · ');
-    heading.append(name, level);
-    info.appendChild(heading);
-
-    const metadata = [
-      spell.castingTime ? `Cast: ${spell.castingTime}` : '',
-      spell.range ? `Range: ${spell.range}` : '',
-      spell.duration ? `Duration: ${spell.duration}` : '',
-      spell.attack && !/^none$/i.test(spell.attack) ? `Attack/save: ${spell.attack}` : '',
-      spell.damage ? `Damage: ${spell.damage}` : ''
-    ].filter(Boolean);
-    if (metadata.length) {
-      const meta = document.createElement('div');
-      meta.className = 'combat-spell-meta';
-      metadata.forEach(value => {
-        const detail = document.createElement('span');
-        detail.textContent = value;
-        meta.appendChild(detail);
-      });
-      info.appendChild(meta);
-    }
-    if (spell.effect) {
-      const effect = document.createElement('p');
-      effect.className = 'combat-spell-effect';
-      effect.textContent = spell.effect;
-      info.appendChild(effect);
-    }
-    row.appendChild(info);
-
-    const actions = document.createElement('div');
-    actions.className = 'combat-spell-actions';
-    if (hasSpellAttack && /\bspell attack\b/i.test(spell.attack)) {
-      const modifier = Number(spellAttackValue) || 0;
-      actions.appendChild(makeCombatRollButton(`Attack ${signed(modifier)}`, () => {
-        if (isNpc) rollNpcD20(character, `${spell.name} spell attack`, modifier, mode());
-        else rollCharacterD20(character, `${spell.name} spell attack`, modifier, { mode: mode() });
-      }));
-    }
-    const damage = parseDiceExpression(spell.damage || spell.effect || spell.name);
-    if (damage) {
-      actions.appendChild(makeCombatRollButton(`Roll ${damage.expression}`, () => rollDice(damage.count, damage.sides, damage.modifier, {
-        characterName: isNpc ? null : character.name,
-        tokenId: isNpc ? character.id : null,
-        label: `${spell.name} damage`
-      }), true));
-    }
-    if (actions.children.length) row.appendChild(actions);
-    spells.appendChild(row);
-  });
-  if (!spells.children.length) spells.innerHTML = '<p class="empty-roll-options">No spells are listed on the sheet.</p>';
-}
-
-function makeCombatRollButton(label, onclick, damage = false) {
-  const button = document.createElement('button');
-  button.type = 'button';
-  button.className = `combat-roll-button${damage ? ' damage' : ''}`;
-  button.textContent = label;
-  button.onclick = onclick;
-  return button;
-}
-
-function characterKnownSpellEntries(character) {
-  const structured = normalizeSpellList(character.fields?.['spell-list']);
-  if (structured.length) {
-    return structured
-      .sort((a, b) => a.level - b.level || a.name.localeCompare(b.name));
-  }
-  const entries = [];
-  for (let level = 0; level <= 9; level += 1) {
-    const text = String(character.fields?.[`spells-${level}`] || '').trim();
-    if (!text) continue;
-    text.split(/\n|;/).flatMap(line => {
-      const trimmed = line.trim();
-      return trimmed.includes(',') && !/\d+d\d+/i.test(trimmed) ? trimmed.split(',') : [trimmed];
-    }).map(name => name.trim()).filter(Boolean).forEach(name => entries.push(normalizeSpell({ level, name }, entries.length)));
-  }
-  return entries;
-}
-
-function characterPreparationDetails(character) {
-  if (!character) return null;
-  const fields = character.fields || {};
-  const className = character.charClass || fields.class || '';
-  const subclass = character.subclass || fields.subclass || '';
-  const level = character.level || fields.level || 1;
-  const ability = characterRules.spellcastingAbilityFor(className, subclass);
-  const abilityScore = ability ? (character.abilities?.[ability] ?? fields[ability] ?? 10) : 10;
-  const limit = characterRules.preparedSpellCount(className, level, abilityScore);
-  if (limit === null) return null;
-  const maximumSpellLevel = characterRules.maximumSpellLevelFor(className, subclass, level);
-  const available = characterKnownSpellEntries(character)
-    .filter(spell => spell.level > 0 && spell.level <= maximumSpellLevel)
-    .sort((a, b) => a.level - b.level || a.name.localeCompare(b.name));
-  const alwaysPrepared = available.filter(spell => spell.alwaysPrepared);
-  const selectable = available.filter(spell => !spell.alwaysPrepared);
-  return {
-    className: characterRules.canonicalClass(className) || className,
-    maximumSpellLevel,
-    limit,
-    available,
-    alwaysPrepared,
-    selectable,
-    target: Math.min(limit, selectable.length)
-  };
-}
-
-function characterSpellEntries(character) {
-  const known = characterKnownSpellEntries(character);
-  const preparation = characterPreparationDetails(character);
-  if (!preparation) return known;
-  const hasSavedPreparation = preparation.available.some(spell => (
-    spell.alwaysPrepared || typeof spell.prepared === 'boolean'
-  ));
-  if (!hasSavedPreparation) return known;
-  return known.filter(spell => (
-    spell.level === 0 ||
-    (spell.level <= preparation.maximumSpellLevel && (spell.alwaysPrepared || spell.prepared === true))
-  ));
-}
-
-function closeSpellPreparation() {
-  pendingSpellPreparation = null;
-  const overlay = document.getElementById('spell-preparation-overlay');
-  overlay.classList.add('hidden');
-  overlay.setAttribute('aria-hidden', 'true');
-}
-
-function updateSpellPreparationCount() {
-  if (!pendingSpellPreparation) return;
-  const { selected, target, alwaysPrepared } = pendingSpellPreparation;
-  const valid = selected.size === target;
-  const count = document.getElementById('spell-preparation-count');
-  count.textContent = `${selected.size} / ${target} selected${alwaysPrepared.length ? ` · ${alwaysPrepared.length} always prepared` : ''}`;
-  count.classList.toggle('invalid', !valid);
-  document.getElementById('spell-preparation-complete-btn').disabled = !valid;
-}
-
-function renderSpellPreparationList() {
-  if (!pendingSpellPreparation) return;
-  const container = document.getElementById('spell-preparation-list');
-  const query = document.getElementById('spell-preparation-search').value.trim().toLowerCase();
-  const visible = pendingSpellPreparation.available.filter(spell => (
-    !query || [spell.name, spell.school, spell.source].some(value => String(value || '').toLowerCase().includes(query))
-  ));
-  container.innerHTML = '';
-  if (!visible.length) {
-    container.innerHTML = `<p class="spell-preparation-empty">${query ? 'No available spells match that search.' : 'No leveled spells on this sheet are available at the character’s current level.'}</p>`;
-    updateSpellPreparationCount();
-    return;
-  }
-  const byLevel = new Map();
-  visible.forEach(spell => {
-    if (!byLevel.has(spell.level)) byLevel.set(spell.level, []);
-    byLevel.get(spell.level).push(spell);
-  });
-  [...byLevel.entries()].forEach(([level, spells]) => {
-    const group = document.createElement('section');
-    group.className = 'spell-preparation-level';
-    const title = document.createElement('h3');
-    title.textContent = `Level ${level}`;
-    const options = document.createElement('div');
-    options.className = 'spell-preparation-options';
-    spells.forEach(spell => {
-      const option = document.createElement('label');
-      option.className = `spell-preparation-option${spell.alwaysPrepared ? ' always' : ''}`;
-      const checkbox = document.createElement('input');
-      checkbox.type = 'checkbox';
-      checkbox.checked = spell.alwaysPrepared || pendingSpellPreparation.selected.has(spell.id);
-      checkbox.disabled = spell.alwaysPrepared;
-      checkbox.setAttribute('aria-label', spell.alwaysPrepared ? `${spell.name}, always prepared` : `Prepare ${spell.name}`);
-      checkbox.onchange = () => {
-        if (checkbox.checked && pendingSpellPreparation.selected.size >= pendingSpellPreparation.target) {
-          checkbox.checked = false;
-          showToast(`You can prepare ${pendingSpellPreparation.target} spell${pendingSpellPreparation.target === 1 ? '' : 's'}.`);
-          return;
-        }
-        if (checkbox.checked) pendingSpellPreparation.selected.add(spell.id);
-        else pendingSpellPreparation.selected.delete(spell.id);
-        updateSpellPreparationCount();
-      };
-      const copy = document.createElement('span');
-      copy.className = 'spell-preparation-option-copy';
-      const name = document.createElement('strong');
-      name.textContent = spell.name;
-      const details = document.createElement('small');
-      details.textContent = spell.alwaysPrepared
-        ? ['Always prepared', spell.school, spell.source].filter(Boolean).join(' · ')
-        : [spell.school, spell.source].filter(Boolean).join(' · ');
-      copy.append(name);
-      if (details.textContent) copy.append(details);
-      option.append(checkbox, copy);
-      options.appendChild(option);
+      row.querySelector(".recover-slot").onclick = () => combatAction("spellSlot", { level: Number(level), delta: -1 });
+      row.querySelector(".use-slot").onclick = () => combatAction("spellSlot", { level: Number(level), delta: 1 });
+      slots.appendChild(row);
     });
-    group.append(title, options);
-    container.appendChild(group);
-  });
-  updateSpellPreparationCount();
-}
-
-function openSpellPreparation(character, preparation = characterPreparationDetails(character)) {
-  if (!preparation) return false;
-  const current = preparation.selectable.filter(spell => spell.prepared === true).map(spell => spell.id);
-  const hasSavedPreparation = preparation.selectable.some(spell => typeof spell.prepared === 'boolean');
-  const selected = new Set(current.slice(0, preparation.target));
-  if (!hasSavedPreparation && preparation.selectable.length <= preparation.target) {
-    preparation.selectable.forEach(spell => selected.add(spell.id));
+    if (!slots.children.length) slots.innerHTML = '<p class="empty-roll-options">No spell slots are configured on this sheet.</p>';
+    const check = isNpc ? null : pendingConcentrationChecks.get(entity.name);
+    const checkButton = document.getElementById("combat-concentration-roll");
+    checkButton.classList.toggle("hidden", !check);
+    if (check) checkButton.textContent = `Roll Constitution save \xB7 DC ${check.dc}`;
   }
-  pendingSpellPreparation = { characterName: character.name, ...preparation, selected };
-  document.getElementById('spell-preparation-title').textContent = `Prepare ${character.name}’s spells`;
-  document.getElementById('spell-preparation-intro').textContent = `${preparation.className} level ${character.level || character.fields?.level || 1} can prepare ${preparation.limit} spell${preparation.limit === 1 ? '' : 's'} of level ${preparation.maximumSpellLevel} or lower. Choose ${preparation.target} from the spells currently on the sheet.`;
-  document.getElementById('spell-preparation-note').textContent = preparation.alwaysPrepared.length
-    ? 'Cantrips and always-prepared spells remain available without using this limit.'
-    : 'Cantrips are always available and do not need to be prepared.';
-  document.getElementById('spell-preparation-search').value = '';
-  const overlay = document.getElementById('spell-preparation-overlay');
-  overlay.classList.remove('hidden');
-  overlay.setAttribute('aria-hidden', 'false');
-  renderSpellPreparationList();
-  document.getElementById('spell-preparation-search').focus();
-  return true;
-}
-
-document.getElementById('combat-close-btn').onclick = closeCombatManager;
-document.getElementById('combat-overlay').addEventListener('mousedown', event => {
-  if (event.target.id === 'combat-overlay') closeCombatManager();
-});
-document.addEventListener('keydown', event => {
-  if (event.key !== 'Escape') return;
-  if (pendingSpellPreparation) closeSpellPreparation();
-  else if (activeCombatTarget) closeCombatManager();
-});
-document.getElementById('combat-damage-btn').onclick = () => combatAction('damage', { amount: Number(document.getElementById('combat-amount').value) || 0 });
-document.getElementById('combat-heal-btn').onclick = () => combatAction('heal', { amount: Number(document.getElementById('combat-amount').value) || 0 });
-document.getElementById('combat-temp-btn').onclick = () => combatAction('tempHp', { amount: Number(document.getElementById('combat-amount').value) || 0 });
-document.getElementById('combat-concentration').onchange = event => combatAction('concentration:set', { value: event.target.checked });
-document.querySelectorAll('[data-combat-action]').forEach(button => {
-  button.onclick = () => {
-    const actions = {
-      'exhaustion-down': ['exhaustion', { delta: -1 }],
-      'exhaustion-up': ['exhaustion', { delta: 1 }],
-      'success-down': ['deathSave', { kind: 'successes', delta: -1 }],
-      'success-up': ['deathSave', { kind: 'successes', delta: 1 }],
-      'failure-down': ['deathSave', { kind: 'failures', delta: -1 }],
-      'failure-up': ['deathSave', { kind: 'failures', delta: 1 }]
-    };
-    const [action, extra] = actions[button.dataset.combatAction];
-    combatAction(action, extra);
-  };
-});
-document.getElementById('combat-restore-slots-btn').onclick = () => combatAction('restoreAllSlots');
-document.getElementById('combat-long-rest-btn').onclick = () => {
-  const target = activeCombatEntity();
-  if (!target) return;
-  const name = target.type === 'npc' ? target.entity.label : target.entity.name;
-  if (target.type === 'npc') {
-    if (confirm(`Restore ${name} to full HP?`)) combatAction('longRest');
-    return;
-  }
-  const preparation = characterPreparationDetails(target.entity);
-  if (preparation?.available.length) {
-    openSpellPreparation(target.entity, preparation);
-    return;
-  }
-  if (confirm(`Give ${name} a long rest? This restores HP and all spell slots.`)) combatAction('longRest');
-};
-document.getElementById('spell-preparation-close-btn').onclick = closeSpellPreparation;
-document.getElementById('spell-preparation-overlay').addEventListener('mousedown', event => {
-  if (event.target.id === 'spell-preparation-overlay') closeSpellPreparation();
-});
-document.getElementById('spell-preparation-search').addEventListener('input', renderSpellPreparationList);
-document.getElementById('spell-preparation-complete-btn').onclick = () => {
-  if (!pendingSpellPreparation || pendingSpellPreparation.selected.size !== pendingSpellPreparation.target) return;
-  const characterName = pendingSpellPreparation.characterName;
-  const preparedSpellIds = [...pendingSpellPreparation.selected];
-  closeSpellPreparation();
-  socket.emit('character:combat:update', { name: characterName, action: 'longRest', preparedSpellIds });
-};
-document.getElementById('combat-concentration-roll').onclick = () => {
-  if (activeCombatTarget?.type !== 'character') return;
-  const character = state?.characters?.[activeCombatTarget.id];
-  const check = pendingConcentrationChecks.get(activeCombatTarget.id);
-  if (!character || !check) return;
-  rollCharacterD20(character, `Concentration save (DC ${check.dc})`, characterSaveModifier(character, 'con'), {
-    targetDc: check.dc,
-    concentrationFor: character.name,
-    mode: 'normal'
-  });
-};
-
-// ================= INITIATIVE (MAP PANEL) =================
-document.getElementById('init-add-btn').onclick = () => {
-  const name = document.getElementById('init-name').value.trim();
-  const value = Number(document.getElementById('init-value').value);
-  if (!name || !Number.isFinite(value)) return showToast('Add a name and initiative value.');
-  const token = state.tokens.find(entry => entry.label.toLowerCase() === name.toLowerCase());
-  socket.emit('initiative:add', { name, value, tokenId: token?.id || null });
-  document.getElementById('init-name').value = '';
-  document.getElementById('init-value').value = '';
-};
-document.getElementById('init-next-btn').onclick = () => socket.emit('initiative:next');
-document.getElementById('init-reset-btn').onclick = () => {
-  if (confirm('Clear the turn order and return to round 1?')) socket.emit('initiative:reset');
-};
-
-function currentInitiativeEntry() {
-  const initiative = state?.initiative;
-  if (!initiative || initiative.currentIndex < 0) return null;
-  return initiative.entries[initiative.currentIndex] || null;
-}
-
-function renderInitiative() {
-  if (!state) return;
-  const initiative = state.initiative || { entries: [], round: 1, currentIndex: -1 };
-  document.getElementById('init-round').textContent = initiative.round || 1;
-  document.getElementById('initiative-count').textContent = initiative.entries.length;
-  const list = document.getElementById('initiative-list');
-  list.innerHTML = '';
-  if (!initiative.entries.length) {
-    const empty = document.createElement('p');
-    empty.className = 'empty-roll-options';
-    empty.textContent = 'No combatants yet. Roll initiative from the Dice tab or add one here.';
-    list.appendChild(empty);
-  }
-  initiative.entries.forEach((entry, index) => {
-    const row = document.createElement('div');
-    row.className = 'initiative-item' + (index === initiative.currentIndex ? ' current-turn' : '');
-    row.dataset.initiativeId = entry.id;
-    if (myRole === 'dm') {
-      const dragHandle = document.createElement('span');
-      dragHandle.className = 'initiative-drag-handle';
-      dragHandle.textContent = '⋮⋮';
-      dragHandle.title = 'Drag to reorder';
-      dragHandle.draggable = true;
-      dragHandle.ondragstart = event => {
-        draggedInitiativeId = entry.id;
-        event.dataTransfer.effectAllowed = 'move';
-        event.dataTransfer.setData('text/plain', entry.id);
-        row.classList.add('dragging');
-      };
-      dragHandle.ondragend = () => {
-        draggedInitiativeId = null;
-        document.querySelectorAll('.initiative-item').forEach(item => item.classList.remove('dragging', 'drag-over'));
-      };
-      row.appendChild(dragHandle);
-    }
-    const value = document.createElement(myRole === 'dm' ? 'input' : 'div');
-    value.className = 'init-value' + (myRole === 'dm' ? ' init-value-edit' : '');
-    if (myRole === 'dm') {
-      value.type = 'number';
-      value.value = entry.value;
-      value.title = `Edit ${entry.name}'s initiative`;
-      value.onchange = () => socket.emit('initiative:edit', { id: entry.id, value: Number(value.value) });
-    } else {
-      value.textContent = entry.value;
-    }
-    const name = document.createElement('div');
-    name.className = 'init-name';
-    name.textContent = entry.name;
-    if (index === initiative.currentIndex) {
-      const meta = document.createElement('span');
-      meta.className = 'init-meta';
-      meta.textContent = 'Current turn';
-      name.appendChild(meta);
-    }
-    row.append(value, name);
-    const character = state.characters[entry.name];
-    const npcToken = entry.tokenId ? state.tokens.find(token => token.id === entry.tokenId && token.kind === 'npc') : null;
-    if (character?.canManage || (myRole === 'dm' && npcToken)) {
-      const combatButton = document.createElement('button');
-      combatButton.type = 'button';
-      combatButton.className = 'initiative-combat-btn';
-      combatButton.textContent = '⚔';
-      combatButton.title = `Open combat controls for ${entry.name}`;
-      combatButton.onclick = () => npcToken ? openNpcCombatManager(npcToken.id) : openCombatManager(entry.name);
-      row.appendChild(combatButton);
-    }
-    if (myRole === 'dm') {
-      const remove = document.createElement('button');
-      remove.type = 'button';
-      remove.className = 'del';
-      remove.textContent = '×';
-      remove.title = `Remove ${entry.name}`;
-      remove.onclick = () => socket.emit('initiative:remove', { id: entry.id });
-      row.appendChild(remove);
-      row.ondragover = event => {
-        if (!draggedInitiativeId || draggedInitiativeId === entry.id) return;
-        event.preventDefault();
-        event.dataTransfer.dropEffect = 'move';
-        row.classList.add('drag-over');
-      };
-      row.ondragleave = () => row.classList.remove('drag-over');
-      row.ondrop = event => {
-        event.preventDefault();
-        const draggedId = draggedInitiativeId || event.dataTransfer.getData('text/plain');
-        row.classList.remove('drag-over');
-        if (!draggedId || draggedId === entry.id) return;
-        const orderedIds = initiative.entries.map(item => item.id).filter(id => id !== draggedId);
-        const targetIndex = orderedIds.indexOf(entry.id);
-        const rect = row.getBoundingClientRect();
-        const insertAfter = event.clientY > rect.top + rect.height / 2;
-        orderedIds.splice(Math.max(0, targetIndex + (insertAfter ? 1 : 0)), 0, draggedId);
-        socket.emit('initiative:reorder', { orderedIds });
+  function renderCombatRolls(character, isNpc = false) {
+    const mode = () => document.getElementById("combat-roll-mode").value;
+    const initiativeButton = document.getElementById("combat-initiative-roll");
+    const initiativeModifier = isNpc ? Number(character.initiativeModifier) || 0 : characterInitiativeModifier(character);
+    initiativeButton.textContent = `Initiative ${signed(initiativeModifier)}`;
+    initiativeButton.onclick = () => isNpc ? rollNpcInitiative(character, mode()) : rollCharacterInitiative(character, mode());
+    const spellAttackValue = character.spellcasting?.attackBonus ?? character.fields?.["spell-attack"];
+    const hasSpellAttack = spellAttackValue !== "" && spellAttackValue !== void 0 && spellAttackValue !== null;
+    const spellAttackButton = document.getElementById("combat-spell-attack-roll");
+    spellAttackButton.classList.toggle("hidden", !hasSpellAttack);
+    if (hasSpellAttack) {
+      const spellModifier = Number(spellAttackValue) || 0;
+      spellAttackButton.textContent = `Spell attack ${signed(spellModifier)}`;
+      spellAttackButton.onclick = () => {
+        if (isNpc) rollNpcD20(character, "Spell attack", spellModifier, mode());
+        else rollCharacterD20(character, "Spell attack", spellModifier, { mode: mode() });
       };
     }
-    list.appendChild(row);
-  });
-  renderInitiativeQuickAdd();
-}
-
-function renderInitiativeQuickAdd() {
-  const container = document.getElementById('init-quick-add');
-  container.innerHTML = '';
-  if (myRole !== 'dm') return;
-  const label = document.createElement('span');
-  label.className = 'quick-add-label';
-  label.textContent = 'Roll initiative:';
-  container.appendChild(label);
-  Object.values(state.characters).forEach(character => {
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.className = 'btn-ghost quick-add-chip';
-    button.textContent = `🎲 ${character.name}`;
-    button.onclick = () => rollCharacterInitiative(character, 'normal');
-    container.appendChild(button);
-  });
-  state.tokens.filter(token => token.kind !== 'item' && !state.characters[token.label]).forEach(token => {
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.className = 'btn-ghost quick-add-chip';
-    button.textContent = token.label;
-    button.onclick = () => {
-      if (token.kind === 'npc') rollNpcInitiative(token, 'normal');
-      else {
-        document.getElementById('init-name').value = token.label;
-        document.getElementById('init-value').focus();
+    const spellDcValue = character.spellcasting?.saveDc ?? character.fields?.["spell-dc"];
+    const spellDc = document.getElementById("combat-spell-dc");
+    const hasSpellDc = spellDcValue !== "" && spellDcValue !== void 0 && spellDcValue !== null;
+    spellDc.classList.toggle("hidden", !hasSpellDc);
+    if (hasSpellDc) spellDc.textContent = `Spell save DC ${Number(spellDcValue) || 0}`;
+    const attacks = document.getElementById("combat-attacks");
+    attacks.innerHTML = "";
+    (character.attacks || []).filter((attack) => attack.name).forEach((attack) => {
+      const row = document.createElement("div");
+      row.className = "combat-roll-row";
+      const name = document.createElement("span");
+      name.className = "combat-roll-name";
+      name.textContent = attack.name;
+      if (attack.details) name.title = attack.details;
+      row.appendChild(name);
+      const bonusMatch = String(attack.bonus || "").match(/[+-]?\d+/);
+      if (bonusMatch) {
+        const modifier = Number(bonusMatch[0]);
+        row.appendChild(makeCombatRollButton(`Hit ${signed(modifier)}`, () => {
+          if (isNpc) rollNpcD20(character, `${attack.name} attack`, modifier, mode());
+          else rollCharacterD20(character, `${attack.name} attack`, modifier, { mode: mode() });
+        }));
       }
+      const damage = parseDiceExpression(attack.damage);
+      if (damage) {
+        row.appendChild(makeCombatRollButton(damage.expression, () => rollDice(damage.count, damage.sides, damage.modifier, {
+          characterName: isNpc ? null : character.name,
+          tokenId: isNpc ? character.id : null,
+          label: `${attack.name} damage`
+        }), true));
+      }
+      attacks.appendChild(row);
+    });
+    if (!attacks.children.length) attacks.innerHTML = '<p class="empty-roll-options">No attacks are configured.</p>';
+    const spells = document.getElementById("combat-spells");
+    spells.innerHTML = "";
+    (isNpc ? normalizeSpellList(character.spells) : characterSpellEntries(character)).forEach((spell) => {
+      const row = document.createElement("div");
+      row.className = "combat-roll-row combat-spell-card";
+      const info = document.createElement("div");
+      info.className = "combat-spell-info";
+      const heading = document.createElement("div");
+      heading.className = "combat-spell-heading";
+      const name = document.createElement("span");
+      name.className = "combat-roll-name";
+      name.textContent = spell.name;
+      const level = document.createElement("small");
+      level.textContent = [spell.level === 0 ? "Cantrip" : `Level ${spell.level}`, spell.school, spell.source].filter(Boolean).join(" \xB7 ");
+      heading.append(name, level);
+      info.appendChild(heading);
+      const metadata = [
+        spell.castingTime ? `Cast: ${spell.castingTime}` : "",
+        spell.range ? `Range: ${spell.range}` : "",
+        spell.duration ? `Duration: ${spell.duration}` : "",
+        spell.attack && !/^none$/i.test(spell.attack) ? `Attack/save: ${spell.attack}` : "",
+        spell.damage ? `Damage: ${spell.damage}` : ""
+      ].filter(Boolean);
+      if (metadata.length) {
+        const meta = document.createElement("div");
+        meta.className = "combat-spell-meta";
+        metadata.forEach((value) => {
+          const detail = document.createElement("span");
+          detail.textContent = value;
+          meta.appendChild(detail);
+        });
+        info.appendChild(meta);
+      }
+      if (spell.effect) {
+        const effect = document.createElement("p");
+        effect.className = "combat-spell-effect";
+        effect.textContent = spell.effect;
+        info.appendChild(effect);
+      }
+      row.appendChild(info);
+      const actions = document.createElement("div");
+      actions.className = "combat-spell-actions";
+      if (hasSpellAttack && /\bspell attack\b/i.test(spell.attack)) {
+        const modifier = Number(spellAttackValue) || 0;
+        actions.appendChild(makeCombatRollButton(`Attack ${signed(modifier)}`, () => {
+          if (isNpc) rollNpcD20(character, `${spell.name} spell attack`, modifier, mode());
+          else rollCharacterD20(character, `${spell.name} spell attack`, modifier, { mode: mode() });
+        }));
+      }
+      const damage = parseDiceExpression(spell.damage || spell.effect || spell.name);
+      if (damage) {
+        actions.appendChild(makeCombatRollButton(`Roll ${damage.expression}`, () => rollDice(damage.count, damage.sides, damage.modifier, {
+          characterName: isNpc ? null : character.name,
+          tokenId: isNpc ? character.id : null,
+          label: `${spell.name} damage`
+        }), true));
+      }
+      if (actions.children.length) row.appendChild(actions);
+      spells.appendChild(row);
+    });
+    if (!spells.children.length) spells.innerHTML = '<p class="empty-roll-options">No spells are listed on the sheet.</p>';
+  }
+  function makeCombatRollButton(label, onclick, damage = false) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `combat-roll-button${damage ? " damage" : ""}`;
+    button.textContent = label;
+    button.onclick = onclick;
+    return button;
+  }
+  function characterKnownSpellEntries(character) {
+    const structured = normalizeSpellList(character.fields?.["spell-list"]);
+    if (structured.length) {
+      return structured.sort((a, b) => a.level - b.level || a.name.localeCompare(b.name));
+    }
+    const entries = [];
+    for (let level = 0; level <= 9; level += 1) {
+      const text = String(character.fields?.[`spells-${level}`] || "").trim();
+      if (!text) continue;
+      text.split(/\n|;/).flatMap((line) => {
+        const trimmed = line.trim();
+        return trimmed.includes(",") && !/\d+d\d+/i.test(trimmed) ? trimmed.split(",") : [trimmed];
+      }).map((name) => name.trim()).filter(Boolean).forEach((name) => entries.push(normalizeSpell({ level, name }, entries.length)));
+    }
+    return entries;
+  }
+  function characterPreparationDetails(character) {
+    if (!character) return null;
+    const fields = character.fields || {};
+    const className = character.charClass || fields.class || "";
+    const subclass = character.subclass || fields.subclass || "";
+    const level = character.level || fields.level || 1;
+    const ability = characterRules.spellcastingAbilityFor(className, subclass);
+    const abilityScore = ability ? character.abilities?.[ability] ?? fields[ability] ?? 10 : 10;
+    const limit = characterRules.preparedSpellCount(className, level, abilityScore);
+    if (limit === null) return null;
+    const maximumSpellLevel = characterRules.maximumSpellLevelFor(className, subclass, level);
+    const available = characterKnownSpellEntries(character).filter((spell) => spell.level > 0 && spell.level <= maximumSpellLevel).sort((a, b) => a.level - b.level || a.name.localeCompare(b.name));
+    const alwaysPrepared = available.filter((spell) => spell.alwaysPrepared);
+    const selectable = available.filter((spell) => !spell.alwaysPrepared);
+    return {
+      className: characterRules.canonicalClass(className) || className,
+      maximumSpellLevel,
+      limit,
+      available,
+      alwaysPrepared,
+      selectable,
+      target: Math.min(limit, selectable.length)
     };
-    container.appendChild(button);
+  }
+  function characterSpellEntries(character) {
+    const known = characterKnownSpellEntries(character);
+    const preparation = characterPreparationDetails(character);
+    if (!preparation) return known;
+    const hasSavedPreparation = preparation.available.some((spell) => spell.alwaysPrepared || typeof spell.prepared === "boolean");
+    if (!hasSavedPreparation) return known;
+    return known.filter((spell) => spell.level === 0 || spell.level <= preparation.maximumSpellLevel && (spell.alwaysPrepared || spell.prepared === true));
+  }
+  function closeSpellPreparation() {
+    pendingSpellPreparation = null;
+    const overlay = document.getElementById("spell-preparation-overlay");
+    overlay.classList.add("hidden");
+    overlay.setAttribute("aria-hidden", "true");
+  }
+  function updateSpellPreparationCount() {
+    if (!pendingSpellPreparation) return;
+    const { selected, target, alwaysPrepared } = pendingSpellPreparation;
+    const valid = selected.size === target;
+    const count = document.getElementById("spell-preparation-count");
+    count.textContent = `${selected.size} / ${target} selected${alwaysPrepared.length ? ` \xB7 ${alwaysPrepared.length} always prepared` : ""}`;
+    count.classList.toggle("invalid", !valid);
+    document.getElementById("spell-preparation-complete-btn").disabled = !valid;
+  }
+  function renderSpellPreparationList() {
+    if (!pendingSpellPreparation) return;
+    const container = document.getElementById("spell-preparation-list");
+    const query = document.getElementById("spell-preparation-search").value.trim().toLowerCase();
+    const visible = pendingSpellPreparation.available.filter((spell) => !query || [spell.name, spell.school, spell.source].some((value) => String(value || "").toLowerCase().includes(query)));
+    container.innerHTML = "";
+    if (!visible.length) {
+      container.innerHTML = `<p class="spell-preparation-empty">${query ? "No available spells match that search." : "No leveled spells on this sheet are available at the character\u2019s current level."}</p>`;
+      updateSpellPreparationCount();
+      return;
+    }
+    const byLevel = /* @__PURE__ */ new Map();
+    visible.forEach((spell) => {
+      if (!byLevel.has(spell.level)) byLevel.set(spell.level, []);
+      byLevel.get(spell.level).push(spell);
+    });
+    [...byLevel.entries()].forEach(([level, spells]) => {
+      const group = document.createElement("section");
+      group.className = "spell-preparation-level";
+      const title = document.createElement("h3");
+      title.textContent = `Level ${level}`;
+      const options = document.createElement("div");
+      options.className = "spell-preparation-options";
+      spells.forEach((spell) => {
+        const option = document.createElement("label");
+        option.className = `spell-preparation-option${spell.alwaysPrepared ? " always" : ""}`;
+        const checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.checked = spell.alwaysPrepared || pendingSpellPreparation.selected.has(spell.id);
+        checkbox.disabled = spell.alwaysPrepared;
+        checkbox.setAttribute("aria-label", spell.alwaysPrepared ? `${spell.name}, always prepared` : `Prepare ${spell.name}`);
+        checkbox.onchange = () => {
+          if (checkbox.checked && pendingSpellPreparation.selected.size >= pendingSpellPreparation.target) {
+            checkbox.checked = false;
+            showToast(`You can prepare ${pendingSpellPreparation.target} spell${pendingSpellPreparation.target === 1 ? "" : "s"}.`);
+            return;
+          }
+          if (checkbox.checked) pendingSpellPreparation.selected.add(spell.id);
+          else pendingSpellPreparation.selected.delete(spell.id);
+          updateSpellPreparationCount();
+        };
+        const copy = document.createElement("span");
+        copy.className = "spell-preparation-option-copy";
+        const name = document.createElement("strong");
+        name.textContent = spell.name;
+        const details = document.createElement("small");
+        details.textContent = spell.alwaysPrepared ? ["Always prepared", spell.school, spell.source].filter(Boolean).join(" \xB7 ") : [spell.school, spell.source].filter(Boolean).join(" \xB7 ");
+        copy.append(name);
+        if (details.textContent) copy.append(details);
+        option.append(checkbox, copy);
+        options.appendChild(option);
+      });
+      group.append(title, options);
+      container.appendChild(group);
+    });
+    updateSpellPreparationCount();
+  }
+  function openSpellPreparation(character, preparation = characterPreparationDetails(character)) {
+    if (!preparation) return false;
+    const current = preparation.selectable.filter((spell) => spell.prepared === true).map((spell) => spell.id);
+    const hasSavedPreparation = preparation.selectable.some((spell) => typeof spell.prepared === "boolean");
+    const selected = new Set(current.slice(0, preparation.target));
+    if (!hasSavedPreparation && preparation.selectable.length <= preparation.target) {
+      preparation.selectable.forEach((spell) => selected.add(spell.id));
+    }
+    pendingSpellPreparation = { characterName: character.name, ...preparation, selected };
+    document.getElementById("spell-preparation-title").textContent = `Prepare ${character.name}\u2019s spells`;
+    document.getElementById("spell-preparation-intro").textContent = `${preparation.className} level ${character.level || character.fields?.level || 1} can prepare ${preparation.limit} spell${preparation.limit === 1 ? "" : "s"} of level ${preparation.maximumSpellLevel} or lower. Choose ${preparation.target} from the spells currently on the sheet.`;
+    document.getElementById("spell-preparation-note").textContent = preparation.alwaysPrepared.length ? "Cantrips and always-prepared spells remain available without using this limit." : "Cantrips are always available and do not need to be prepared.";
+    document.getElementById("spell-preparation-search").value = "";
+    const overlay = document.getElementById("spell-preparation-overlay");
+    overlay.classList.remove("hidden");
+    overlay.setAttribute("aria-hidden", "false");
+    renderSpellPreparationList();
+    document.getElementById("spell-preparation-search").focus();
+    return true;
+  }
+  document.getElementById("combat-close-btn").onclick = closeCombatManager;
+  document.getElementById("combat-overlay").addEventListener("mousedown", (event) => {
+    if (event.target.id === "combat-overlay") closeCombatManager();
   });
-}
-
-// ================= Shared helpers =================
-function signed(value) {
-  const number = Number(value) || 0;
-  return number >= 0 ? `+${number}` : String(number);
-}
-
-function escapeHtml(value) {
-  return String(value ?? '').replace(/[&<>"']/g, character => ({
-    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;'
-  })[character]);
-}
-
-function escapeAttr(value) {
-  return escapeHtml(value);
-}
-
-function showToast(message) {
-  const toast = document.getElementById('toast');
-  toast.textContent = message;
-  toast.classList.add('visible');
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => toast.classList.remove('visible'), 3200);
-}
-
-async function uploadFile(file) {
-  const form = new FormData();
-  form.append('file', file);
-  const res = await fetch('/api/upload', { method: 'POST', body: form });
-  if (!res.ok) throw new Error('Upload failed');
-  const data = await res.json();
-  return data.url;
-}
-
-async function uploadAudioFile(file) {
-  const form = new FormData();
-  form.append('file', file);
-  const res = await fetch('/api/upload/audio', { method: 'POST', body: form });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || 'The MP3 could not be uploaded.');
-  return data;
-}
-
-async function uploadLibraryFile(file) {
-  const form = new FormData();
-  form.append('file', file);
-  const res = await fetch('/api/upload/library', { method: 'POST', body: form });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || 'The file could not be uploaded.');
-  return data;
-}
-
-// Connect only after every socket listener above has been registered. This is
-// especially important for an automatic session restore on a fast connection.
-socket.connect();
+  document.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape") return;
+    if (pendingSpellPreparation) closeSpellPreparation();
+    else if (activeCombatTarget) closeCombatManager();
+  });
+  document.getElementById("combat-damage-btn").onclick = () => combatAction("damage", { amount: Number(document.getElementById("combat-amount").value) || 0 });
+  document.getElementById("combat-heal-btn").onclick = () => combatAction("heal", { amount: Number(document.getElementById("combat-amount").value) || 0 });
+  document.getElementById("combat-temp-btn").onclick = () => combatAction("tempHp", { amount: Number(document.getElementById("combat-amount").value) || 0 });
+  document.getElementById("combat-concentration").onchange = (event) => combatAction("concentration:set", { value: event.target.checked });
+  document.querySelectorAll("[data-combat-action]").forEach((button) => {
+    button.onclick = () => {
+      const actions = {
+        "exhaustion-down": ["exhaustion", { delta: -1 }],
+        "exhaustion-up": ["exhaustion", { delta: 1 }],
+        "success-down": ["deathSave", { kind: "successes", delta: -1 }],
+        "success-up": ["deathSave", { kind: "successes", delta: 1 }],
+        "failure-down": ["deathSave", { kind: "failures", delta: -1 }],
+        "failure-up": ["deathSave", { kind: "failures", delta: 1 }]
+      };
+      const [action, extra] = actions[button.dataset.combatAction];
+      combatAction(action, extra);
+    };
+  });
+  document.getElementById("combat-restore-slots-btn").onclick = () => combatAction("restoreAllSlots");
+  document.getElementById("combat-long-rest-btn").onclick = () => {
+    const target = activeCombatEntity();
+    if (!target) return;
+    const name = target.type === "npc" ? target.entity.label : target.entity.name;
+    if (target.type === "npc") {
+      if (confirm(`Restore ${name} to full HP?`)) combatAction("longRest");
+      return;
+    }
+    const preparation = characterPreparationDetails(target.entity);
+    if (preparation?.available.length) {
+      openSpellPreparation(target.entity, preparation);
+      return;
+    }
+    if (confirm(`Give ${name} a long rest? This restores HP and all spell slots.`)) combatAction("longRest");
+  };
+  document.getElementById("spell-preparation-close-btn").onclick = closeSpellPreparation;
+  document.getElementById("spell-preparation-overlay").addEventListener("mousedown", (event) => {
+    if (event.target.id === "spell-preparation-overlay") closeSpellPreparation();
+  });
+  document.getElementById("spell-preparation-search").addEventListener("input", renderSpellPreparationList);
+  document.getElementById("spell-preparation-complete-btn").onclick = () => {
+    if (!pendingSpellPreparation || pendingSpellPreparation.selected.size !== pendingSpellPreparation.target) return;
+    const characterName = pendingSpellPreparation.characterName;
+    const preparedSpellIds = [...pendingSpellPreparation.selected];
+    closeSpellPreparation();
+    socket.emit("character:combat:update", { name: characterName, action: "longRest", preparedSpellIds });
+  };
+  document.getElementById("combat-concentration-roll").onclick = () => {
+    if (activeCombatTarget?.type !== "character") return;
+    const character = state?.characters?.[activeCombatTarget.id];
+    const check = pendingConcentrationChecks.get(activeCombatTarget.id);
+    if (!character || !check) return;
+    rollCharacterD20(character, `Concentration save (DC ${check.dc})`, characterSaveModifier(character, "con"), {
+      targetDc: check.dc,
+      concentrationFor: character.name,
+      mode: "normal"
+    });
+  };
+  document.getElementById("init-add-btn").onclick = () => {
+    const name = document.getElementById("init-name").value.trim();
+    const value = Number(document.getElementById("init-value").value);
+    if (!name || !Number.isFinite(value)) return showToast("Add a name and initiative value.");
+    const token = state.tokens.find((entry) => entry.label.toLowerCase() === name.toLowerCase());
+    socket.emit("initiative:add", { name, value, tokenId: token?.id || null });
+    document.getElementById("init-name").value = "";
+    document.getElementById("init-value").value = "";
+  };
+  document.getElementById("init-next-btn").onclick = () => socket.emit("initiative:next");
+  document.getElementById("init-reset-btn").onclick = () => {
+    if (confirm("Clear the turn order and return to round 1?")) socket.emit("initiative:reset");
+  };
+  function currentInitiativeEntry() {
+    const initiative = state?.initiative;
+    if (!initiative || initiative.currentIndex < 0) return null;
+    return initiative.entries[initiative.currentIndex] || null;
+  }
+  function renderInitiative() {
+    if (!state) return;
+    const initiative = state.initiative || { entries: [], round: 1, currentIndex: -1 };
+    document.getElementById("init-round").textContent = initiative.round || 1;
+    document.getElementById("initiative-count").textContent = initiative.entries.length;
+    const list = document.getElementById("initiative-list");
+    list.innerHTML = "";
+    if (!initiative.entries.length) {
+      const empty = document.createElement("p");
+      empty.className = "empty-roll-options";
+      empty.textContent = "No combatants yet. Roll initiative from the Dice tab or add one here.";
+      list.appendChild(empty);
+    }
+    initiative.entries.forEach((entry, index) => {
+      const row = document.createElement("div");
+      row.className = "initiative-item" + (index === initiative.currentIndex ? " current-turn" : "");
+      row.dataset.initiativeId = entry.id;
+      if (myRole === "dm") {
+        const dragHandle = document.createElement("span");
+        dragHandle.className = "initiative-drag-handle";
+        dragHandle.textContent = "\u22EE\u22EE";
+        dragHandle.title = "Drag to reorder";
+        dragHandle.draggable = true;
+        dragHandle.ondragstart = (event) => {
+          draggedInitiativeId = entry.id;
+          event.dataTransfer.effectAllowed = "move";
+          event.dataTransfer.setData("text/plain", entry.id);
+          row.classList.add("dragging");
+        };
+        dragHandle.ondragend = () => {
+          draggedInitiativeId = null;
+          document.querySelectorAll(".initiative-item").forEach((item) => item.classList.remove("dragging", "drag-over"));
+        };
+        row.appendChild(dragHandle);
+      }
+      const value = document.createElement(myRole === "dm" ? "input" : "div");
+      value.className = "init-value" + (myRole === "dm" ? " init-value-edit" : "");
+      if (myRole === "dm") {
+        value.type = "number";
+        value.value = entry.value;
+        value.title = `Edit ${entry.name}'s initiative`;
+        value.onchange = () => socket.emit("initiative:edit", { id: entry.id, value: Number(value.value) });
+      } else {
+        value.textContent = entry.value;
+      }
+      const name = document.createElement("div");
+      name.className = "init-name";
+      name.textContent = entry.name;
+      if (index === initiative.currentIndex) {
+        const meta = document.createElement("span");
+        meta.className = "init-meta";
+        meta.textContent = "Current turn";
+        name.appendChild(meta);
+      }
+      row.append(value, name);
+      const character = state.characters[entry.name];
+      const npcToken = entry.tokenId ? state.tokens.find((token) => token.id === entry.tokenId && token.kind === "npc") : null;
+      if (character?.canManage || myRole === "dm" && npcToken) {
+        const combatButton = document.createElement("button");
+        combatButton.type = "button";
+        combatButton.className = "initiative-combat-btn";
+        combatButton.textContent = "\u2694";
+        combatButton.title = `Open combat controls for ${entry.name}`;
+        combatButton.onclick = () => npcToken ? openNpcCombatManager(npcToken.id) : openCombatManager(entry.name);
+        row.appendChild(combatButton);
+      }
+      if (myRole === "dm") {
+        const remove = document.createElement("button");
+        remove.type = "button";
+        remove.className = "del";
+        remove.textContent = "\xD7";
+        remove.title = `Remove ${entry.name}`;
+        remove.onclick = () => socket.emit("initiative:remove", { id: entry.id });
+        row.appendChild(remove);
+        row.ondragover = (event) => {
+          if (!draggedInitiativeId || draggedInitiativeId === entry.id) return;
+          event.preventDefault();
+          event.dataTransfer.dropEffect = "move";
+          row.classList.add("drag-over");
+        };
+        row.ondragleave = () => row.classList.remove("drag-over");
+        row.ondrop = (event) => {
+          event.preventDefault();
+          const draggedId = draggedInitiativeId || event.dataTransfer.getData("text/plain");
+          row.classList.remove("drag-over");
+          if (!draggedId || draggedId === entry.id) return;
+          const orderedIds = initiative.entries.map((item) => item.id).filter((id) => id !== draggedId);
+          const targetIndex = orderedIds.indexOf(entry.id);
+          const rect = row.getBoundingClientRect();
+          const insertAfter = event.clientY > rect.top + rect.height / 2;
+          orderedIds.splice(Math.max(0, targetIndex + (insertAfter ? 1 : 0)), 0, draggedId);
+          socket.emit("initiative:reorder", { orderedIds });
+        };
+      }
+      list.appendChild(row);
+    });
+    renderInitiativeQuickAdd();
+  }
+  function renderInitiativeQuickAdd() {
+    const container = document.getElementById("init-quick-add");
+    container.innerHTML = "";
+    if (myRole !== "dm") return;
+    const label = document.createElement("span");
+    label.className = "quick-add-label";
+    label.textContent = "Roll initiative:";
+    container.appendChild(label);
+    Object.values(state.characters).forEach((character) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "btn-ghost quick-add-chip";
+      button.textContent = `\u{1F3B2} ${character.name}`;
+      button.onclick = () => rollCharacterInitiative(character, "normal");
+      container.appendChild(button);
+    });
+    state.tokens.filter((token) => token.kind !== "item" && !state.characters[token.label]).forEach((token) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "btn-ghost quick-add-chip";
+      button.textContent = token.label;
+      button.onclick = () => {
+        if (token.kind === "npc") rollNpcInitiative(token, "normal");
+        else {
+          document.getElementById("init-name").value = token.label;
+          document.getElementById("init-value").focus();
+        }
+      };
+      container.appendChild(button);
+    });
+  }
+  function signed(value) {
+    const number = Number(value) || 0;
+    return number >= 0 ? `+${number}` : String(number);
+  }
+  function escapeHtml(value) {
+    return String(value ?? "").replace(/[&<>"']/g, (character) => ({
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&#039;"
+    })[character]);
+  }
+  function escapeAttr(value) {
+    return escapeHtml(value);
+  }
+  function showToast(message) {
+    const toast = document.getElementById("toast");
+    toast.textContent = message;
+    toast.classList.add("visible");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => toast.classList.remove("visible"), 3200);
+  }
+  async function uploadFile(file) {
+    const form = new FormData();
+    form.append("file", file);
+    const res = await fetch("/api/upload", { method: "POST", body: form });
+    if (!res.ok) throw new Error("Upload failed");
+    const data = await res.json();
+    return data.url;
+  }
+  async function uploadAudioFile(file) {
+    const form = new FormData();
+    form.append("file", file);
+    const res = await fetch("/api/upload/audio", { method: "POST", body: form });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || "The MP3 could not be uploaded.");
+    return data;
+  }
+  async function uploadLibraryFile(file) {
+    const form = new FormData();
+    form.append("file", file);
+    const res = await fetch("/api/upload/library", { method: "POST", body: form });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || "The file could not be uploaded.");
+    return data;
+  }
+  initializeCharacterRuleControls();
+  initializeFeatPresetControls();
+  initializeAttackPresetControls();
+  initializeNpcPresetControls();
+  socket.connect();
+})();
+//# sourceMappingURL=app.js.map
