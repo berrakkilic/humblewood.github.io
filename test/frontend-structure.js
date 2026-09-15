@@ -17,6 +17,10 @@ assert.strictEqual((bootstrap.match(/socket\.connect\(\)/g) || []).length, 1, 'B
 assert.ok(bundle.lastIndexOf('socket.connect()') > bundle.lastIndexOf('initializeAttackPresetControls()'), 'The initial socket connection must remain after feature initialization.');
 assert.match(bundle, /function openSpellPreparation\(/, 'The generated app is missing spell preparation.');
 assert.match(bundle, /function renderMap\(/, 'The generated app is missing the map feature.');
+assert.match(indexHtml, /id="jukebox-volume"[^>]+type="range"/, 'The jukebox needs a per-device volume slider.');
+assert.match(bundle, /humblewood:jukebox-volume/, 'The jukebox should persist the local volume preference.');
+assert.match(bundle, /audioEl\.volume = percent \/ 100/, 'The local volume preference should control the audio element.');
+assert.doesNotMatch(bundle, /socket\.emit\("jukebox:volume"/, 'Device volume must not be synchronized to other users.');
 assert.match(indexHtml, /<link rel="icon" href="\/favicon\.svg" type="image\/svg\+xml">/, 'The page should link the Humblewood favicon.');
 assert.match(favicon, /<svg[^>]+viewBox="0 0 64 64"/, 'The Humblewood favicon should remain a scalable SVG.');
 assert.match(bundle, /function createDialogController\(/, 'The generated app is missing the dialog utility.');

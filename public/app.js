@@ -4382,7 +4382,44 @@ ${choices}`,
   const trackUrlInput = document.getElementById("track-url");
   const trackFileInput = document.getElementById("track-file");
   const addTrackButton = document.getElementById("add-track-btn");
+  const jukeboxVolumeInput = document.getElementById("jukebox-volume");
+  const jukeboxVolumeValue = document.getElementById("jukebox-volume-value");
+  const jukeboxVolumeIcon = document.getElementById("jukebox-volume-icon");
+  const JUKEBOX_VOLUME_STORAGE_KEY = "humblewood:jukebox-volume";
   let availableMusicTracks = [];
+  function normalizedJukeboxVolume(value) {
+    const numeric = Number(value);
+    return Number.isFinite(numeric) ? Math.max(0, Math.min(100, Math.round(numeric))) : 100;
+  }
+  function storedJukeboxVolume() {
+    try {
+      const stored = localStorage.getItem(JUKEBOX_VOLUME_STORAGE_KEY);
+      return stored === null ? 100 : normalizedJukeboxVolume(stored);
+    } catch {
+      return 100;
+    }
+  }
+  function applyLocalJukeboxVolume(value, persist = false) {
+    const percent = normalizedJukeboxVolume(value);
+    audioEl.volume = percent / 100;
+    jukeboxVolumeInput.value = String(percent);
+    jukeboxVolumeInput.setAttribute("aria-valuetext", `${percent} percent`);
+    jukeboxVolumeValue.textContent = `${percent}%`;
+    jukeboxVolumeIcon.textContent = percent === 0 ? "\u{1F507}" : percent < 50 ? "\u{1F509}" : "\u{1F50A}";
+    if (persist) {
+      try {
+        localStorage.setItem(JUKEBOX_VOLUME_STORAGE_KEY, String(percent));
+      } catch {
+      }
+    }
+  }
+  applyLocalJukeboxVolume(storedJukeboxVolume());
+  jukeboxVolumeInput.addEventListener("input", () => applyLocalJukeboxVolume(jukeboxVolumeInput.value, true));
+  window.addEventListener("storage", (event) => {
+    if (event.key === JUKEBOX_VOLUME_STORAGE_KEY && event.newValue !== null) {
+      applyLocalJukeboxVolume(event.newValue);
+    }
+  });
   function renderMusicTrackOptions() {
     trackPresetSelect.innerHTML = '<option value="">Choose an existing track\u2026</option>';
     availableMusicTracks.forEach((track, index) => {

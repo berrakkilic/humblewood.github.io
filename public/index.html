@@ -849,6 +849,14 @@
           <button id="jb-next">⏭</button>
         </div>
 
+        <div class="jukebox-volume-control">
+          <label for="jukebox-volume">
+            <span><span id="jukebox-volume-icon" aria-hidden="true">🔊</span> Volume on this device</span>
+            <output id="jukebox-volume-value" for="jukebox-volume">100%</output>
+          </label>
+          <input id="jukebox-volume" type="range" min="0" max="100" step="1" value="100" aria-label="Jukebox volume on this device">
+        </div>
+
         <audio id="audio-el"></audio>
 
         <div class="vine-divider"></div>
