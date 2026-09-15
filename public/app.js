@@ -1995,12 +1995,28 @@ ${choices}`,
     return `${minutes}m${remainder ? ` ${remainder}s` : ""} remaining`;
   }
   const sharedHandoutDialog = createDialogController(document.getElementById("shared-handout-overlay"), {
-    onDismiss: () => {
-      if (state?.library?.broadcast && sharedHandoutRenderKey) dismissedSharedHandoutKey = sharedHandoutRenderKey;
-      clearInterval(sharedHandoutTimer);
-      sharedHandoutTimer = null;
+    onDismiss: (reason) => {
+      const broadcast = state?.library?.broadcast;
+      const stillActive = broadcast && (!broadcast.expiresAt || Number(broadcast.expiresAt) > Date.now());
+      if (stillActive && reason !== "expired" && reason !== "broadcast-ended" && sharedHandoutRenderKey) {
+        dismissedSharedHandoutKey = sharedHandoutRenderKey;
+        setSharedHandoutReopenVisible(true, broadcast);
+      } else if (!stillActive) {
+        dismissedSharedHandoutKey = "";
+        setSharedHandoutReopenVisible(false);
+      }
     }
   });
+  function setSharedHandoutReopenVisible(visible, broadcast = null) {
+    const button = document.getElementById("shared-handout-reopen-btn");
+    button.classList.toggle("hidden", !visible);
+    button.setAttribute("aria-hidden", String(!visible));
+    if (visible) {
+      const name = String(broadcast?.name || "shared handout").trim() || "shared handout";
+      document.getElementById("shared-handout-reopen-label").textContent = `Open ${name}`;
+      button.setAttribute("aria-label", `Open ${name}`);
+    }
+  }
   function renderSharedHandoutContent(broadcast) {
     const content = document.getElementById("shared-handout-content");
     content.innerHTML = "";
@@ -2057,8 +2073,13 @@ ${choices}`,
   }
   function updateSharedHandoutTimer() {
     const broadcast = state?.library?.broadcast;
-    if (!broadcast) return;
+    if (!broadcast) {
+      setSharedHandoutReopenVisible(false);
+      return;
+    }
     if (broadcast.expiresAt && Number(broadcast.expiresAt) <= Date.now()) {
+      dismissedSharedHandoutKey = "";
+      setSharedHandoutReopenVisible(false);
       sharedHandoutDialog.close("expired");
       clearInterval(sharedHandoutTimer);
       sharedHandoutTimer = null;
@@ -2072,13 +2093,20 @@ ${choices}`,
     sharedHandoutTimer = null;
     if (!broadcast || broadcast.expiresAt && Number(broadcast.expiresAt) <= Date.now()) {
       dismissedSharedHandoutKey = "";
+      setSharedHandoutReopenVisible(false);
       sharedHandoutDialog.close(broadcast ? "expired" : "broadcast-ended");
       sharedHandoutRenderKey = "";
       return;
     }
     const renderKey = `${broadcast.fileId}:${broadcast.url}:${broadcast.kind}:${broadcast.startedAt || ""}`;
-    if (dismissedSharedHandoutKey === renderKey) return;
+    if (dismissedSharedHandoutKey === renderKey) {
+      setSharedHandoutReopenVisible(true, broadcast);
+      updateSharedHandoutTimer();
+      if (broadcast.expiresAt) sharedHandoutTimer = setInterval(updateSharedHandoutTimer, 250);
+      return;
+    }
     if (dismissedSharedHandoutKey) dismissedSharedHandoutKey = "";
+    setSharedHandoutReopenVisible(false);
     document.getElementById("shared-handout-title").textContent = broadcast.name || "Shared handout";
     if (sharedHandoutRenderKey !== renderKey) {
       sharedHandoutRenderKey = renderKey;
@@ -2088,6 +2116,11 @@ ${choices}`,
     sharedHandoutDialog.open();
     if (broadcast.expiresAt) sharedHandoutTimer = setInterval(updateSharedHandoutTimer, 250);
   }
+  document.getElementById("shared-handout-reopen-btn").onclick = () => {
+    dismissedSharedHandoutKey = "";
+    setSharedHandoutReopenVisible(false);
+    renderSharedHandout();
+  };
   document.getElementById("library-new-folder-btn").onclick = () => {
     const name = prompt("Folder name");
     if (name?.trim()) {

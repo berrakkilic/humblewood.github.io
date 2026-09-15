@@ -923,6 +923,13 @@ body[data-role="dm"] .token-tray.dm-detailed .token-list-details { display: flex
 .shared-handout-content pre { width: 100%; min-height: 180px; margin: 0; padding: 22px; color: var(--ink); font: 14px/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; text-align: left; white-space: pre-wrap; overflow-wrap: anywhere; }
 .shared-handout-content p { max-width: 500px; padding: 24px; color: var(--ink-soft); text-align: center; }
 .shared-handout-content a { color: var(--rose-deep); font-weight: 800; }
+.shared-handout-reopen { position: fixed; left: 50%; bottom: 22px; z-index: 1290; display: flex; align-items: center; gap: 10px; max-width: min(430px, calc(100vw - 28px)); border: 1px solid var(--moss-light); border-radius: 999px; padding: 9px 17px 9px 11px; color: var(--forest-deep); background: var(--paper); box-shadow: var(--panel-shadow); text-align: left; transform: translateX(-50%); }
+.shared-handout-reopen:hover { border-color: var(--rose); transform: translateX(-50%) translateY(-2px); }
+.shared-handout-reopen:focus-visible { outline: 3px solid rgba(217,138,158,.34); outline-offset: 3px; }
+.shared-handout-reopen-icon { display: grid; width: 34px; height: 34px; flex: 0 0 auto; place-items: center; border-radius: 50%; background: var(--parchment-dark); font-size: 17px; }
+.shared-handout-reopen small, .shared-handout-reopen strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.shared-handout-reopen small { color: var(--rose-deep); font-size: 9px; font-weight: 900; letter-spacing: .08em; text-transform: uppercase; }
+.shared-handout-reopen strong { max-width: 300px; font-size: 13px; }
 
 .dm-only { }
 body[data-role="player"] .dm-only { display: none !important; }
@@ -1477,6 +1484,7 @@ body[data-role="player"] .dm-only { display: none !important; }
   .shared-handout-content { max-height: calc(92vh - 130px); }
   .shared-handout-content img { max-height: calc(92vh - 150px); }
   .shared-handout-content iframe { height: calc(92vh - 145px); }
+  .shared-handout-reopen { bottom: 12px; }
   .player-question-overlay { padding: 10px; place-items: end center; }
   .player-question-modal { max-height: 92vh; border-radius: 18px 18px 0 0; padding: 16px; }
 }

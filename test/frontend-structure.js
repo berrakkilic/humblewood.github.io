@@ -20,6 +20,8 @@ assert.match(bundle, /function createDialogController\(/, 'The generated app is 
 assert.match(bundle, /function createPopoverController\(/, 'The generated app is missing the popover utility.');
 assert.match(indexHtml, /<dialog[^>]+id="shared-handout-overlay"/, 'Shared handouts should use a native dialog.');
 assert.match(indexHtml, /data-dialog-close="dismiss"/, 'Shared handouts need a dismiss control.');
+assert.match(indexHtml, /id="shared-handout-reopen-btn"/, 'Dismissed handouts need a reopen control.');
+assert.match(bundle, /function setSharedHandoutReopenVisible\(/, 'The generated app is missing dismissed-handout recovery.');
 assert.match(stoneTablets, /<dialog[^>]+id="puzzle-dialog"/, 'The Stone Tablets handout needs a native puzzle dialog.');
 assert.match(stoneTablets, /id="instructions-popover" popover/, 'The Stone Tablets handout needs Popover API instructions.');
 assert.match(stoneTablets, /id="fullscreen-puzzle"/, 'The Stone Tablets handout should offer a full-screen view.');
