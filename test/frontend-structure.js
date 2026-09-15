@@ -8,6 +8,7 @@ const sourceFiles = config.files.filter(file => file.endsWith('.ts') && !file.en
 const bundle = fs.readFileSync(path.join(projectRoot, 'public', 'app.js'), 'utf8');
 const bootstrap = fs.readFileSync(path.join(projectRoot, 'frontend', 'app', 'bootstrap.ts'), 'utf8');
 const indexHtml = fs.readFileSync(path.join(projectRoot, 'public', 'index.html'), 'utf8');
+const favicon = fs.readFileSync(path.join(projectRoot, 'public', 'favicon.svg'), 'utf8');
 const stoneTablets = fs.readFileSync(path.join(projectRoot, 'public', 'handouts', 'stone-tablets.html'), 'utf8');
 
 assert.strictEqual(sourceFiles.length, 17, 'The frontend manifest should include every feature and bootstrap file.');
@@ -16,6 +17,8 @@ assert.strictEqual((bootstrap.match(/socket\.connect\(\)/g) || []).length, 1, 'B
 assert.ok(bundle.lastIndexOf('socket.connect()') > bundle.lastIndexOf('initializeAttackPresetControls()'), 'The initial socket connection must remain after feature initialization.');
 assert.match(bundle, /function openSpellPreparation\(/, 'The generated app is missing spell preparation.');
 assert.match(bundle, /function renderMap\(/, 'The generated app is missing the map feature.');
+assert.match(indexHtml, /<link rel="icon" href="\/favicon\.svg" type="image\/svg\+xml">/, 'The page should link the Humblewood favicon.');
+assert.match(favicon, /<svg[^>]+viewBox="0 0 64 64"/, 'The Humblewood favicon should remain a scalable SVG.');
 assert.match(bundle, /function createDialogController\(/, 'The generated app is missing the dialog utility.');
 assert.match(bundle, /function createPopoverController\(/, 'The generated app is missing the popover utility.');
 assert.match(indexHtml, /<dialog[^>]+id="shared-handout-overlay"/, 'Shared handouts should use a native dialog.');
