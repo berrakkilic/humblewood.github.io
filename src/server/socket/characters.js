@@ -110,7 +110,9 @@ function registerCharacterHandlers(socket, room) {
         concentration: original.combat.concentration,
         exhaustion: original.combat.exhaustion,
         stable: original.combat.stable,
-        dead: original.combat.dead
+        dead: original.combat.dead,
+        reactionAvailable: original.combat.reactionAvailable !== false,
+        spellSlots: original.combat.spellSlots
       };
     }
     normalizeCharacter(sheet);
@@ -216,6 +218,15 @@ function registerCharacterHandlers(socket, room) {
       slot.used = Math.max(0, Math.min(slot.total, slot.used + Math.sign(Number(payload.delta) || 0)));
     } else if (payload.action === 'restoreAllSlots') {
       Object.values(combat.spellSlots).forEach(slot => { slot.used = 0; });
+    } else if (payload.action === 'reaction:use') {
+      if (combat.reactionAvailable === false) return deny(socket, 'This character has already used a reaction this turn.');
+      const reactionId = String(payload.reactionId || '').slice(0, 140);
+      if (!character.reactions.some(reaction => reaction.id === reactionId)) {
+        return deny(socket, 'That reaction is not configured on this character.');
+      }
+      combat.reactionAvailable = false;
+    } else if (payload.action === 'reaction:refresh') {
+      combat.reactionAvailable = true;
     } else if (payload.action === 'longRest') {
       const preparationError = prepareSpellsForLongRest(character, payload.preparedSpellIds);
       if (preparationError) return deny(socket, preparationError);
@@ -225,6 +236,7 @@ function registerCharacterHandlers(socket, room) {
       combat.deathSaves = { successes: 0, failures: 0 };
       combat.stable = false;
       combat.dead = false;
+      combat.reactionAvailable = true;
       combat.exhaustion = Math.max(0, combat.exhaustion - 1);
       Object.values(combat.spellSlots).forEach(slot => { slot.used = 0; });
     } else {

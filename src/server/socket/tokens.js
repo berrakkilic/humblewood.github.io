@@ -75,6 +75,7 @@ function registerTokenHandlers(socket, room) {
           ac: requested.ac,
           initiativeModifier: requested.initiativeModifier,
           attacks: requested.attacks,
+          reactions: requested.reactions || requested.sheet?.reactions,
           spells: requested.spells,
           spellcasting: requested.spellcasting,
           sheet: requested.sheet,
@@ -242,6 +243,7 @@ function registerTokenHandlers(socket, room) {
         token.ac = updated.ac;
         token.initiativeModifier = updated.initiativeModifier;
         token.attacks = cloneJson(updated.attacks);
+        token.reactions = cloneJson(updated.reactions);
         token.spells = cloneJson(updated.spells);
         token.spellcasting = cloneJson(updated.spellcasting);
         const previousCombat = token.combat && typeof token.combat === 'object' ? token.combat : {};
@@ -249,6 +251,7 @@ function registerTokenHandlers(socket, room) {
         token.combat.conditions = Array.isArray(previousCombat.conditions) ? previousCombat.conditions : [];
         token.combat.concentration = !!previousCombat.concentration;
         token.combat.exhaustion = Number(previousCombat.exhaustion) || 0;
+        token.combat.reactionAvailable = previousCombat.reactionAvailable !== false;
         Object.entries(token.combat.spellSlots || {}).forEach(([level, slot]) => {
           const previousUsed = previousCombat.spellSlots?.[level]?.used;
           slot.used = Math.max(0, Math.min(slot.total, Number(previousUsed) || 0));
@@ -318,11 +321,21 @@ function registerTokenHandlers(socket, room) {
       slot.used = Math.max(0, Math.min(slot.total, slot.used + Math.sign(Number(payload.delta) || 0)));
     } else if (payload.action === 'restoreAllSlots') {
       Object.values(combat.spellSlots).forEach(slot => { slot.used = 0; });
+    } else if (payload.action === 'reaction:use') {
+      if (combat.reactionAvailable === false) return deny(socket, 'This NPC has already used a reaction this turn.');
+      const reactionId = String(payload.reactionId || '').slice(0, 140);
+      if (!token.reactions.some(reaction => reaction.id === reactionId)) {
+        return deny(socket, 'That reaction is not configured on this NPC.');
+      }
+      combat.reactionAvailable = false;
+    } else if (payload.action === 'reaction:refresh') {
+      combat.reactionAvailable = true;
     } else if (payload.action === 'longRest') {
       token.hp = token.maxHp;
       token.tempHp = 0;
       combat.concentration = false;
       combat.exhaustion = Math.max(0, combat.exhaustion - 1);
+      combat.reactionAvailable = true;
       Object.values(combat.spellSlots).forEach(slot => { slot.used = 0; });
     } else {
       return;

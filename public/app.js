@@ -5647,7 +5647,14 @@ ${choices}`,
     const { type, entity } = target;
     const isNpc = type === "npc";
     const name = isNpc ? entity.label : entity.name;
-    const combat = entity.combat || { conditions: [], concentration: false, exhaustion: 0, deathSaves: {}, spellSlots: {} };
+    const combat = entity.combat || {
+      conditions: [],
+      concentration: false,
+      exhaustion: 0,
+      deathSaves: {},
+      spellSlots: {},
+      reactionAvailable: true
+    };
     document.getElementById("combat-kicker").textContent = isNpc ? "NPC combat controls" : "Character combat controls";
     document.getElementById("combat-title").textContent = name;
     const portrait = document.getElementById("combat-portrait");
@@ -5666,6 +5673,7 @@ ${choices}`,
     const preparesSpells = !isNpc && characterPreparationDetails(entity) !== null;
     document.getElementById("combat-long-rest-btn").textContent = isNpc ? "Restore NPC" : preparesSpells ? "Long rest & prepare spells" : "Complete long rest";
     renderCombatRolls(entity, isNpc);
+    renderCombatReactions(entity, isNpc);
     document.getElementById("combat-concentration").checked = !!combat.concentration;
     document.getElementById("combat-exhaustion").textContent = Number(combat.exhaustion) || 0;
     document.getElementById("combat-death-successes").textContent = `${Number(combat.deathSaves?.successes) || 0} / 3`;
@@ -5814,6 +5822,68 @@ ${choices}`,
       spells.appendChild(row);
     });
     if (!spells.children.length) spells.innerHTML = '<p class="empty-roll-options">No spells are listed on the sheet.</p>';
+  }
+  function renderCombatReactions(character, isNpc = false) {
+    const section = document.getElementById("combat-reactions-section");
+    const container = document.getElementById("combat-reactions");
+    const stateLabel = document.getElementById("combat-reaction-state");
+    const refreshButton = document.getElementById("combat-reaction-refresh-btn");
+    if (!section || !container || !stateLabel || !refreshButton) return;
+    const reactions = normalizeReactionList(
+      isNpc ? character.reactions || state?.npcs?.[character.npcId]?.reactions : character.reactions
+    );
+    const available = character.combat?.reactionAvailable !== false;
+    stateLabel.textContent = available ? "Available" : "Spent this turn";
+    stateLabel.classList.toggle("spent", !available);
+    refreshButton.disabled = available;
+    refreshButton.textContent = available ? "Reaction ready" : "Refresh reaction";
+    container.innerHTML = "";
+    if (!reactions.length) {
+      container.innerHTML = '<p class="empty-roll-options">No reactions are configured. Add them from the character sheet.</p>';
+      return;
+    }
+    reactions.forEach((reaction) => {
+      const card = document.createElement("article");
+      card.className = "combat-reaction-card";
+      const heading = document.createElement("div");
+      heading.className = "combat-reaction-heading";
+      const title = document.createElement("h4");
+      title.textContent = reaction.name;
+      heading.appendChild(title);
+      const meta = [reaction.requirement, reaction.resource, reaction.source].filter(Boolean);
+      if (meta.length) {
+        const metaLine = document.createElement("div");
+        metaLine.className = "combat-reaction-meta";
+        metaLine.textContent = meta.join(" \xB7 ");
+        heading.appendChild(metaLine);
+      }
+      card.appendChild(heading);
+      if (reaction.trigger) {
+        const trigger = document.createElement("p");
+        trigger.className = "combat-reaction-copy";
+        trigger.innerHTML = "<strong>Trigger:</strong> ";
+        trigger.append(document.createTextNode(reaction.trigger));
+        card.appendChild(trigger);
+      }
+      if (reaction.effect) {
+        const effect = document.createElement("p");
+        effect.className = "combat-reaction-copy";
+        effect.innerHTML = "<strong>Response:</strong> ";
+        effect.append(document.createTextNode(reaction.effect));
+        card.appendChild(effect);
+      }
+      const actions = document.createElement("div");
+      actions.className = "combat-reaction-actions";
+      const useButton = document.createElement("button");
+      useButton.type = "button";
+      useButton.className = "btn-primary";
+      useButton.textContent = available ? "Use reaction" : "Reaction spent";
+      useButton.disabled = !available;
+      useButton.onclick = () => combatAction("reaction:use", { reactionId: reaction.id });
+      actions.appendChild(useButton);
+      card.appendChild(actions);
+      container.appendChild(card);
+    });
   }
   function makeCombatRollButton(label, onclick, damage = false) {
     const button = document.createElement("button");
@@ -5991,6 +6061,7 @@ ${choices}`,
     };
   });
   document.getElementById("combat-restore-slots-btn").onclick = () => combatAction("restoreAllSlots");
+  document.getElementById("combat-reaction-refresh-btn").onclick = () => combatAction("reaction:refresh");
   document.getElementById("combat-long-rest-btn").onclick = () => {
     const target = activeCombatEntity();
     if (!target) return;

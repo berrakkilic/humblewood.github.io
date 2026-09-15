@@ -340,6 +340,7 @@ function createRoom({ dataDir, dmPin, io, uploadDir }) {
       conditions: Array.isArray(combat.conditions) ? combat.conditions.filter(condition => CONDITIONS.has(condition)) : [],
       concentration: !!combat.concentration,
       exhaustion: Math.max(0, Math.min(6, Number(combat.exhaustion) || 0)),
+      reactionAvailable: combat.reactionAvailable !== false,
       spellSlots
     };
     return npc;
@@ -358,6 +359,7 @@ function createRoom({ dataDir, dmPin, io, uploadDir }) {
       initiativeModifier: token.initiativeModifier,
       tokenScale: token.sizeScale,
       attacks: token.attacks,
+      reactions: token.reactions,
       spells: token.spells,
       spellcasting: token.spellcasting,
       notes: token.notes,
@@ -394,11 +396,17 @@ function createRoom({ dataDir, dmPin, io, uploadDir }) {
     }
     if (token.kind === 'npc') {
       token.npcId = String(token.npcId || (`npc_${token.id}`)).slice(0, 120);
-      const npc = normalizeNpc({ ...token, id: token.npcId, name: token.label });
+      const npc = normalizeNpc({
+        ...token,
+        id: token.npcId,
+        name: token.label,
+        reactions: token.reactions || state.npcs?.[token.npcId]?.reactions
+      });
       token.pronouns = npc.pronouns;
       token.ac = npc.ac;
       token.initiativeModifier = npc.initiativeModifier;
       token.attacks = npc.attacks;
+      token.reactions = npc.reactions;
       token.spells = npc.spells;
       token.spellcasting = npc.spellcasting;
       token.notes = npc.notes;
@@ -437,6 +445,7 @@ function createRoom({ dataDir, dmPin, io, uploadDir }) {
     token.ac = npc.ac;
     token.initiativeModifier = npc.initiativeModifier;
     token.attacks = cloneJson(npc.attacks);
+    token.reactions = cloneJson(npc.reactions);
     token.spells = cloneJson(npc.spells);
     token.spellcasting = cloneJson(npc.spellcasting);
     token.notes = npc.notes;
@@ -475,6 +484,7 @@ function createRoom({ dataDir, dmPin, io, uploadDir }) {
       },
       stable: !!previous.stable,
       dead: !!previous.dead,
+      reactionAvailable: previous.reactionAvailable !== false,
       spellSlots
     };
     syncCombatFields(character);
@@ -1085,6 +1095,30 @@ function createRoom({ dataDir, dmPin, io, uploadDir }) {
     if (linkedTokens.length) markSceneDirty();
   }
 
+  function refreshReactionForInitiativeEntry(entry) {
+    if (!entry) return false;
+    const token = entry.tokenId
+      ? state.tokens.find(item => item.id === entry.tokenId)
+      : null;
+    const character = token?.characterName
+      ? state.characters[token.characterName]
+      : (!token ? state.characters[entry.name] : null);
+    if (character) {
+      normalizeCharacter(character);
+      character.combat.reactionAvailable = true;
+      syncCharacterTokens(character);
+      emitCharacterUpdate(character);
+      return true;
+    }
+    if (token?.kind !== 'npc') return false;
+    normalizeToken(token);
+    token.combat.reactionAvailable = true;
+    syncNpcFromToken(token);
+    emitToken('token:update', token);
+    emitNpcRoster();
+    return true;
+  }
+
   function snapCoordinateToCell(value, gridSize, gridOffset = 0) {
     const v = Number(value) - gridOffset;
     return Math.floor(v / gridSize) * gridSize + gridSize / 2 + gridOffset;
@@ -1228,6 +1262,7 @@ function createRoom({ dataDir, dmPin, io, uploadDir }) {
     revokeAuthSessionsForUsername,
     removeLibraryFileAsset,
     removeInitiativeForTokenIds,
+    refreshReactionForInitiativeEntry,
     scheduleLibraryBroadcastExpiry,
     setSceneDirty,
     snapCoordinateToCell,

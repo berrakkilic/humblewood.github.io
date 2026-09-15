@@ -21,6 +21,11 @@ assert.ok(bundle.lastIndexOf('socket.connect()') > bundle.lastIndexOf('initializ
 assert.ok(bundle.lastIndexOf('socket.connect()') > bundle.lastIndexOf('initializeReactionPresetControls()'), 'Reaction presets must initialize before the socket connects.');
 assert.match(bundle, /function openSpellPreparation\(/, 'The generated app is missing spell preparation.');
 assert.match(bundle, /function renderMap\(/, 'The generated app is missing the map feature.');
+assert.match(indexHtml, /id="combat-reactions"/, 'The Fight tab needs a reactions list.');
+assert.match(indexHtml, /id="combat-reaction-refresh-btn"/, 'The Fight tab needs a reaction refresh control.');
+assert.match(bundle, /function renderCombatReactions\(/, 'The generated app is missing Fight tab reaction cards.');
+assert.match(bundle, /combatAction\(["']reaction:use["']/, 'Fight tab reaction cards must spend reactions.');
+assert.match(bundle, /reactionAvailable/, 'The frontend must track reaction availability.');
 assert.match(bundle, /function rollPopupText\(/, 'Roll popups should format the roller and roll label together.');
 assert.match(bundle, /rolled \$\{rollLabel\}: \$\{entry\.total\}/, 'Roll popups should identify who rolled what.');
 assert.match(indexHtml, /id="jukebox-volume"[^>]+type="range"/, 'The jukebox needs a per-device volume slider.');
@@ -33,6 +38,8 @@ assert.match(sheetEditorCss, /\.section-attacks,\s*\n#sheet-editor \.sheet-form 
 assert.match(bundle, /function normalizeReactionList\(/, 'The generated app is missing structured reaction data.');
 assert.match(bundle, /reactions: editingReactions\.map/, 'Character saves must include their reactions.');
 assert.match(roomSource, /function cleanReactions\(/, 'The server must sanitize saved reactions.');
+assert.match(roomSource, /reactionAvailable: combat\.reactionAvailable !== false/, 'Combat state must persist reaction availability.');
+assert.match(roomSource, /function refreshReactionForInitiativeEntry\(/, 'The server must refresh reactions at the start of an initiative turn.');
 assert.ok((reactionSource.match(/^\s+id: '/gm) || []).length >= 35, 'The reaction catalogue should cover common PHB and Humblewood choices.');
 for (const reactionName of ['Opportunity Attack', 'Uncanny Dodge', 'Counterspell', 'Glide', 'Ward of Shadows', 'Spiny Shield']) {
   assert.match(reactionSource, new RegExp(`name: ['"]${reactionName}['"]`), `The reaction catalogue is missing ${reactionName}.`);

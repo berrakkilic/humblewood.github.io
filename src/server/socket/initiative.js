@@ -1,5 +1,8 @@
 function registerInitiativeHandlers(socket, room) {
-  const { deny, isDm, markSceneDirty, persistState, upsertInitiativeEntry } = room;
+  const {
+    deny, isDm, markSceneDirty, persistState, refreshReactionForInitiativeEntry,
+    upsertInitiativeEntry
+  } = room;
   const { io, state } = room;
 
   socket.on('initiative:add', ({ name, value, tokenId }) => {
@@ -35,6 +38,7 @@ function registerInitiativeHandlers(socket, room) {
     } else {
       state.initiative.currentIndex = next;
     }
+    refreshReactionForInitiativeEntry(state.initiative.entries[state.initiative.currentIndex]);
     markSceneDirty();
     persistState();
     io.emit('initiative:update', state.initiative);
