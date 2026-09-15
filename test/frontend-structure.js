@@ -17,6 +17,8 @@ assert.strictEqual((bootstrap.match(/socket\.connect\(\)/g) || []).length, 1, 'B
 assert.ok(bundle.lastIndexOf('socket.connect()') > bundle.lastIndexOf('initializeAttackPresetControls()'), 'The initial socket connection must remain after feature initialization.');
 assert.match(bundle, /function openSpellPreparation\(/, 'The generated app is missing spell preparation.');
 assert.match(bundle, /function renderMap\(/, 'The generated app is missing the map feature.');
+assert.match(bundle, /function rollPopupText\(/, 'Roll popups should format the roller and roll label together.');
+assert.match(bundle, /rolled \$\{rollLabel\}: \$\{entry\.total\}/, 'Roll popups should identify who rolled what.');
 assert.match(indexHtml, /id="jukebox-volume"[^>]+type="range"/, 'The jukebox needs a per-device volume slider.');
 assert.match(bundle, /humblewood:jukebox-volume/, 'The jukebox should persist the local volume preference.');
 assert.match(bundle, /audioEl\.volume = percent \/ 100/, 'The local volume preference should control the audio element.');

@@ -94,14 +94,20 @@ function rollDice(count, sides, modifier, options: any = {}) {
   });
 }
 
+function rollPopupText(entry, privateRoll = false) {
+  const roller = String(entry.name || 'Someone').trim() || 'Someone';
+  const rollLabel = String(entry.label || entry.expression || 'a roll').trim() || 'a roll';
+  const showOutcome = entry.targetDc && !/\b(?:attack|damage)\b/i.test(entry.label || '');
+  const outcome = showOutcome ? (entry.success ? ' — success' : ' — failed') : '';
+  return `${privateRoll ? '🔒 ' : ''}${roller} rolled ${rollLabel}: ${entry.total}${outcome}`;
+}
+
 socket.on('roll:made', (entry) => {
   if (!state.rollLog) state.rollLog = [];
   state.rollLog.unshift(entry);
   if (entry.characterName && entry.targetDc) pendingConcentrationChecks.delete(entry.characterName);
   renderRollLog();
-  const showOutcome = entry.targetDc && !/\b(?:attack|damage)\b/i.test(entry.label || '');
-  const outcome = showOutcome ? (entry.success ? ' — success' : ' — failed') : '';
-  showToast(`${entry.label || entry.expression}: ${entry.total}${outcome}`);
+  showToast(rollPopupText(entry));
 });
 
 socket.on('roll:private', (entry) => {
@@ -109,9 +115,7 @@ socket.on('roll:private', (entry) => {
   privateRollLog.unshift({ ...entry, private: true });
   privateRollLog = privateRollLog.slice(0, 50);
   renderRollLog();
-  const showOutcome = entry.targetDc && !/\b(?:attack|damage)\b/i.test(entry.label || '');
-  const outcome = showOutcome ? (entry.success ? ' — success' : ' — failed') : '';
-  showToast(`🔒 ${entry.label || entry.expression}: ${entry.total}${outcome}`);
+  showToast(rollPopupText(entry, true));
 });
 
 function rollBreakdownText(entry) {

@@ -4630,23 +4630,26 @@ ${choices}`,
       private: options.private ?? privateDiceRollActive()
     });
   }
+  function rollPopupText(entry, privateRoll = false) {
+    const roller = String(entry.name || "Someone").trim() || "Someone";
+    const rollLabel = String(entry.label || entry.expression || "a roll").trim() || "a roll";
+    const showOutcome = entry.targetDc && !/\b(?:attack|damage)\b/i.test(entry.label || "");
+    const outcome = showOutcome ? entry.success ? " \u2014 success" : " \u2014 failed" : "";
+    return `${privateRoll ? "\u{1F512} " : ""}${roller} rolled ${rollLabel}: ${entry.total}${outcome}`;
+  }
   socket.on("roll:made", (entry) => {
     if (!state.rollLog) state.rollLog = [];
     state.rollLog.unshift(entry);
     if (entry.characterName && entry.targetDc) pendingConcentrationChecks.delete(entry.characterName);
     renderRollLog();
-    const showOutcome = entry.targetDc && !/\b(?:attack|damage)\b/i.test(entry.label || "");
-    const outcome = showOutcome ? entry.success ? " \u2014 success" : " \u2014 failed" : "";
-    showToast(`${entry.label || entry.expression}: ${entry.total}${outcome}`);
+    showToast(rollPopupText(entry));
   });
   socket.on("roll:private", (entry) => {
     if (myRole !== "dm") return;
     privateRollLog.unshift({ ...entry, private: true });
     privateRollLog = privateRollLog.slice(0, 50);
     renderRollLog();
-    const showOutcome = entry.targetDc && !/\b(?:attack|damage)\b/i.test(entry.label || "");
-    const outcome = showOutcome ? entry.success ? " \u2014 success" : " \u2014 failed" : "";
-    showToast(`\u{1F512} ${entry.label || entry.expression}: ${entry.total}${outcome}`);
+    showToast(rollPopupText(entry, true));
   });
   function rollBreakdownText(entry) {
     const modifier = entry.modifier ? ` ${entry.modifier > 0 ? "+" : ""}${entry.modifier}` : "";
