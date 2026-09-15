@@ -42,6 +42,7 @@ let editingOriginalName = null;
 let editingInventory: any[] = [];
 let inventoryExpandedContainers = new Set();
 let inventoryDraggingId = '';
+let inventoryEditingId = '';
 let editingAttacks: any[] = [];
 let editingAttackId = null;
 let editingReactions: any[] = [];

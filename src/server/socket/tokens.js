@@ -3,7 +3,8 @@ function registerTokenHandlers(socket, room) {
     CONDITIONS, applyNpcToToken, cloneJson, controlsToken, deny, emitCharacterUpdate,
     emitNpcRoster, emitSavedScenes, emitToken, isDm, markSceneDirty, normalizeCharacter,
     normalizeNpc, normalizeToken, npcFromToken, persistState, publicToken,
-    removeInitiativeForTokenIds, snapCoordinateToCell, syncNpcFromToken, uniqueTokenLabel
+    removeInitiativeForTokenIds, resetLongRestItemUsage, snapCoordinateToCell,
+    syncNpcFromToken, uniqueTokenLabel
   } = room;
   const { io, state } = room;
 
@@ -337,6 +338,8 @@ function registerTokenHandlers(socket, room) {
       combat.exhaustion = Math.max(0, combat.exhaustion - 1);
       combat.reactionAvailable = true;
       Object.values(combat.spellSlots).forEach(slot => { slot.used = 0; });
+      const npc = state.npcs[token.npcId];
+      if (npc?.sheet?.inventory) npc.sheet.inventory = resetLongRestItemUsage(npc.sheet.inventory);
     } else {
       return;
     }

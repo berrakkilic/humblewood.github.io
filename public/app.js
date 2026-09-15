@@ -39,6 +39,7 @@
   let editingInventory = [];
   let inventoryExpandedContainers = /* @__PURE__ */ new Set();
   let inventoryDraggingId = "";
+  let inventoryEditingId = "";
   let editingAttacks = [];
   let editingAttackId = null;
   let editingReactions = [];
@@ -2917,6 +2918,7 @@ ${choices}`,
     if (!c && !fields["ac-method"]) applyRecommendedArmorMethod();
     editingInventory = normalizeInventory(isNpc ? c?.sheet?.inventory : c?.inventory);
     inventoryExpandedContainers = new Set(editingInventory.filter((item) => item.isContainer).map((item) => item.id));
+    inventoryEditingId = "";
     renderInventoryEditor();
     editingAttacks = normalizeAttackList(isNpc ? c?.sheet?.attacks || c?.attacks : c?.attacks);
     editingAttackId = null;
@@ -3002,13 +3004,27 @@ ${choices}`,
       seen.add(id);
       const quantity = item.qty === 0 ? 0 : Number(item.qty);
       const name = String(item.name || "").trim();
+      const rawUsage = item.usage && typeof item.usage === "object" ? item.usage : {};
+      const rawMax = rawUsage.max ?? item.usageMax ?? item.maxUses ?? item.maxCharges ?? 0;
+      const max = Math.max(0, Math.min(999, Math.floor(Number(rawMax) || 0)));
+      const rawRemaining = rawUsage.remaining ?? item.usageRemaining ?? item.chargesRemaining;
+      const rawUsed = rawUsage.used ?? item.usageUsed;
+      const remainingValue = rawRemaining !== void 0 ? Number(rawRemaining) : rawUsed !== void 0 ? max - (Number(rawUsed) || 0) : max;
+      const resetValue = String(rawUsage.reset ?? item.usageReset ?? "").trim().toLowerCase();
+      const reset = ["long-rest", "short-rest", "manual"].includes(resetValue) ? resetValue : max > 0 ? "long-rest" : "manual";
       return {
         id,
         name,
+        description: String(item.description || "").trim().slice(0, 4e3),
         qty: Math.max(0, Math.min(9999, Number.isFinite(quantity) ? quantity : 1)),
         location: item.location === "carried" ? "carried" : "backpack",
         isContainer: !!(item.isContainer ?? item.container) || /(?:backpack|bag|pouch|chest|satchel|quiver|case|pack)$/i.test(name),
-        containerId: String(item.containerId || "").trim() || null
+        containerId: String(item.containerId || "").trim() || null,
+        usage: {
+          max,
+          remaining: Math.max(0, Math.min(max, Math.floor(Number.isFinite(remainingValue) ? remainingValue : max))),
+          reset
+        }
       };
     }).filter((item) => item && item.name);
     const byId = new Map(items.map((item) => [item.id, item]));
@@ -3149,6 +3165,107 @@ ${choices}`,
     }
     renderInventoryEditor();
   }
+  function inventoryResetLabel(reset) {
+    if (reset === "long-rest") return "long rest";
+    if (reset === "short-rest") return "short rest (manual)";
+    return "manual reset";
+  }
+  function inventoryUsage(item) {
+    const usage = item.usage && typeof item.usage === "object" ? item.usage : {};
+    const max = Math.max(0, Math.min(999, Math.floor(Number(usage.max) || 0)));
+    const remaining = Math.max(0, Math.min(max, Math.floor(Number(usage.remaining) || 0)));
+    return { max, remaining, reset: ["long-rest", "short-rest", "manual"].includes(usage.reset) ? usage.reset : "manual" };
+  }
+  function renderInventoryEditForm(item, children) {
+    const usage = inventoryUsage(item);
+    const form = document.createElement("div");
+    form.className = "inventory-item-edit-form";
+    const nameField = document.createElement("label");
+    nameField.className = "inventory-edit-name";
+    nameField.textContent = "Item name";
+    const nameInput = document.createElement("input");
+    nameInput.type = "text";
+    nameInput.value = item.name;
+    nameInput.maxLength = 200;
+    nameField.appendChild(nameInput);
+    const descriptionField = document.createElement("label");
+    descriptionField.className = "inventory-edit-description";
+    descriptionField.textContent = "Description";
+    const descriptionInput = document.createElement("textarea");
+    descriptionInput.rows = 2;
+    descriptionInput.maxLength = 4e3;
+    descriptionInput.placeholder = "What does this item look like or do?";
+    descriptionInput.value = item.description || "";
+    descriptionField.appendChild(descriptionInput);
+    const maxField = document.createElement("label");
+    maxField.textContent = "Max uses / charges";
+    const maxInput = document.createElement("input");
+    maxInput.type = "number";
+    maxInput.min = "0";
+    maxInput.max = "999";
+    maxInput.step = "1";
+    maxInput.value = String(usage.max);
+    maxField.appendChild(maxInput);
+    const remainingField = document.createElement("label");
+    remainingField.textContent = "Uses remaining";
+    const remainingInput = document.createElement("input");
+    remainingInput.type = "number";
+    remainingInput.min = "0";
+    remainingInput.max = "999";
+    remainingInput.step = "1";
+    remainingInput.value = String(usage.remaining);
+    remainingField.appendChild(remainingInput);
+    const resetField = document.createElement("label");
+    resetField.textContent = "Reset";
+    const resetInput = document.createElement("select");
+    [
+      ["long-rest", "Long rest"],
+      ["short-rest", "Short rest (manual)"],
+      ["manual", "Manual"]
+    ].forEach(([value, label]) => {
+      const option = document.createElement("option");
+      option.value = value;
+      option.textContent = label;
+      resetInput.appendChild(option);
+    });
+    resetInput.value = usage.reset;
+    resetField.appendChild(resetInput);
+    const actions = document.createElement("div");
+    actions.className = "inventory-edit-actions";
+    const save = document.createElement("button");
+    save.type = "button";
+    save.className = "btn-primary";
+    save.textContent = "Save item";
+    save.onclick = () => {
+      const name = nameInput.value.trim();
+      if (!name) return showToast("Give the item a name first.");
+      const max = Math.max(0, Math.min(999, Math.floor(Number(maxInput.value) || 0)));
+      const remaining = Math.max(0, Math.min(max, Math.floor(Number(remainingInput.value) || 0)));
+      item.name = name;
+      item.isContainer = item.isContainer || /(?:backpack|bag|pouch|chest|satchel|quiver|case|pack)$/i.test(name);
+      item.description = descriptionInput.value.trim().slice(0, 4e3);
+      item.usage = { max, remaining, reset: resetInput.value };
+      inventoryEditingId = "";
+      renderInventoryEditor();
+    };
+    const cancel = document.createElement("button");
+    cancel.type = "button";
+    cancel.className = "btn-ghost";
+    cancel.textContent = "Cancel";
+    cancel.onclick = () => {
+      inventoryEditingId = "";
+      renderInventoryEditor();
+    };
+    actions.append(save, cancel);
+    form.append(nameField, descriptionField, maxField, remainingField, resetField, actions);
+    if (children.length) {
+      const note = document.createElement("small");
+      note.className = "inventory-edit-note";
+      note.textContent = "This item contains other items; its container status cannot be changed here.";
+      form.appendChild(note);
+    }
+    return form;
+  }
   function renderInventoryItem(item) {
     const children = inventoryChildren(item.id);
     const row = document.createElement("div");
@@ -3220,6 +3337,39 @@ ${choices}`,
     meta.className = "inventory-item-meta";
     meta.textContent = item.containerId ? `Inside ${editingInventory.find((parent) => parent.id === item.containerId)?.name || "container"}` : item.location === "carried" ? "Carried / on character" : "Backpack";
     main.append(name, meta);
+    if (item.description) {
+      const description = document.createElement("div");
+      description.className = "inventory-item-description";
+      description.textContent = item.description;
+      main.appendChild(description);
+    }
+    const usage = inventoryUsage(item);
+    if (usage.max > 0) {
+      const usageRow = document.createElement("div");
+      usageRow.className = "inventory-item-usage";
+      const usageLabel = document.createElement("span");
+      usageLabel.textContent = `Uses ${usage.remaining}/${usage.max} \xB7 ${inventoryResetLabel(usage.reset)}`;
+      const spend = document.createElement("button");
+      spend.type = "button";
+      spend.textContent = "\u2212";
+      spend.title = `Spend one use of ${item.name}`;
+      spend.disabled = !editingCanEdit || usage.remaining <= 0;
+      spend.onclick = () => {
+        item.usage.remaining = Math.max(0, usage.remaining - 1);
+        renderInventoryEditor();
+      };
+      const restore = document.createElement("button");
+      restore.type = "button";
+      restore.textContent = "+";
+      restore.title = `Restore one use of ${item.name}`;
+      restore.disabled = !editingCanEdit || usage.remaining >= usage.max;
+      restore.onclick = () => {
+        item.usage.remaining = Math.min(usage.max, usage.remaining + 1);
+        renderInventoryEditor();
+      };
+      usageRow.append(usageLabel, spend, restore);
+      main.appendChild(usageRow);
+    }
     summary.append(toggle, main);
     const controls = document.createElement("div");
     controls.className = "inventory-item-controls";
@@ -3244,6 +3394,15 @@ ${choices}`,
       item.qty = Math.min(9999, item.qty + 1);
       renderInventoryEditor();
     };
+    const edit = document.createElement("button");
+    edit.type = "button";
+    edit.textContent = "\u270E";
+    edit.title = `Edit ${item.name}`;
+    edit.disabled = !editingCanEdit;
+    edit.onclick = () => {
+      inventoryEditingId = inventoryEditingId === item.id ? "" : item.id;
+      renderInventoryEditor();
+    };
     const move = document.createElement("button");
     move.type = "button";
     move.textContent = "\u2194";
@@ -3257,10 +3416,11 @@ ${choices}`,
     remove.title = "Remove item";
     remove.disabled = !editingCanEdit;
     remove.onclick = () => removeInventoryItem(item);
-    controls.append(decrease, quantity, increase, move, remove);
+    controls.append(decrease, quantity, increase, edit, move, remove);
     row.append(summary, controls);
     const wrapper = document.createDocumentFragment();
     wrapper.appendChild(row);
+    if (inventoryEditingId === item.id && editingCanEdit) wrapper.appendChild(renderInventoryEditForm(item, children));
     if (children.length && inventoryExpandedContainers.has(item.id)) {
       const childList = document.createElement("div");
       childList.className = "inventory-item-children";
@@ -3323,18 +3483,24 @@ ${choices}`,
     const locationInput = document.getElementById("inv-item-location");
     const containerInput = document.getElementById("inv-item-container");
     const containerFlag = document.getElementById("inv-item-is-container");
+    const descriptionInput = document.getElementById("inv-item-description");
+    const usageMaxInput = document.getElementById("inv-item-usage-max");
+    const usageResetInput = document.getElementById("inv-item-usage-reset");
     const name = nameInput.value.trim();
     if (!name) return;
     const parent = editingInventory.find((item2) => item2.id === containerInput.value && item2.isContainer);
     const quantity = Number(qtyInput.value);
+    const usageMax = Math.max(0, Math.min(999, Math.floor(Number(usageMaxInput.value) || 0)));
     const location2 = parent ? inventoryEffectiveLocation(parent) : locationInput.value === "carried" ? "carried" : "backpack";
     const item = {
       id: `item-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       name,
+      description: descriptionInput.value.trim().slice(0, 4e3),
       qty: Math.max(0, Math.min(9999, Number.isFinite(quantity) ? quantity : 1)),
       location: location2,
       isContainer: !!containerFlag.checked,
-      containerId: parent?.id || null
+      containerId: parent?.id || null,
+      usage: { max: usageMax, remaining: usageMax, reset: usageResetInput.value }
     };
     editingInventory.push(item);
     if (parent) inventoryExpandedContainers.add(parent.id);
@@ -3342,6 +3508,9 @@ ${choices}`,
     qtyInput.value = 1;
     containerInput.value = "";
     containerFlag.checked = false;
+    descriptionInput.value = "";
+    usageMaxInput.value = 0;
+    usageResetInput.value = "long-rest";
     renderInventoryEditor();
   };
   function normalizeAttack(attack, index = 0) {
@@ -3494,6 +3663,7 @@ ${choices}`,
     acMethodManuallySelected = true;
     initiativeManuallyEdited = true;
     editingInventory = [];
+    inventoryEditingId = "";
     renderInventoryEditor();
     editingAttacks = normalizeAttackList(parsed.attacks);
     closeAttackForm();

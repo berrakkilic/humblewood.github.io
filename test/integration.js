@@ -474,7 +474,10 @@ async function run() {
     pronouns: 'they/them',
     inventory: [
       { id: 'pack', name: 'Backpack', qty: 1, location: 'carried', isContainer: true },
-      { id: 'torches', name: 'Torches', qty: 10, location: 'backpack', containerId: 'pack' },
+      {
+        id: 'torches', name: 'Torches', description: 'A bundle of dry pine torches.', qty: 10,
+        usage: { max: 3, remaining: 1, reset: 'long-rest' }, location: 'backpack', containerId: 'pack'
+      },
       { id: 'dagger', name: 'Dagger', qty: 1, location: 'carried' }
     ],
     fields: {
@@ -489,8 +492,17 @@ async function run() {
   assert.equal(hazelFinch.fields.pronouns, 'they/them');
   assert.equal(hazelFinch.inventory.find(item => item.name === 'Torches').qty, 10);
   assert.equal(hazelFinch.inventory.find(item => item.name === 'Torches').containerId, 'pack');
+  assert.equal(hazelFinch.inventory.find(item => item.name === 'Torches').description, 'A bundle of dry pine torches.');
+  assert.deepEqual(hazelFinch.inventory.find(item => item.name === 'Torches').usage, { max: 3, remaining: 1, reset: 'long-rest' });
   assert.equal(hazelFinch.inventory.find(item => item.name === 'Backpack').isContainer, true);
   assert.deepEqual(hazelFinch.inventory.map(item => item.id), ['pack', 'torches', 'dagger']);
+
+  pending = once(playerOne.socket, 'character:update', character => (
+    character.name === 'Hazel Finch' && character.inventory.find(item => item.id === 'torches')?.usage?.remaining === 3
+  ));
+  playerOne.socket.emit('character:combat:update', { name: 'Hazel Finch', action: 'longRest' });
+  const restedHazel = await pending;
+  assert.equal(restedHazel.inventory.find(item => item.id === 'torches').usage.remaining, 3);
 
   const clericSpellList = [
     { id: 'guidance', name: 'Guidance', level: 0 },

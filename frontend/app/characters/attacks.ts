@@ -160,6 +160,7 @@ function applyImportedStatBlock(parsed) {
   acMethodManuallySelected = true;
   initiativeManuallyEdited = true;
   editingInventory = [];
+  inventoryEditingId = '';
   renderInventoryEditor();
   editingAttacks = normalizeAttackList(parsed.attacks);
   closeAttackForm();

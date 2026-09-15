@@ -79,10 +79,12 @@ function addToBackpack(inventory, item, plan) {
   inventory.push({
     id: `shop-${crypto.randomUUID()}`,
     name: item.inventoryName,
+    description: '',
     qty: item.inventoryQuantity,
     location: 'backpack',
     isContainer: false,
-    containerId: plan.backpack?.id || null
+    containerId: plan.backpack?.id || null,
+    usage: { max: 0, remaining: 0, reset: 'manual' }
   });
 }
 

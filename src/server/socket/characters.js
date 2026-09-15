@@ -72,7 +72,7 @@ function registerCharacterHandlers(socket, room) {
   const {
     CONDITIONS, deny, emitCharacterUpdate, emitToken, isDm, normalizeCharacter,
     ownsCharacter, persistState, removeInitiativeForTokenIds, syncCharacterTokens,
-    syncCombatFields
+    syncCombatFields, resetLongRestItemUsage
   } = room;
   const { io, state } = room;
 
@@ -239,6 +239,7 @@ function registerCharacterHandlers(socket, room) {
       combat.reactionAvailable = true;
       combat.exhaustion = Math.max(0, combat.exhaustion - 1);
       Object.values(combat.spellSlots).forEach(slot => { slot.used = 0; });
+      character.inventory = resetLongRestItemUsage(character.inventory);
     } else {
       return;
     }

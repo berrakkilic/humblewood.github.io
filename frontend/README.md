@@ -16,7 +16,7 @@ small enough to navigate and review.
 | `library.ts` | Handouts, folders, broadcasts, and shop bridge |
 | `tokens.ts` | Token tray, token editors, NPC roster, and sidebars |
 | `characters/sheet.ts` | Character/NPC sheet lifecycle and calculations |
-| `characters/inventory.ts` | Inventory editing and drag/drop |
+| `characters/inventory.ts` | Inventory editing, descriptions, usage tracking, and drag/drop |
 | `characters/attacks.ts` | Attack presets and NPC stat-block imports |
 | `characters/reactions.ts` | Reaction presets and reaction editing |
 | `characters/spells.ts` | Spell catalog and spell editing |

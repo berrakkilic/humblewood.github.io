@@ -649,7 +649,7 @@
             </div>
             <div class="field">
               <label>Equipment / Inventory</label>
-              <p class="inventory-help">Keep worn, pocketed and held items under <strong>Carried / on character</strong>. Put bags and their contents in <strong>Backpack</strong>; containers can be expanded below. Use −/+ for resources, then save the sheet. Drag an item above or below another to reorder it; drop on a container to put it inside, or drop in a section to move it there.</p>
+              <p class="inventory-help">Keep worn, pocketed and held items under <strong>Carried / on character</strong>. Put bags and their contents in <strong>Backpack</strong>; containers can be expanded below. Use −/+ for quantities and item charges, then save the sheet. Drag an item above or below another to reorder it; drop on a container to put it inside, or drop in a section to move it there.</p>
               <div id="inventory-list"></div>
               <div class="inventory-add-row">
                 <input type="text" id="inv-item-name" placeholder="Item name">
@@ -664,6 +664,25 @@
                 <label class="inventory-add-container"><input type="checkbox" id="inv-item-is-container"> Container</label>
                 <button type="button" class="btn-ghost" id="inv-add-btn">+ Add</button>
               </div>
+              <details class="inventory-add-options">
+                <summary>Add description & usage tracking (optional)</summary>
+                <div class="inventory-add-details-grid">
+                  <label class="inventory-add-description" for="inv-item-description">Description
+                    <textarea id="inv-item-description" rows="2" maxlength="4000" placeholder="What does this item look like or do?"></textarea>
+                  </label>
+                  <label for="inv-item-usage-max">Max uses / charges
+                    <input type="number" id="inv-item-usage-max" min="0" max="999" step="1" value="0">
+                  </label>
+                  <label for="inv-item-usage-reset">Reset
+                    <select id="inv-item-usage-reset">
+                      <option value="long-rest">Long rest</option>
+                      <option value="short-rest">Short rest (manual)</option>
+                      <option value="manual">Manual</option>
+                    </select>
+                  </label>
+                </div>
+                <small>Set max uses to 3 for a three-charge item. Spending charges happens from the item row; long-rest charges refill automatically.</small>
+              </details>
             </div>
             <div class="field"><label>Treasure, valuables & carried notes</label><textarea id="sf-treasure" rows="3"></textarea></div>
           </details>

@@ -40,6 +40,12 @@ assert.match(bundle, /reactions: editingReactions\.map/, 'Character saves must i
 assert.match(roomSource, /function cleanReactions\(/, 'The server must sanitize saved reactions.');
 assert.match(roomSource, /reactionAvailable: combat\.reactionAvailable !== false/, 'Combat state must persist reaction availability.');
 assert.match(roomSource, /function refreshReactionForInitiativeEntry\(/, 'The server must refresh reactions at the start of an initiative turn.');
+assert.match(indexHtml, /id="inv-item-description"/, 'Inventory items need editable descriptions.');
+assert.match(indexHtml, /id="inv-item-usage-max"/, 'Inventory items need usage limits.');
+assert.match(bundle, /function renderInventoryEditForm\(/, 'Inventory items need an editor for typo corrections.');
+assert.match(bundle, /function inventoryUsage\(/, 'Inventory usage controls are missing.');
+assert.match(roomSource, /function cleanItemUsage\(/, 'The server must sanitize item usage data.');
+assert.match(roomSource, /function resetLongRestItemUsage\(/, 'The server must reset long-rest item usage.');
 assert.ok((reactionSource.match(/^\s+id: '/gm) || []).length >= 35, 'The reaction catalogue should cover common PHB and Humblewood choices.');
 for (const reactionName of ['Opportunity Attack', 'Uncanny Dodge', 'Counterspell', 'Glide', 'Ward of Shadows', 'Spiny Shield']) {
   assert.match(reactionSource, new RegExp(`name: ['"]${reactionName}['"]`), `The reaction catalogue is missing ${reactionName}.`);

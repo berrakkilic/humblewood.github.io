@@ -33,6 +33,26 @@ function createRoom({ dataDir, dmPin, io, uploadDir }) {
     return String(value || '').trim().replace(/\s+/g, ' ').slice(0, 60);
   }
 
+  function cleanItemUsage(item) {
+    const rawUsage = item?.usage && typeof item.usage === 'object' ? item.usage : {};
+    const rawMax = rawUsage.max ?? item?.usageMax ?? item?.maxUses ?? item?.maxCharges ?? 0;
+    const max = Math.max(0, Math.min(999, Math.floor(Number(rawMax) || 0)));
+    const rawRemaining = rawUsage.remaining ?? item?.usageRemaining ?? item?.chargesRemaining;
+    const rawUsed = rawUsage.used ?? item?.usageUsed;
+    const remainingValue = rawRemaining !== undefined
+      ? Number(rawRemaining)
+      : rawUsed !== undefined ? max - (Number(rawUsed) || 0) : max;
+    const requestedReset = String(rawUsage.reset ?? item?.usageReset ?? '').trim().toLowerCase();
+    const reset = ['long-rest', 'short-rest', 'manual'].includes(requestedReset)
+      ? requestedReset
+      : max > 0 ? 'long-rest' : 'manual';
+    return {
+      max,
+      remaining: Math.max(0, Math.min(max, Math.floor(Number.isFinite(remainingValue) ? remainingValue : max))),
+      reset
+    };
+  }
+
   function cleanInventory(inventory) {
     const source = Array.isArray(inventory)
       ? inventory
@@ -50,12 +70,14 @@ function createRoom({ dataDir, dmPin, io, uploadDir }) {
       return {
         id,
         name,
+        description: String(item.description || '').trim().slice(0, 4000),
         qty: Math.max(0, Math.min(9999, Number.isFinite(rawQuantity) ? rawQuantity : 1)),
         // Existing and unknown items stay in the backpack so migrations never
         // make equipment disappear.
         location: item.location === 'carried' ? 'carried' : 'backpack',
         isContainer: !!(item.isContainer ?? item.container) || /(?:backpack|bag|pouch|chest|satchel|quiver|case|pack)$/i.test(name),
-        containerId: String(item.containerId || '').trim().slice(0, 140) || null
+        containerId: String(item.containerId || '').trim().slice(0, 140) || null,
+        usage: cleanItemUsage(item)
       };
     }).filter(item => item && item.name);
 
@@ -78,6 +100,15 @@ function createRoom({ dataDir, dmPin, io, uploadDir }) {
       if (item.containerId && !byId.has(item.containerId)) item.containerId = null;
     });
     return items;
+  }
+
+  function resetLongRestItemUsage(inventory) {
+    return cleanInventory(inventory).map(item => {
+      if (item.usage.reset === 'long-rest' && item.usage.max > 0) {
+        item.usage.remaining = item.usage.max;
+      }
+      return item;
+    });
   }
 
   const LIBRARY_TEXT_EXTENSIONS = new Set([
@@ -1248,6 +1279,7 @@ function createRoom({ dataDir, dmPin, io, uploadDir }) {
     normalizeNpc,
     normalizeToken,
     cleanInventory,
+    resetLongRestItemUsage,
     onlineUsers,
     normalizeUsername,
     npcFromToken,

@@ -375,6 +375,7 @@ function openSheetEditor(c, options: any = {}) {
   if (!c && !fields['ac-method']) applyRecommendedArmorMethod();
   editingInventory = normalizeInventory(isNpc ? c?.sheet?.inventory : c?.inventory);
   inventoryExpandedContainers = new Set(editingInventory.filter(item => item.isContainer).map(item => item.id));
+  inventoryEditingId = '';
   renderInventoryEditor();
   editingAttacks = normalizeAttackList(isNpc ? (c?.sheet?.attacks || c?.attacks) : c?.attacks);
   editingAttackId = null;

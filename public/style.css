@@ -756,8 +756,16 @@ body[data-role="dm"] .token-tray.dm-detailed .token-list-details { display: flex
 }
 .portrait-preview img { width: 100%; height: 100%; object-fit: cover; }
 
-.inventory-add-row { display: flex; gap: 8px; margin-top: 8px; }
-.inventory-add-row input:first-child { flex: 1; }
+.inventory-add-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 8px; }
+.inventory-add-row input:first-child { flex: 1 1 180px; min-width: 150px; }
+.inventory-add-row select { flex: 1 1 140px; min-width: 120px; }
+.inventory-add-options { margin-top: 8px; padding: 9px 10px; border: 1px solid rgba(58,46,37,.12); border-radius: 9px; background: rgba(246,239,220,.45); }
+.inventory-add-options summary { color: var(--forest); cursor: pointer; font-size: 11px; font-weight: 800; }
+.inventory-add-options > small { display: block; margin-top: 7px; color: var(--ink-soft); font-size: 10px; line-height: 1.4; }
+.inventory-add-details-grid { display: grid; grid-template-columns: minmax(0, 2fr) repeat(2, minmax(120px, 1fr)); gap: 8px; margin-top: 9px; }
+.inventory-add-details-grid label, .inventory-item-edit-form label { display: flex; flex-direction: column; gap: 4px; color: var(--forest); font-size: 10px; font-weight: 800; }
+.inventory-add-details-grid textarea { min-height: 52px; resize: vertical; }
+.inventory-add-description { grid-row: span 2; }
 .inventory-help { margin: -2px 0 10px; color: var(--ink-soft); font-size: 11px; line-height: 1.45; }
 .inventory-group { margin-bottom: 12px; }
 .inventory-group-title { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 0 0 6px; color: var(--forest-deep); font-size: 12px; font-weight: 800; letter-spacing: .02em; text-transform: uppercase; }
@@ -776,6 +784,11 @@ body[data-role="dm"] .token-tray.dm-detailed .token-list-details { display: flex
 .inventory-item-main { min-width: 0; flex: 1; }
 .inventory-item-name { overflow-wrap: anywhere; font-weight: 700; }
 .inventory-item-meta { margin-top: 2px; color: var(--ink-soft); font-size: 10px; }
+.inventory-item-description { margin-top: 5px; color: var(--ink-soft); font-size: 11px; line-height: 1.4; white-space: pre-wrap; overflow-wrap: anywhere; }
+.inventory-item-usage { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; margin-top: 6px; color: var(--forest); font-size: 10px; font-weight: 800; }
+.inventory-item-usage span { margin-right: 2px; }
+.inventory-item-usage button { width: 22px; height: 22px; padding: 0; border: 1px solid rgba(58,46,37,.16); border-radius: 6px; background: #fffdf8; color: var(--forest); font-weight: 800; cursor: pointer; }
+.inventory-item-usage button:hover { background: rgba(124,148,115,.15); }
 .inventory-item-controls { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
 .inventory-item-controls button { width: 25px; height: 25px; padding: 0; border: 1px solid rgba(58,46,37,.16); border-radius: 6px; background: #fffdf8; color: var(--forest); font-weight: 800; cursor: pointer; }
 .inventory-item-controls button:hover { background: rgba(124,148,115,.15); }
@@ -785,6 +798,12 @@ body[data-role="dm"] .token-tray.dm-detailed .token-list-details { display: flex
 .inventory-item-children { margin: 4px 0 2px 23px; padding-left: 9px; border-left: 2px solid rgba(124,148,115,.35); }
 .inventory-item-children .inventory-item { background: rgba(255,253,248,.72); }
 .inventory-container-badge { display: inline-block; margin-left: 5px; padding: 2px 5px; border-radius: 999px; background: rgba(124,148,115,.22); color: var(--forest); font-size: 9px; font-weight: 800; text-transform: uppercase; vertical-align: 2px; }
+.inventory-item-edit-form { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(100px, .55fr) minmax(100px, .55fr) minmax(130px, .8fr); gap: 8px; margin: 3px 0 7px 31px; padding: 10px; border: 1px solid rgba(124,148,115,.3); border-radius: 9px; background: rgba(255,253,248,.8); }
+.inventory-edit-description { grid-column: span 2; }
+.inventory-item-edit-form textarea { min-height: 48px; resize: vertical; }
+.inventory-edit-actions { display: flex; align-items: end; gap: 6px; }
+.inventory-edit-actions button { flex: 1; padding: 6px 8px; font-size: 11px; }
+.inventory-edit-note { grid-column: 1 / -1; color: var(--ink-soft); font-size: 10px; }
 
 .sheet-owner-note { font-size: 12px; color: var(--ink-soft); margin-top: 8px; }
 .npc-sheet-tools { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 10px; padding: 14px; border: 1px solid rgba(217,138,158,.38); border-radius: 12px; background: linear-gradient(135deg, rgba(217,138,158,.12), rgba(246,239,220,.78)); }
@@ -1469,11 +1488,12 @@ body[data-role="player"] .dm-only { display: none !important; }
   .character-view-heading, .character-list-heading-row { align-items: stretch; flex-direction: column; }
   .character-create-actions { display: grid; grid-template-columns: 1fr; }
   .character-create-actions button { width: 100%; }
-  .npc-preset-controls, .spell-bulk-row, .attack-preset-row, .attack-form-grid, .reaction-preset-row, .reaction-form-grid { grid-template-columns: 1fr; }
+  .npc-preset-controls, .spell-bulk-row, .attack-preset-row, .attack-form-grid, .reaction-preset-row, .reaction-form-grid, .inventory-add-details-grid, .inventory-item-edit-form { grid-template-columns: 1fr; }
   .npc-import-actions, .attack-form-actions, .reaction-form-actions { flex-direction: column; }
   .npc-import-actions button { width: 100%; }
   .attack-form-details { grid-column: auto; }
   .reaction-form-wide { grid-column: auto; }
+  .inventory-add-description, .inventory-edit-description { grid-column: auto; grid-row: auto; }
   .attack-list-item { grid-template-columns: 1fr; }
   .attack-list-details, .attack-list-actions { grid-column: 1; grid-row: auto; }
   #view-map { padding: 10px; gap: 10px; }
