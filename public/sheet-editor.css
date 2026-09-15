@@ -25,6 +25,7 @@
 #sheet-editor .sheet-form > .section-combat { grid-column: span 7; }
 #sheet-editor .sheet-form > .section-abilities { grid-column: span 5; }
 #sheet-editor .sheet-form > .section-attacks,
+#sheet-editor .sheet-form > .section-reactions { grid-column: 1 / -1; }
 #sheet-editor .sheet-form > .section-proficiencies,
 #sheet-editor .sheet-form > .section-equipment,
 #sheet-editor .sheet-form > .section-features,

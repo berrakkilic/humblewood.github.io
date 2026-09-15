@@ -18,6 +18,7 @@ small enough to navigate and review.
 | `characters/sheet.ts` | Character/NPC sheet lifecycle and calculations |
 | `characters/inventory.ts` | Inventory editing and drag/drop |
 | `characters/attacks.ts` | Attack presets and NPC stat-block imports |
+| `characters/reactions.ts` | Reaction presets and reaction editing |
 | `characters/spells.ts` | Spell catalog and spell editing |
 | `characters/level-up.ts` | Level-up flow |
 | `jukebox.ts` | Shared music controls |

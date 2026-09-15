@@ -814,6 +814,26 @@ body[data-role="dm"] .token-tray.dm-detailed .token-list-details { display: flex
 .attack-list-actions button { padding: 2px 5px; border: 0; background: none; cursor: pointer; }
 .attack-list-actions .edit { color: var(--forest); }
 .attack-list-actions .del { color: var(--rose-deep); font-weight: 800; }
+.reaction-list-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+.reaction-list-heading p { margin: 0; }
+.reaction-add-form { display: flex; flex-direction: column; gap: 10px; margin-bottom: 12px; padding: 12px; border-radius: 10px; background: var(--parchment-dark); }
+.reaction-add-form.hidden { display: none; }
+.reaction-preset-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 8px; padding-bottom: 10px; border-bottom: 1px solid rgba(58,46,37,.12); }
+.reaction-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
+.reaction-form-wide { grid-column: 1 / -1; }
+.reaction-form-actions { display: flex; gap: 8px; }
+.reaction-form-actions button { flex: 1; }
+.reaction-list { display: flex; flex-direction: column; gap: 8px; }
+.reaction-list-item { padding: 10px 12px; border: 1px solid rgba(58,46,37,.12); border-left: 4px solid var(--rose); border-radius: 9px; background: #fffdf8; }
+.reaction-list-title { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; color: var(--forest-deep); }
+.reaction-list-actions { display: flex; gap: 4px; }
+.reaction-list-actions button { padding: 2px 5px; border: 0; background: none; cursor: pointer; }
+.reaction-list-actions .edit { color: var(--forest); }
+.reaction-list-actions .del { color: var(--rose-deep); font-weight: 800; }
+.reaction-list-meta { display: flex; flex-wrap: wrap; gap: 5px; margin: 5px 0 7px; }
+.reaction-list-meta span { padding: 2px 7px; border-radius: 999px; background: rgba(124,148,115,.16); color: var(--forest-deep); font-size: 10px; font-weight: 700; }
+.reaction-list-item p { margin: 5px 0 0; color: var(--ink-soft); font-size: 12px; line-height: 1.45; }
+.reaction-list-item p b { display: inline-block; min-width: 62px; margin-right: 7px; color: var(--ink); }
 .spell-bulk-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 8px; padding-bottom: 10px; border-bottom: 1px solid rgba(58,46,37,.12); }
 
 .char-card .card-top { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
@@ -1434,10 +1454,11 @@ body[data-role="player"] .dm-only { display: none !important; }
   .character-view-heading, .character-list-heading-row { align-items: stretch; flex-direction: column; }
   .character-create-actions { display: grid; grid-template-columns: 1fr; }
   .character-create-actions button { width: 100%; }
-  .npc-preset-controls, .spell-bulk-row, .attack-preset-row, .attack-form-grid { grid-template-columns: 1fr; }
-  .npc-import-actions, .attack-form-actions { flex-direction: column; }
+  .npc-preset-controls, .spell-bulk-row, .attack-preset-row, .attack-form-grid, .reaction-preset-row, .reaction-form-grid { grid-template-columns: 1fr; }
+  .npc-import-actions, .attack-form-actions, .reaction-form-actions { flex-direction: column; }
   .npc-import-actions button { width: 100%; }
   .attack-form-details { grid-column: auto; }
+  .reaction-form-wide { grid-column: auto; }
   .attack-list-item { grid-template-columns: 1fr; }
   .attack-list-details, .attack-list-actions { grid-column: 1; grid-row: auto; }
   #view-map { padding: 10px; gap: 10px; }

@@ -164,6 +164,9 @@ function applyImportedStatBlock(parsed) {
   editingAttacks = normalizeAttackList(parsed.attacks);
   closeAttackForm();
   renderAttackEditor();
+  editingReactions = [];
+  closeReactionForm();
+  renderReactionEditor();
   editingSpells = normalizeSpellList(parsed.spells);
   editingSpellId = null;
   document.getElementById('spell-add-form').classList.add('hidden');

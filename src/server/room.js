@@ -212,6 +212,19 @@ function createRoom({ dataDir, dmPin, io, uploadDir }) {
     })).filter(attack => attack.name);
   }
 
+  function cleanReactions(reactions) {
+    if (!Array.isArray(reactions)) return [];
+    return reactions.slice(0, 80).map((reaction, index) => ({
+      id: String(reaction?.id || `reaction-${index}`).slice(0, 140),
+      name: String(reaction?.name || '').trim().slice(0, 100),
+      trigger: String(reaction?.trigger || '').trim().slice(0, 1200),
+      effect: String(reaction?.effect || '').trim().slice(0, 3000),
+      resource: String(reaction?.resource || '').trim().slice(0, 300),
+      requirement: String(reaction?.requirement || '').trim().slice(0, 300),
+      source: String(reaction?.source || '').trim().slice(0, 160)
+    })).filter(reaction => reaction.name);
+  }
+
   function cleanSpells(spells) {
     if (!Array.isArray(spells)) return [];
     return spells.slice(0, 300).map((spell, index) => {
@@ -266,6 +279,7 @@ function createRoom({ dataDir, dmPin, io, uploadDir }) {
       saves: sheet.saves && typeof sheet.saves === 'object' ? cloneJson(sheet.saves) : {},
       skills: sheet.skills && typeof sheet.skills === 'object' ? cloneJson(sheet.skills) : {},
       attacks: cleanAttacks(sheet.attacks),
+      reactions: cleanReactions(sheet.reactions),
       spells: cleanSpells(sheet.spells),
       spellcasting: {
         className: String(sheet.spellcasting?.className || '').slice(0, 100),
@@ -292,6 +306,7 @@ function createRoom({ dataDir, dmPin, io, uploadDir }) {
     npc.initiativeModifier = Math.max(-99, Math.min(99, Number(npc.initiativeModifier) || 0));
     npc.tokenScale = Math.max(0.35, Math.min(3, Number(npc.tokenScale ?? npc.sizeScale) || 1));
     npc.attacks = cleanAttacks(npc.attacks);
+    npc.reactions = cleanReactions(npc.reactions || npc.sheet?.reactions);
     npc.spells = cleanSpells(npc.spells || npc.sheet?.spells);
     const spellSaveDcRaw = npc.sheet?.fields?.['spell-dc'] ?? npc.spellcasting?.saveDc;
     const spellAttackRaw = npc.sheet?.fields?.['spell-attack'] ?? npc.spellcasting?.attackBonus;
@@ -432,6 +447,7 @@ function createRoom({ dataDir, dmPin, io, uploadDir }) {
   function normalizeCharacter(character) {
     if (!character.fields || typeof character.fields !== 'object') character.fields = {};
     character.inventory = cleanInventory(character.inventory);
+    character.reactions = cleanReactions(character.reactions);
     character.pronouns = cleanPronouns(character.pronouns ?? character.fields.pronouns);
     character.fields.pronouns = character.pronouns;
     character.hp = Math.max(0, Number(character.hp ?? character.fields.hp) || 0);

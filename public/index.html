@@ -592,6 +592,36 @@
             <div class="field"><label>Actions, bonus actions, reactions & combat notes</label><textarea id="sf-attacks-notes" rows="4" placeholder="Sneak Attack, Talons, Glide, special actions..."></textarea></div>
           </details>
 
+          <!-- REACTIONS -->
+          <details class="sheet-section section-reactions" open>
+            <summary>Reactions</summary>
+            <div class="reaction-list-heading">
+              <p class="sidebar-help">Keep each trigger beside its response so you can spot it quickly. You regain your reaction at the start of your turn.</p>
+              <button type="button" class="btn-ghost" id="reaction-add-btn">+ Add reaction</button>
+            </div>
+            <div class="reaction-add-form hidden" id="reaction-add-form">
+              <div class="reaction-preset-row">
+                <label class="field">Core 5e / Humblewood preset
+                  <select id="reaction-preset-select"><option value="">Choose a reaction...</option></select>
+                </label>
+                <button type="button" class="btn-ghost" id="reaction-preset-load">Load preset</button>
+              </div>
+              <div class="reaction-form-grid">
+                <label class="field">Name<input type="text" id="reaction-form-name" placeholder="Opportunity Attack"></label>
+                <label class="field">Requirement<input type="text" id="reaction-form-requirement" placeholder="Any creature / Rogue level 5 / Shield spell"></label>
+                <label class="field">Resource / limit<input type="text" id="reaction-form-resource" placeholder="One reaction / spell slot / once per rest"></label>
+                <label class="field">Source<input type="text" id="reaction-form-source" placeholder="Core rules / PHB / Humblewood"></label>
+                <label class="field reaction-form-wide">Trigger<textarea id="reaction-form-trigger" rows="2" placeholder="When a hostile creature you can see leaves your reach..."></textarea></label>
+                <label class="field reaction-form-wide">Response<textarea id="reaction-form-effect" rows="3" placeholder="What happens when you take the reaction..."></textarea></label>
+              </div>
+              <div class="reaction-form-actions">
+                <button type="button" class="btn-primary" id="reaction-form-save">Save reaction</button>
+                <button type="button" class="btn-ghost" id="reaction-form-cancel">Cancel</button>
+              </div>
+            </div>
+            <div class="reaction-list" id="reaction-list"></div>
+          </details>
+
           <!-- PROFICIENCIES -->
           <details class="sheet-section section-proficiencies" open>
             <summary>Languages & Proficiencies</summary>

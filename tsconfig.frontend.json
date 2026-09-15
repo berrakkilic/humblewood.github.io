@@ -20,6 +20,7 @@
     "frontend/app/characters/sheet.ts",
     "frontend/app/characters/inventory.ts",
     "frontend/app/characters/attacks.ts",
+    "frontend/app/characters/reactions.ts",
     "frontend/app/characters/spells.ts",
     "frontend/app/characters/level-up.ts",
     "frontend/app/jukebox.ts",

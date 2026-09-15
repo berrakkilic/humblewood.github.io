@@ -380,6 +380,10 @@ function openSheetEditor(c, options: any = {}) {
   editingAttackId = null;
   document.getElementById('attack-add-form').classList.add('hidden');
   renderAttackEditor();
+  editingReactions = normalizeReactionList(isNpc ? (c?.sheet?.reactions || c?.reactions) : c?.reactions);
+  editingReactionId = null;
+  document.getElementById('reaction-add-form').classList.add('hidden');
+  renderReactionEditor();
   editingSpells = normalizeSpellList(fields['spell-list'] || (isNpc ? c?.spells : null));
   if (isNpc && !editingSpells.length) editingSpells = normalizeSpellList(c?.spells);
   if (!editingSpells.length) editingSpells = migrateLegacySpellText(fields);

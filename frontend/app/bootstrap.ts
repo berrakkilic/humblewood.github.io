@@ -3,6 +3,7 @@
 initializeCharacterRuleControls();
 initializeFeatPresetControls();
 initializeAttackPresetControls();
+initializeReactionPresetControls();
 initializeNpcPresetControls();
 
 // Connecting last prevents a fast automatic session restore from racing the

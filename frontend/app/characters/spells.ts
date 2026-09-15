@@ -400,6 +400,7 @@ document.getElementById('save-sheet-btn').onclick = async () => {
       proficient: !!fields[`skill-${skill}-prof`], modifier: num(`skill-${skill}`)
     }])),
     attacks: editingAttacks.map(attack => ({ ...attack })),
+    reactions: editingReactions.map(reaction => ({ ...reaction })),
     spellcasting: {
       className: fields['spell-class'] || '', ability: fields['spell-ability'] || '',
       saveDc: num('spell-dc'), attackBonus: num('spell-attack')
@@ -426,6 +427,7 @@ document.getElementById('save-sheet-btn').onclick = async () => {
       hp: num('hp', 10), maxHp: Math.max(1, num('maxhp', 10)), tempHp: Math.max(0, num('temphp')),
       ac: num('ac', 10), initiativeModifier: num('initiative'),
       attacks: sheet.attacks,
+      reactions: sheet.reactions,
       spells: editingSpells.map(spell => ({ ...spell })),
       spellcasting: sheet.spellcasting,
       notes: fields['attacks-notes'] || fields.notes || '',
