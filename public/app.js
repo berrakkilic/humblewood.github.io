@@ -63,6 +63,7 @@
   let draggedInitiativeId = null;
   let libraryCurrentFolderId = "all";
   let sharedHandoutRenderKey = "";
+  let dismissedSharedHandoutKey = "";
   let sharedHandoutTimer = null;
   let sharedHandoutContentRequest = 0;
   let shopPurchaseCharacterName = "";
@@ -132,6 +133,116 @@
     "Stunned",
     "Unconscious"
   ];
+  function createDialogController(dialog, options = {}) {
+    if (!dialog) throw new Error("A dialog element is required.");
+    let lastFocused = null;
+    let fallbackOpen = false;
+    function finalizeClose(reason = "dismiss") {
+      fallbackOpen = false;
+      dialog.classList.add("hidden");
+      dialog.setAttribute("aria-hidden", "true");
+      if (typeof options.onDismiss === "function") options.onDismiss(reason, dialog.returnValue || "");
+      if (options.restoreFocus !== false && lastFocused?.focus) {
+        try {
+          lastFocused.focus({ preventScroll: true });
+        } catch {
+          lastFocused.focus();
+        }
+      }
+    }
+    function open() {
+      if (dialog.open || fallbackOpen) return;
+      lastFocused = document.activeElement;
+      dialog.classList.remove("hidden");
+      dialog.setAttribute("aria-hidden", "false");
+      if (typeof dialog.showModal === "function") dialog.showModal();
+      else {
+        fallbackOpen = true;
+        dialog.setAttribute("open", "");
+      }
+      if (typeof options.onOpen === "function") options.onOpen();
+    }
+    function close(reason = "dismiss") {
+      dialog.returnValue = reason;
+      if (typeof dialog.close === "function" && dialog.open) dialog.close(reason);
+      else if (fallbackOpen || dialog.hasAttribute("open")) {
+        dialog.removeAttribute("open");
+        finalizeClose(reason);
+      }
+    }
+    dialog.addEventListener("click", (event) => {
+      const closeButton = event.target?.closest?.("[data-dialog-close]");
+      if (closeButton && dialog.contains(closeButton)) {
+        close(closeButton.dataset.dialogClose || "close");
+        return;
+      }
+      if (options.closeOnBackdrop !== false && event.target === dialog) close("backdrop");
+    });
+    dialog.addEventListener("cancel", (event) => {
+      if (options.closeOnEscape === false) event.preventDefault();
+      else dialog.returnValue = "escape";
+    });
+    dialog.addEventListener("close", () => finalizeClose(dialog.returnValue || "dismiss"));
+    return {
+      element: dialog,
+      open,
+      close,
+      isOpen: () => !!dialog.open || fallbackOpen
+    };
+  }
+  function createPopoverController(popover, options = {}) {
+    if (!popover) throw new Error("A popover element is required.");
+    const nativePopover = typeof popover.showPopover === "function";
+    let suppressOutsideClick = false;
+    if (nativePopover && !popover.hasAttribute("popover")) popover.setAttribute("popover", options.mode || "auto");
+    function show() {
+      if (nativePopover) {
+        if (!popover.matches(":popover-open")) popover.showPopover();
+      } else {
+        suppressOutsideClick = true;
+        popover.hidden = false;
+        popover.setAttribute("aria-hidden", "false");
+        popover.classList.add("popover-fallback-open");
+        queueMicrotask(() => {
+          suppressOutsideClick = false;
+        });
+      }
+    }
+    function hide() {
+      if (nativePopover) {
+        if (popover.matches(":popover-open")) popover.hidePopover();
+      } else {
+        popover.hidden = true;
+        popover.setAttribute("aria-hidden", "true");
+        popover.classList.remove("popover-fallback-open");
+      }
+    }
+    function toggle() {
+      if (nativePopover) popover.togglePopover();
+      else if (popover.hidden) show();
+      else hide();
+    }
+    popover.addEventListener("click", (event) => {
+      if (event.target?.closest?.("[data-popover-close]")) hide();
+    });
+    if (!nativePopover) {
+      popover.hidden = true;
+      popover.setAttribute("aria-hidden", "true");
+      document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape" && !popover.hidden) hide();
+      });
+      if (options.closeOnOutsideClick !== false) {
+        document.addEventListener("click", (event) => {
+          if (!suppressOutsideClick && !popover.hidden && !popover.contains(event.target)) hide();
+        });
+      }
+    }
+    return { element: popover, show, hide, toggle, isOpen: () => nativePopover ? popover.matches(":popover-open") : !popover.hidden };
+  }
+  window.HumblewoodOverlays = {
+    createDialogController,
+    createPopoverController
+  };
   document.getElementById("role-dm").onclick = () => setRole("dm");
   document.getElementById("role-player").onclick = () => setRole("player");
   document.getElementById("auth-login").onclick = () => setAuthMode("login");
@@ -1850,6 +1961,11 @@ ${choices}`,
     const frame = activeShopFrame();
     if (!frame || event.source !== frame.contentWindow || !event.data || typeof event.data !== "object") return;
     const request = event.data;
+    if (request.type === "humblewood:puzzle-complete") {
+      const puzzleName = String(request.name || "Puzzle").trim().slice(0, 80) || "Puzzle";
+      showToast(`${puzzleName} completed.`);
+      return;
+    }
     if (request.type === "humblewood:shop-ready") {
       postShopContext(frame);
       return;
@@ -1878,6 +1994,13 @@ ${choices}`,
     const remainder = seconds % 60;
     return `${minutes}m${remainder ? ` ${remainder}s` : ""} remaining`;
   }
+  const sharedHandoutDialog = createDialogController(document.getElementById("shared-handout-overlay"), {
+    onDismiss: () => {
+      if (state?.library?.broadcast && sharedHandoutRenderKey) dismissedSharedHandoutKey = sharedHandoutRenderKey;
+      clearInterval(sharedHandoutTimer);
+      sharedHandoutTimer = null;
+    }
+  });
   function renderSharedHandoutContent(broadcast) {
     const content = document.getElementById("shared-handout-content");
     content.innerHTML = "";
@@ -1901,6 +2024,8 @@ ${choices}`,
       frame.title = broadcast.name;
       frame.dataset.shopHandout = "true";
       frame.setAttribute("sandbox", "allow-scripts");
+      frame.setAttribute("allow", "fullscreen");
+      frame.setAttribute("allowfullscreen", "");
       frame.addEventListener("load", () => postShopContext(frame));
       content.appendChild(frame);
       return;
@@ -1932,11 +2057,9 @@ ${choices}`,
   }
   function updateSharedHandoutTimer() {
     const broadcast = state?.library?.broadcast;
-    const overlay = document.getElementById("shared-handout-overlay");
     if (!broadcast) return;
     if (broadcast.expiresAt && Number(broadcast.expiresAt) <= Date.now()) {
-      overlay.classList.add("hidden");
-      overlay.setAttribute("aria-hidden", "true");
+      sharedHandoutDialog.close("expired");
       clearInterval(sharedHandoutTimer);
       sharedHandoutTimer = null;
       return;
@@ -1944,25 +2067,25 @@ ${choices}`,
     document.getElementById("shared-handout-timer").textContent = broadcast.expiresAt ? formatSharedHandoutTimer(broadcast.expiresAt) : "Shown until stopped";
   }
   function renderSharedHandout() {
-    const overlay = document.getElementById("shared-handout-overlay");
     const broadcast = state?.library?.broadcast;
     clearInterval(sharedHandoutTimer);
     sharedHandoutTimer = null;
     if (!broadcast || broadcast.expiresAt && Number(broadcast.expiresAt) <= Date.now()) {
-      overlay.classList.add("hidden");
-      overlay.setAttribute("aria-hidden", "true");
+      dismissedSharedHandoutKey = "";
+      sharedHandoutDialog.close(broadcast ? "expired" : "broadcast-ended");
       sharedHandoutRenderKey = "";
       return;
     }
-    overlay.classList.remove("hidden");
-    overlay.setAttribute("aria-hidden", "false");
+    const renderKey = `${broadcast.fileId}:${broadcast.url}:${broadcast.kind}:${broadcast.startedAt || ""}`;
+    if (dismissedSharedHandoutKey === renderKey) return;
+    if (dismissedSharedHandoutKey) dismissedSharedHandoutKey = "";
     document.getElementById("shared-handout-title").textContent = broadcast.name || "Shared handout";
-    updateSharedHandoutTimer();
-    const renderKey = `${broadcast.fileId}:${broadcast.url}:${broadcast.kind}`;
     if (sharedHandoutRenderKey !== renderKey) {
       sharedHandoutRenderKey = renderKey;
       renderSharedHandoutContent(broadcast);
     }
+    updateSharedHandoutTimer();
+    sharedHandoutDialog.open();
     if (broadcast.expiresAt) sharedHandoutTimer = setInterval(updateSharedHandoutTimer, 250);
   }
   document.getElementById("library-new-folder-btn").onclick = () => {

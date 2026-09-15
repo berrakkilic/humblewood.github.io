@@ -412,6 +412,11 @@ window.addEventListener('message', event => {
   const frame = activeShopFrame();
   if (!frame || event.source !== frame.contentWindow || !event.data || typeof event.data !== 'object') return;
   const request = event.data;
+  if (request.type === 'humblewood:puzzle-complete') {
+    const puzzleName = String(request.name || 'Puzzle').trim().slice(0, 80) || 'Puzzle';
+    showToast(`${puzzleName} completed.`);
+    return;
+  }
   if (request.type === 'humblewood:shop-ready') {
     postShopContext(frame);
     return;
@@ -446,6 +451,14 @@ function formatSharedHandoutTimer(expiresAt) {
   return `${minutes}m${remainder ? ` ${remainder}s` : ''} remaining`;
 }
 
+const sharedHandoutDialog = createDialogController(document.getElementById('shared-handout-overlay'), {
+  onDismiss: () => {
+    if (state?.library?.broadcast && sharedHandoutRenderKey) dismissedSharedHandoutKey = sharedHandoutRenderKey;
+    clearInterval(sharedHandoutTimer);
+    sharedHandoutTimer = null;
+  }
+});
+
 function renderSharedHandoutContent(broadcast) {
   const content = document.getElementById('shared-handout-content');
   content.innerHTML = '';
@@ -469,6 +482,8 @@ function renderSharedHandoutContent(broadcast) {
     frame.title = broadcast.name;
     frame.dataset.shopHandout = 'true';
     frame.setAttribute('sandbox', 'allow-scripts');
+    frame.setAttribute('allow', 'fullscreen');
+    frame.setAttribute('allowfullscreen', '');
     frame.addEventListener('load', () => postShopContext(frame));
     content.appendChild(frame);
     return;
@@ -504,11 +519,9 @@ function renderSharedHandoutContent(broadcast) {
 
 function updateSharedHandoutTimer() {
   const broadcast = state?.library?.broadcast;
-  const overlay = document.getElementById('shared-handout-overlay');
   if (!broadcast) return;
   if (broadcast.expiresAt && Number(broadcast.expiresAt) <= Date.now()) {
-    overlay.classList.add('hidden');
-    overlay.setAttribute('aria-hidden', 'true');
+    sharedHandoutDialog.close('expired');
     clearInterval(sharedHandoutTimer);
     sharedHandoutTimer = null;
     return;
@@ -519,25 +532,25 @@ function updateSharedHandoutTimer() {
 }
 
 function renderSharedHandout() {
-  const overlay = document.getElementById('shared-handout-overlay');
   const broadcast = state?.library?.broadcast;
   clearInterval(sharedHandoutTimer);
   sharedHandoutTimer = null;
   if (!broadcast || (broadcast.expiresAt && Number(broadcast.expiresAt) <= Date.now())) {
-    overlay.classList.add('hidden');
-    overlay.setAttribute('aria-hidden', 'true');
+    dismissedSharedHandoutKey = '';
+    sharedHandoutDialog.close(broadcast ? 'expired' : 'broadcast-ended');
     sharedHandoutRenderKey = '';
     return;
   }
-  overlay.classList.remove('hidden');
-  overlay.setAttribute('aria-hidden', 'false');
+  const renderKey = `${broadcast.fileId}:${broadcast.url}:${broadcast.kind}:${broadcast.startedAt || ''}`;
+  if (dismissedSharedHandoutKey === renderKey) return;
+  if (dismissedSharedHandoutKey) dismissedSharedHandoutKey = '';
   document.getElementById('shared-handout-title').textContent = broadcast.name || 'Shared handout';
-  updateSharedHandoutTimer();
-  const renderKey = `${broadcast.fileId}:${broadcast.url}:${broadcast.kind}`;
   if (sharedHandoutRenderKey !== renderKey) {
     sharedHandoutRenderKey = renderKey;
     renderSharedHandoutContent(broadcast);
   }
+  updateSharedHandoutTimer();
+  sharedHandoutDialog.open();
   if (broadcast.expiresAt) sharedHandoutTimer = setInterval(updateSharedHandoutTimer, 250);
 }
 
@@ -586,4 +599,3 @@ document.getElementById('library-file-input').onchange = async event => {
   }
 };
 document.getElementById('shared-handout-stop-btn').onclick = () => socket.emit('library:broadcast:clear');
-

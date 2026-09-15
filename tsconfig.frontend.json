@@ -12,6 +12,7 @@
   "files": [
     "frontend/types/globals.d.ts",
     "frontend/app/state.ts",
+    "frontend/app/ui/overlays.ts",
     "frontend/app/session.ts",
     "frontend/app/map.ts",
     "frontend/app/library.ts",

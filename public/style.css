@@ -908,16 +908,18 @@ body[data-role="dm"] .token-tray.dm-detailed .token-list-details { display: flex
 .library-empty span { display: block; margin-bottom: 5px; font-size: 25px; }
 .library-empty strong { color: var(--forest-deep); }
 .library-empty p { margin: 5px 0 0; font-size: 12px; }
-.shared-handout-overlay { position: fixed; inset: 0; z-index: 1300; display: grid; place-items: center; padding: 24px; background: rgba(41, 69, 50, .72); backdrop-filter: blur(4px); }
+.shared-handout-overlay { position: fixed; inset: 0; z-index: 1300; width: 100%; max-width: none; height: 100%; max-height: none; margin: 0; border: 0; padding: 24px; overflow: auto; background: transparent; }
+.shared-handout-overlay[open] { display: grid; place-items: center; }
+.shared-handout-overlay::backdrop { background: rgba(41, 69, 50, .72); backdrop-filter: blur(4px); }
 .shared-handout-overlay.hidden { display: none !important; }
-.shared-handout-modal { display: flex; flex-direction: column; width: min(1100px, 100%); max-height: calc(100vh - 48px); padding: 20px; }
+.shared-handout-modal { display: flex; flex-direction: column; align-self: center; justify-self: center; width: min(1100px, 100%); max-height: calc(100vh - 48px); padding: 20px; }
 .shared-handout-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 14px; }
 .shared-handout-header h2 { margin: 3px 0 0; overflow-wrap: anywhere; }
 .shared-handout-header-actions { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
 .shared-handout-timer { color: var(--rose-deep); font-size: 12px; font-weight: 800; white-space: nowrap; }
 .shared-handout-content { display: grid; place-items: center; min-height: 180px; max-height: calc(100vh - 150px); overflow: auto; border-radius: 10px; background: var(--parchment-dark); }
 .shared-handout-content img { display: block; max-width: 100%; max-height: calc(100vh - 170px); object-fit: contain; }
-.shared-handout-content iframe { display: block; width: 100%; height: min(72vh, 800px); border: 0; background: #fff; }
+.shared-handout-content iframe { display: block; width: 100%; height: min(82vh, 960px); border: 0; background: #fff; }
 .shared-handout-content pre { width: 100%; min-height: 180px; margin: 0; padding: 22px; color: var(--ink); font: 14px/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; text-align: left; white-space: pre-wrap; overflow-wrap: anywhere; }
 .shared-handout-content p { max-width: 500px; padding: 24px; color: var(--ink-soft); text-align: center; }
 .shared-handout-content a { color: var(--rose-deep); font-weight: 800; }
@@ -1474,6 +1476,7 @@ body[data-role="player"] .dm-only { display: none !important; }
   .shared-handout-header-actions { justify-content: space-between; width: 100%; }
   .shared-handout-content { max-height: calc(92vh - 130px); }
   .shared-handout-content img { max-height: calc(92vh - 150px); }
+  .shared-handout-content iframe { height: calc(92vh - 145px); }
   .player-question-overlay { padding: 10px; place-items: end center; }
   .player-question-modal { max-height: 92vh; border-radius: 18px 18px 0 0; padding: 16px; }
 }

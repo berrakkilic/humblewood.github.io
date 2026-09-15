@@ -1,0 +1,600 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Stone Tablets Puzzle</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --forest-deep: #294532;
+      --forest: #3d5f47;
+      --moss: #71866b;
+      --moss-light: #a6b19a;
+      --rose: #b9687c;
+      --rose-deep: #8f4659;
+      --gold: #b79545;
+      --ink: #3a2e25;
+      --ink-soft: #75695d;
+      --paper: #fffdf8;
+      --parchment: #f5ecd9;
+      --parchment-dark: #e9dcc0;
+      --line: rgba(58, 46, 37, .17);
+      --shadow: 0 22px 65px rgba(36, 47, 36, .2);
+    }
+
+    * { box-sizing: border-box; }
+    html { min-height: 100%; background: #e9dec8; }
+    body {
+      min-height: 100vh;
+      margin: 0;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 9% 8%, rgba(185, 104, 124, .16), transparent 28%),
+        radial-gradient(circle at 90% 12%, rgba(113, 134, 107, .22), transparent 29%),
+        linear-gradient(135deg, #faf3e5, #e8dcc4);
+      font: 16px/1.55 ui-rounded, "Trebuchet MS", system-ui, sans-serif;
+    }
+    button, select { font: inherit; }
+    button { cursor: pointer; }
+
+    .landing {
+      display: grid;
+      min-height: 100vh;
+      place-items: center;
+      padding: 24px;
+    }
+    .tablet-intro {
+      position: relative;
+      width: min(720px, 100%);
+      overflow: hidden;
+      border: 1px solid rgba(41, 69, 50, .17);
+      border-radius: 28px;
+      padding: clamp(30px, 7vw, 58px);
+      background: linear-gradient(145deg, rgba(255, 253, 248, .98), rgba(245, 236, 217, .94));
+      box-shadow: var(--shadow);
+      text-align: center;
+    }
+    .tablet-intro::before, .tablet-intro::after {
+      position: absolute;
+      color: rgba(82, 115, 90, .12);
+      font: 110px/1 Georgia, serif;
+      content: "❧";
+      pointer-events: none;
+    }
+    .tablet-intro::before { top: -22px; right: 20px; transform: rotate(14deg); }
+    .tablet-intro::after { bottom: -49px; left: 24px; transform: rotate(190deg); }
+    .eyebrow {
+      position: relative;
+      z-index: 1;
+      color: var(--rose-deep);
+      font-size: 12px;
+      font-weight: 900;
+      letter-spacing: .16em;
+      text-transform: uppercase;
+    }
+    h1, h2, h3 { font-family: Georgia, "Times New Roman", serif; }
+    h1 {
+      position: relative;
+      z-index: 1;
+      margin: 7px 0 13px;
+      color: var(--forest-deep);
+      font-size: clamp(44px, 9vw, 76px);
+      line-height: .98;
+      letter-spacing: -.035em;
+    }
+    .lede {
+      position: relative;
+      z-index: 1;
+      max-width: 570px;
+      margin: 0 auto 24px;
+      color: var(--forest);
+      font-size: clamp(16px, 2.5vw, 20px);
+    }
+    .button-row { position: relative; z-index: 1; display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; }
+    .primary, .secondary, .icon-button {
+      border-radius: 999px;
+      padding: 10px 17px;
+      font-weight: 850;
+      transition: transform .16s ease, box-shadow .16s ease, background .16s ease;
+    }
+    .primary { border: 1px solid var(--forest-deep); color: white; background: var(--forest-deep); box-shadow: 0 8px 18px rgba(41, 69, 50, .2); }
+    .secondary { border: 1px solid rgba(58, 46, 37, .18); color: var(--forest-deep); background: rgba(255, 253, 248, .8); }
+    .primary:hover, .secondary:hover, .icon-button:hover { transform: translateY(-1px); }
+    .primary:focus-visible, .secondary:focus-visible, .icon-button:focus-visible, select:focus-visible { outline: 3px solid rgba(185, 104, 124, .42); outline-offset: 2px; }
+
+    .puzzle-dialog {
+      width: calc(100% - 16px);
+      max-width: none;
+      max-height: calc(100vh - 16px);
+      margin: auto;
+      border: 0;
+      padding: 0;
+      overflow: hidden;
+      border-radius: 24px;
+      color: var(--ink);
+      background: transparent;
+      box-shadow: var(--shadow);
+    }
+    .puzzle-dialog::backdrop { background: rgba(31, 47, 36, .75); backdrop-filter: blur(5px); }
+    .puzzle-shell { display: flex; height: calc(100vh - 16px); height: calc(100dvh - 16px); max-height: calc(100vh - 16px); flex-direction: column; background: var(--paper); }
+    .puzzle-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 11px 16px 10px;
+      border-bottom: 1px solid var(--line);
+      background: linear-gradient(135deg, #fffdf8, #f4ead5);
+    }
+    .puzzle-header h2 { margin: 2px 0 0; color: var(--forest-deep); font-size: clamp(24px, 3vw, 32px); line-height: 1.05; }
+    .puzzle-header p { margin: 3px 0 0; color: var(--ink-soft); font-size: 12px; }
+    .icon-button { flex: 0 0 auto; border: 1px solid var(--line); padding: 8px 12px; color: var(--forest-deep); background: var(--paper); }
+
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(245, 236, 217, .64);
+    }
+    .toolbar .secondary { padding: 7px 11px; font-size: 12px; }
+    .tablet-picker { display: flex; align-items: center; gap: 6px; color: var(--forest); font-size: 12px; font-weight: 800; }
+    .tablet-picker select { width: auto; border: 1px solid var(--line); border-radius: 9px; padding: 7px 28px 7px 9px; color: var(--ink); background: var(--paper); }
+    .progress-pill { margin-left: auto; border-radius: 999px; padding: 6px 11px; color: var(--forest-deep); background: rgba(113, 134, 107, .17); font-size: 12px; font-weight: 900; white-space: nowrap; }
+
+    .board-scroll { display: grid; flex: 1 1 auto; min-height: 0; place-items: center; overflow: hidden; padding: 10px; background: #ddd0b7; }
+    .board-wrap { width: 100%; height: 100%; min-width: 0; border: 1px solid rgba(41, 69, 50, .2); border-radius: 18px; overflow: hidden; background: #d4c6aa; box-shadow: inset 0 1px rgba(255, 255, 255, .5); }
+    #tablet-board { display: block; width: 100%; height: 100%; min-height: 0; touch-action: none; user-select: none; }
+    .tray-label, .frame-label { fill: #3d493c; font: 800 18px/1 ui-rounded, "Trebuchet MS", sans-serif; letter-spacing: .12em; text-transform: uppercase; }
+    .tray-help { fill: #6f675b; font: 14px/1 ui-rounded, "Trebuchet MS", sans-serif; }
+    .wood-frame { fill: url(#wood); stroke: #3a2e25; stroke-width: 7; }
+    .frame-bed { fill: url(#sand); stroke: rgba(58, 46, 37, .46); stroke-width: 3; }
+    .piece { cursor: grab; filter: url(#piece-shadow); transition: filter .16s ease; }
+    .piece:focus-visible { outline: none; }
+    .piece:hover, .piece.selected { filter: url(#selected-shadow); }
+    .piece.dragging { cursor: grabbing; }
+    .piece.locked { cursor: default; filter: url(#locked-glow); }
+    .stone-face { fill: url(#stone); stroke: #3b3933; stroke-width: 4; vector-effect: non-scaling-stroke; }
+    .piece.selected .stone-face { stroke: var(--rose-deep); stroke-width: 6; }
+    .piece.locked .stone-face { stroke: #617857; }
+    .stone-mark { fill: rgba(50, 61, 48, .5); font: 800 24px/1 Georgia, serif; text-anchor: middle; dominant-baseline: central; pointer-events: none; }
+    .piece.locked .stone-mark { opacity: .25; }
+
+    .status-bar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-height: 46px;
+      padding: 10px 18px;
+      border-top: 1px solid var(--line);
+      color: var(--ink-soft);
+      background: var(--paper);
+      font-size: 13px;
+    }
+    .status-rune { color: var(--gold); font-size: 19px; }
+    .success-message { color: var(--forest-deep); font-weight: 850; }
+
+    .info-popover {
+      width: min(430px, calc(100% - 24px));
+      max-height: min(650px, calc(100vh - 30px));
+      margin: auto;
+      border: 1px solid rgba(41, 69, 50, .19);
+      border-radius: 19px;
+      padding: 0;
+      overflow: auto;
+      color: var(--ink);
+      background: var(--paper);
+      box-shadow: var(--shadow);
+    }
+    .info-popover::backdrop { background: rgba(41, 69, 50, .22); }
+    .info-card { padding: 22px; }
+    .info-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
+    .info-heading h3 { margin: 0; color: var(--forest-deep); font-size: 25px; }
+    .info-card p, .info-card li { color: var(--ink-soft); }
+    .info-card ol, .info-card ul { padding-left: 21px; }
+    .info-card li + li { margin-top: 8px; }
+    .hint-card { margin-top: 10px; border-left: 4px solid var(--gold); border-radius: 9px; padding: 10px 12px; color: var(--forest-deep); background: var(--parchment); }
+    .hint-card[hidden] { display: none; }
+    .popover-fallback { position: fixed; inset: 50% auto auto 50%; z-index: 50; transform: translate(-50%, -50%); }
+    .popover-fallback[hidden] { display: none; }
+
+    .completion-flare { animation: completion-flare 1.3s ease both; }
+    @keyframes completion-flare { 0% { filter: brightness(1); } 45% { filter: brightness(1.35) drop-shadow(0 0 24px rgba(183, 149, 69, .8)); } 100% { filter: brightness(1); } }
+    @media (max-width: 720px) {
+      .landing { padding: 12px; }
+      .tablet-intro { border-radius: 20px; padding: 30px 21px; }
+      .puzzle-dialog { width: 100%; max-height: 100vh; border-radius: 0; }
+      .puzzle-shell { height: 100vh; height: 100dvh; max-height: 100vh; }
+      .puzzle-header { padding: 9px 11px; }
+      .puzzle-header p { display: none; }
+      .toolbar { padding: 6px 8px; }
+      .progress-pill { margin-left: 0; }
+      .board-scroll { padding: 5px; }
+      .status-bar { align-items: flex-start; }
+    }
+    @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; transition-duration: .01ms !important; } }
+  </style>
+</head>
+<body>
+  <main class="landing">
+    <section class="tablet-intro" aria-labelledby="page-title">
+      <span class="eyebrow">An ancient woodland mechanism</span>
+      <h1 id="page-title">Stone Tablets</h1>
+      <p class="lede">Eight weathered tablets rest beside a square wooden frame. Fit every piece inside without gaps or overlaps.</p>
+      <div class="button-row">
+        <button class="primary" id="open-puzzle" type="button">Approach the frame</button>
+        <button class="secondary" type="button" popovertarget="instructions-popover">How to play</button>
+      </div>
+    </section>
+  </main>
+
+  <dialog class="puzzle-dialog" id="puzzle-dialog" aria-labelledby="puzzle-title">
+    <div class="puzzle-shell">
+      <header class="puzzle-header">
+        <div>
+          <span class="eyebrow">Eight pieces · one perfect square</span>
+          <h2 id="puzzle-title">The tablet frame</h2>
+          <p>Drag a tablet, then rotate it until the old seams recognize one another.</p>
+        </div>
+        <button class="icon-button" id="close-puzzle" type="button" aria-label="Close puzzle">Close</button>
+      </header>
+
+      <div class="toolbar" aria-label="Puzzle controls">
+        <label class="tablet-picker">Select
+          <select id="piece-picker" aria-label="Select a stone tablet"></select>
+        </label>
+        <button class="secondary" id="rotate-piece" type="button">Rotate 45°</button>
+        <button class="secondary" id="check-frame" type="button">Check frame</button>
+        <button class="secondary" id="reset-puzzle" type="button">Scatter again</button>
+        <button class="secondary" id="fullscreen-puzzle" type="button">Full screen</button>
+        <button class="secondary" type="button" popovertarget="instructions-popover">Instructions</button>
+        <button class="secondary" type="button" popovertarget="hints-popover">Hints</button>
+        <span class="progress-pill" id="progress-pill">0 / 8 settled</span>
+      </div>
+
+      <div class="board-scroll">
+        <div class="board-wrap">
+          <svg id="tablet-board" viewBox="0 0 1280 760" role="application" aria-label="A pile of eight movable stone pieces beside a square wooden frame">
+            <defs>
+              <linearGradient id="stone" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0" stop-color="#b9b2a3"/>
+                <stop offset=".46" stop-color="#918d83"/>
+                <stop offset="1" stop-color="#77766e"/>
+              </linearGradient>
+              <pattern id="sand" width="34" height="34" patternUnits="userSpaceOnUse">
+                <rect width="34" height="34" fill="#c9bda4"/>
+                <circle cx="8" cy="10" r="1.3" fill="#9f947f" opacity=".55"/>
+                <circle cx="28" cy="22" r="1" fill="#e6dcc5" opacity=".8"/>
+                <path d="M1 29l8-2M20 6l7 3" stroke="#a69a83" stroke-width="1" opacity=".45"/>
+              </pattern>
+              <pattern id="wood" width="55" height="22" patternUnits="userSpaceOnUse">
+                <rect width="55" height="22" fill="#72513a"/>
+                <path d="M0 5c13 6 30-7 55 2M0 17c16-7 34 7 55-1" fill="none" stroke="#987358" stroke-width="3" opacity=".7"/>
+              </pattern>
+              <filter id="piece-shadow" x="-25%" y="-25%" width="150%" height="150%"><feDropShadow dx="0" dy="7" stdDeviation="6" flood-color="#302a24" flood-opacity=".32"/></filter>
+              <filter id="selected-shadow" x="-30%" y="-30%" width="160%" height="160%"><feDropShadow dx="0" dy="8" stdDeviation="8" flood-color="#8f4659" flood-opacity=".55"/></filter>
+              <filter id="locked-glow" x="-30%" y="-30%" width="160%" height="160%"><feDropShadow dx="0" dy="0" stdDeviation="7" flood-color="#d2b45f" flood-opacity=".7"/></filter>
+            </defs>
+
+            <rect x="18" y="18" width="585" height="724" rx="22" fill="url(#sand)" stroke="#9a8a6d" stroke-width="3"/>
+            <text class="tray-label" x="45" y="55">The scattered tablets</text>
+            <text class="tray-help" x="45" y="82">Drag · double-click or press R to rotate</text>
+
+            <rect class="wood-frame" x="625" y="55" width="650" height="650" rx="11"/>
+            <rect class="frame-bed" x="650" y="80" width="600" height="600"/>
+            <text class="frame-label" x="950" y="735" text-anchor="middle">The wooden frame</text>
+            <g id="locked-layer"></g>
+            <g id="piece-layer"></g>
+          </svg>
+        </div>
+      </div>
+
+      <footer class="status-bar" aria-live="polite">
+        <span class="status-rune" aria-hidden="true">✦</span>
+        <span id="puzzle-status">Choose a tablet and begin arranging the square.</span>
+      </footer>
+    </div>
+  </dialog>
+
+  <aside class="info-popover" id="instructions-popover" popover>
+    <div class="info-card">
+      <div class="info-heading">
+        <h3>How to arrange the stones</h3>
+        <button class="icon-button" type="button" popovertarget="instructions-popover" popovertargetaction="hide" aria-label="Close instructions">×</button>
+      </div>
+      <ol>
+        <li>Drag each tablet from the left-hand pile into the wooden frame.</li>
+        <li>Double-click, right-click, press <strong>R</strong>, or use the Rotate button to turn the selected tablet.</li>
+        <li>When a correctly oriented tablet reaches its old position, it settles and glows.</li>
+        <li>Place all eight tablets to complete a perfect square.</li>
+      </ol>
+      <p>Keyboard: choose a tablet, use the arrow keys to move it, hold Shift for smaller steps, and press R to rotate.</p>
+    </div>
+  </aside>
+
+  <aside class="info-popover" id="hints-popover" popover>
+    <div class="info-card">
+      <div class="info-heading">
+        <h3>Whispers in the stone</h3>
+        <button class="icon-button" type="button" popovertarget="hints-popover" popovertargetaction="hide" aria-label="Close hints">×</button>
+      </div>
+      <p>Reveal these only when the Dungeon Master grants a clue.</p>
+      <div class="hint-card" id="hint-1" hidden>The tablets are not making a picture. Together, their outer edges become one perfect square.</div>
+      <div class="hint-card" id="hint-2" hidden>Begin with a long straight edge against the wooden frame; the broad, shallow triangle knows the lower edge.</div>
+      <div class="hint-card" id="hint-3" hidden>The small diamond-shaped tablet rests near the upper middle of the finished square.</div>
+      <button class="primary" id="reveal-hint" type="button">Reveal a hint</button>
+    </div>
+  </aside>
+
+  <script>
+    (() => {
+      const dialog = document.getElementById('puzzle-dialog');
+      const svg = document.getElementById('tablet-board');
+      const pieceLayer = document.getElementById('piece-layer');
+      const lockedLayer = document.getElementById('locked-layer');
+      const picker = document.getElementById('piece-picker');
+      const status = document.getElementById('puzzle-status');
+      const progress = document.getElementById('progress-pill');
+      const boardOffset = { x: 650, y: 80 };
+      let selectedId = '';
+      let drag = null;
+      let hintCount = 0;
+
+      const pieces = [
+        { id: 'tablet-1', label: 'Tablet I', points: '0,0 300,0 150,150', center: [150, 50], start: [55, 95, 180] },
+        { id: 'tablet-2', label: 'Tablet II', points: '300,0 450,150 300,300 150,150', center: [300, 150], start: [-55, 195, 45] },
+        { id: 'tablet-3', label: 'Tablet III', points: '300,0 600,0 600,300', center: [500, 100], start: [-80, 145, 90] },
+        { id: 'tablet-4', label: 'Tablet IV', points: '450,150 600,300 600,600 300,300', center: [488, 338], start: [-180, 25, 180] },
+        { id: 'tablet-5', label: 'Tablet V', points: '0,0 0,300 140,360', center: [47, 220], start: [395, 95, 270] },
+        { id: 'tablet-6', label: 'Tablet VI', points: '0,0 190,190 140,360', center: [110, 183], start: [28, 345, 135] },
+        { id: 'tablet-7', label: 'Tablet VII', points: '0,300 0,600 450,450 190,190 140,360', center: [156, 380], start: [70, 12, 90] },
+        { id: 'tablet-8', label: 'Tablet VIII', points: '0,600 600,600 450,450', center: [350, 550], start: [-45, 90, 180] }
+      ];
+
+      function openDialog() {
+        if (typeof dialog.showModal === 'function') {
+          if (!dialog.open) dialog.showModal();
+        } else dialog.setAttribute('open', '');
+      }
+
+      function closeDialog() {
+        if (typeof dialog.close === 'function' && dialog.open) dialog.close();
+        else dialog.removeAttribute('open');
+      }
+
+      document.getElementById('open-puzzle').addEventListener('click', openDialog);
+      document.getElementById('close-puzzle').addEventListener('click', closeDialog);
+      dialog.addEventListener('click', event => { if (event.target === dialog) closeDialog(); });
+
+      function makeSvgElement(name, attributes = {}) {
+        const element = document.createElementNS('http://www.w3.org/2000/svg', name);
+        Object.entries(attributes).forEach(([key, value]) => element.setAttribute(key, String(value)));
+        return element;
+      }
+
+      function normalizedAngle(value) {
+        return ((Number(value) % 360) + 360) % 360;
+      }
+
+      function applyTransform(group) {
+        const piece = pieces.find(entry => entry.id === group.dataset.id);
+        group.setAttribute('transform', `translate(${group.dataset.x} ${group.dataset.y}) rotate(${group.dataset.angle} ${piece.center[0]} ${piece.center[1]})`);
+      }
+
+      function selectPiece(id) {
+        const group = document.querySelector(`[data-id="${id}"]`);
+        if (!group) return;
+        document.querySelectorAll('.piece').forEach(piece => piece.classList.toggle('selected', piece === group));
+        selectedId = id;
+        picker.value = id;
+        if (group.dataset.locked !== 'true') pieceLayer.appendChild(group);
+        group.focus({ preventScroll: true });
+        status.textContent = group.dataset.locked === 'true' ? `${group.getAttribute('aria-label')} is already settled.` : `${group.getAttribute('aria-label')} selected.`;
+      }
+
+      function svgPoint(event) {
+        const point = svg.createSVGPoint();
+        point.x = event.clientX;
+        point.y = event.clientY;
+        return point.matrixTransform(svg.getScreenCTM().inverse());
+      }
+
+      function movePiece(group, x, y) {
+        group.dataset.x = String(x);
+        group.dataset.y = String(y);
+        applyTransform(group);
+      }
+
+      function rotatePiece(group, amount = 45) {
+        if (!group || group.dataset.locked === 'true') return;
+        group.dataset.angle = String(normalizedAngle(Number(group.dataset.angle) + amount));
+        applyTransform(group);
+        status.textContent = `${group.getAttribute('aria-label')} rotated to ${group.dataset.angle}°.`;
+      }
+
+      function settleIfCorrect(group, announce = true) {
+        if (!group || group.dataset.locked === 'true') return false;
+        const distance = Math.hypot(Number(group.dataset.x) - boardOffset.x, Number(group.dataset.y) - boardOffset.y);
+        if (distance > 38 || normalizedAngle(group.dataset.angle) !== 0) return false;
+        group.dataset.x = String(boardOffset.x);
+        group.dataset.y = String(boardOffset.y);
+        group.dataset.angle = '0';
+        group.dataset.locked = 'true';
+        group.classList.add('locked');
+        group.classList.remove('selected');
+        group.setAttribute('aria-label', `${group.dataset.label}, settled correctly`);
+        applyTransform(group);
+        lockedLayer.appendChild(group);
+        selectedId = '';
+        updateProgress();
+        if (announce) status.textContent = `${group.dataset.label} settles into an ancient groove.`;
+        return true;
+      }
+
+      function updateProgress() {
+        const settled = document.querySelectorAll('.piece.locked').length;
+        progress.textContent = `${settled} / 8 settled`;
+        if (settled !== pieces.length) return;
+        status.classList.add('success-message');
+        status.textContent = 'The final seam vanishes. Green-gold light races through the completed square!';
+        svg.classList.add('completion-flare');
+        window.parent.postMessage({ type: 'humblewood:puzzle-complete', puzzleId: 'stone-tablets', name: 'Stone Tablets' }, '*');
+      }
+
+      function addPiece(piece) {
+        const group = makeSvgElement('g', {
+          class: 'piece',
+          tabindex: '0',
+          role: 'button',
+          'aria-label': `${piece.label}, movable stone`,
+          'data-id': piece.id,
+          'data-label': piece.label,
+          'data-x': piece.start[0],
+          'data-y': piece.start[1],
+          'data-angle': piece.start[2],
+          'data-locked': 'false'
+        });
+        group.appendChild(makeSvgElement('polygon', { class: 'stone-face', points: piece.points }));
+        const mark = makeSvgElement('text', { class: 'stone-mark', x: piece.center[0], y: piece.center[1] });
+        mark.textContent = piece.label.replace('Tablet ', '');
+        group.appendChild(mark);
+        applyTransform(group);
+
+        group.addEventListener('pointerdown', event => {
+          if (group.dataset.locked === 'true') return;
+          event.preventDefault();
+          selectPiece(piece.id);
+          const point = svgPoint(event);
+          drag = { id: piece.id, pointerId: event.pointerId, point, x: Number(group.dataset.x), y: Number(group.dataset.y) };
+          group.classList.add('dragging');
+          group.setPointerCapture(event.pointerId);
+        });
+        group.addEventListener('pointermove', event => {
+          if (!drag || drag.id !== piece.id || drag.pointerId !== event.pointerId) return;
+          const point = svgPoint(event);
+          movePiece(group, drag.x + point.x - drag.point.x, drag.y + point.y - drag.point.y);
+        });
+        group.addEventListener('pointerup', event => {
+          if (!drag || drag.id !== piece.id || drag.pointerId !== event.pointerId) return;
+          group.classList.remove('dragging');
+          if (group.hasPointerCapture(event.pointerId)) group.releasePointerCapture(event.pointerId);
+          drag = null;
+          if (!settleIfCorrect(group)) status.textContent = `${piece.label} rests loosely. The old seams do not answer yet.`;
+        });
+        group.addEventListener('pointercancel', () => { drag = null; group.classList.remove('dragging'); });
+        group.addEventListener('dblclick', event => { event.preventDefault(); rotatePiece(group); });
+        group.addEventListener('contextmenu', event => { event.preventDefault(); rotatePiece(group); });
+        group.addEventListener('focus', () => {
+          if (group.dataset.locked !== 'true') {
+            document.querySelectorAll('.piece').forEach(other => other.classList.toggle('selected', other === group));
+            selectedId = piece.id;
+            picker.value = piece.id;
+          }
+        });
+        group.addEventListener('keydown', event => {
+          if (group.dataset.locked === 'true') return;
+          const step = event.shiftKey ? 2 : 12;
+          const directions = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] };
+          if (directions[event.key]) {
+            event.preventDefault();
+            movePiece(group, Number(group.dataset.x) + directions[event.key][0], Number(group.dataset.y) + directions[event.key][1]);
+          } else if (event.key.toLowerCase() === 'r') {
+            event.preventDefault();
+            rotatePiece(group);
+          } else if (event.key === 'Enter') {
+            event.preventDefault();
+            if (!settleIfCorrect(group)) status.textContent = `${piece.label} is not aligned with its groove.`;
+          }
+        });
+        pieceLayer.appendChild(group);
+
+        const option = document.createElement('option');
+        option.value = piece.id;
+        option.textContent = piece.label;
+        picker.appendChild(option);
+      }
+
+      function resetPuzzle() {
+        drag = null;
+        status.classList.remove('success-message');
+        svg.classList.remove('completion-flare');
+        pieces.forEach(piece => {
+          const group = document.querySelector(`[data-id="${piece.id}"]`);
+          group.dataset.x = String(piece.start[0]);
+          group.dataset.y = String(piece.start[1]);
+          group.dataset.angle = String(piece.start[2]);
+          group.dataset.locked = 'false';
+          group.classList.remove('locked', 'selected', 'dragging');
+          group.setAttribute('aria-label', `${piece.label}, movable stone`);
+          applyTransform(group);
+          pieceLayer.appendChild(group);
+        });
+        selectedId = pieces[0].id;
+        picker.value = selectedId;
+        updateProgress();
+        status.textContent = 'The eight tablets scatter across the work surface.';
+      }
+
+      pieces.forEach(addPiece);
+      selectedId = pieces[0].id;
+      picker.value = selectedId;
+      picker.addEventListener('change', () => selectPiece(picker.value));
+      document.getElementById('rotate-piece').addEventListener('click', () => rotatePiece(document.querySelector(`[data-id="${selectedId}"]`)));
+      document.getElementById('check-frame').addEventListener('click', () => {
+        const newlySettled = [...document.querySelectorAll('.piece:not(.locked)')].filter(piece => settleIfCorrect(piece, false)).length;
+        if (document.querySelectorAll('.piece.locked').length === pieces.length) return;
+        status.textContent = newlySettled ? `${newlySettled} tablet${newlySettled === 1 ? '' : 's'} settle into place.` : 'The frame remains silent. Some tablets are still misplaced or turned.';
+      });
+      document.getElementById('reset-puzzle').addEventListener('click', resetPuzzle);
+      const fullscreenButton = document.getElementById('fullscreen-puzzle');
+      if (typeof document.documentElement.requestFullscreen !== 'function') fullscreenButton.hidden = true;
+      else {
+        fullscreenButton.addEventListener('click', async () => {
+          try {
+            if (document.fullscreenElement) await document.exitFullscreen();
+            else await document.documentElement.requestFullscreen();
+          } catch {
+            status.textContent = 'Full screen is not available in this browser.';
+          }
+        });
+        document.addEventListener('fullscreenchange', () => {
+          fullscreenButton.textContent = document.fullscreenElement ? 'Exit full screen' : 'Full screen';
+        });
+      }
+      document.getElementById('reveal-hint').addEventListener('click', event => {
+        hintCount = Math.min(3, hintCount + 1);
+        document.getElementById(`hint-${hintCount}`).hidden = false;
+        if (hintCount === 3) {
+          event.currentTarget.disabled = true;
+          event.currentTarget.textContent = 'All hints revealed';
+        } else event.currentTarget.textContent = 'Reveal another hint';
+      });
+
+      if (typeof HTMLElement.prototype.showPopover !== 'function') {
+        document.querySelectorAll('[popover]').forEach(popover => {
+          popover.removeAttribute('popover');
+          popover.hidden = true;
+          popover.classList.add('popover-fallback');
+        });
+        document.querySelectorAll('[popovertarget]').forEach(button => {
+          button.addEventListener('click', event => {
+            event.stopPropagation();
+            const popover = document.getElementById(button.getAttribute('popovertarget'));
+            const hide = button.getAttribute('popovertargetaction') === 'hide';
+            document.querySelectorAll('.popover-fallback').forEach(other => { if (other !== popover) other.hidden = true; });
+            popover.hidden = hide ? true : !popover.hidden;
+          });
+        });
+        document.addEventListener('keydown', event => {
+          if (event.key === 'Escape') document.querySelectorAll('.popover-fallback').forEach(popover => { popover.hidden = true; });
+        });
+      }
+
+      requestAnimationFrame(openDialog);
+    })();
+  </script>
+</body>
+</html>

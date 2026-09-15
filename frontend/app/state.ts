@@ -66,6 +66,7 @@ let lastPointerSentAt = 0;
 let draggedInitiativeId = null;
 let libraryCurrentFolderId = 'all';
 let sharedHandoutRenderKey = '';
+let dismissedSharedHandoutKey = '';
 let sharedHandoutTimer = null;
 let sharedHandoutContentRequest = 0;
 let shopPurchaseCharacterName = '';

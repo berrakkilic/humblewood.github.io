@@ -10,6 +10,7 @@ small enough to navigate and review.
 | Source | Responsibility |
 | --- | --- |
 | `state.ts` | Shared dependencies, state, and constants |
+| `ui/overlays.ts` | Reusable dismissible dialog and popover controllers, exposed as `window.HumblewoodOverlays` |
 | `session.ts` | Login, routing, socket synchronization, and account UI |
 | `map.ts` | Map tools, pan/zoom, fog, doodles, pointers, and pings |
 | `library.ts` | Handouts, folders, broadcasts, and shop bridge |

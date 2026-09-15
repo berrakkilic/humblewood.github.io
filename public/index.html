@@ -1005,8 +1005,8 @@
   </section>
 </div>
 
-<div class="shared-handout-overlay hidden" id="shared-handout-overlay" aria-hidden="true">
-  <section class="shared-handout-modal panel" role="dialog" aria-modal="true" aria-labelledby="shared-handout-title">
+<dialog class="shared-handout-overlay hidden" id="shared-handout-overlay" aria-hidden="true" aria-labelledby="shared-handout-title">
+  <section class="shared-handout-modal panel">
     <header class="shared-handout-header">
       <div>
         <span class="library-eyebrow">A handout from the Dungeon Master</span>
@@ -1015,11 +1015,12 @@
       <div class="shared-handout-header-actions">
         <span class="shared-handout-timer" id="shared-handout-timer" role="timer"></span>
         <button class="btn-ghost dm-only" id="shared-handout-stop-btn" type="button">Stop sharing</button>
+        <button class="btn-ghost" type="button" data-dialog-close="dismiss">Close</button>
       </div>
     </header>
     <div class="shared-handout-content" id="shared-handout-content"></div>
   </section>
-</div>
+</dialog>
 
 <div class="combat-overlay level-up-overlay hidden" id="level-up-overlay" aria-hidden="true">
   <section class="combat-modal panel level-up-modal" role="dialog" aria-modal="true" aria-labelledby="level-up-title">
