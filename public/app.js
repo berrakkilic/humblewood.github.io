@@ -672,6 +672,7 @@
   socket.on("pointer:move", renderSharedPointer);
   socket.on("pointer:hide", ({ id }) => removeSharedPointer(id));
   socket.on("pointer:ping", renderSharedPing);
+  let mapRenderReady = false;
   const mapUpload = document.getElementById("map-upload");
   mapUpload.onchange = async () => {
     const file = mapUpload.files[0];
@@ -681,6 +682,7 @@
   };
   function renderMap() {
     const img = document.getElementById("map-image");
+    const stage = document.getElementById("map-stage");
     const empty = document.getElementById("empty-map");
     const grid = document.getElementById("grid-overlay");
     const gridSize = Math.max(10, Number(state.scene.gridSize) || 50);
@@ -700,11 +702,17 @@
     if (!Array.isArray(state.scene.fogShapes)) state.scene.fogShapes = [];
     updateMapPermissionControls();
     applyMapTransform();
+    mapRenderReady = false;
+    img.style.display = "none";
+    img.style.visibility = "hidden";
+    stage.classList.toggle("map-loading", myRole === "player" && !!state.scene.mapUrl && !!state.scene.fogEnabled);
+    renderMapTokens();
     if (state.scene.mapUrl) {
       const sizeMapStage = () => {
-        const stage = document.getElementById("map-stage");
-        stage.style.width = img.naturalWidth + "px";
-        stage.style.height = img.naturalHeight + "px";
+        if (state?.scene?.mapUrl !== requestedMapUrl) return;
+        const stage2 = document.getElementById("map-stage");
+        stage2.style.width = img.naturalWidth + "px";
+        stage2.style.height = img.naturalHeight + "px";
         img.style.width = img.naturalWidth + "px";
         img.style.height = img.naturalHeight + "px";
         const canvas = document.getElementById("doodle-canvas");
@@ -715,20 +723,35 @@
         fogCanvas.height = img.naturalHeight;
         redrawAllDoodles();
         renderFog();
+        mapRenderReady = true;
+        img.style.display = "block";
+        img.style.visibility = "visible";
+        stage2.classList.remove("map-loading");
         renderMapTokens();
         if (lastFittedMapUrl !== state.scene.mapUrl) {
           lastFittedMapUrl = state.scene.mapUrl;
           fitMapToViewport();
         }
       };
+      const requestedMapUrl = state.scene.mapUrl;
       img.onload = sizeMapStage;
+      img.onerror = () => {
+        if (state?.scene?.mapUrl !== requestedMapUrl) return;
+        mapRenderReady = false;
+        stage.classList.remove("map-loading");
+        img.style.display = "none";
+        img.style.visibility = "hidden";
+        empty.style.display = "flex";
+        renderMapTokens();
+      };
       img.src = state.scene.mapUrl;
-      img.style.display = "block";
       empty.style.display = "none";
       if (img.complete && img.naturalWidth) sizeMapStage();
     } else {
       lastFittedMapUrl = null;
       img.style.display = "none";
+      img.style.visibility = "hidden";
+      stage.classList.remove("map-loading");
       empty.style.display = "flex";
       renderFog();
       renderMapTokens();
@@ -737,6 +760,7 @@
   function renderMapTokens() {
     document.querySelectorAll(".token-on-map").forEach((el) => el.remove());
     const stage = document.getElementById("map-stage");
+    if (!mapRenderReady) return;
     const current = currentInitiativeEntry();
     state.tokens.forEach((t) => {
       if (myRole === "player" && t.visibleToPlayers === false) return;

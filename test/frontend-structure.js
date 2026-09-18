@@ -12,7 +12,9 @@ const sheetEditorCss = fs.readFileSync(path.join(projectRoot, 'public', 'sheet-e
 const favicon = fs.readFileSync(path.join(projectRoot, 'public', 'favicon.svg'), 'utf8');
 const stoneTablets = fs.readFileSync(path.join(projectRoot, 'public', 'handouts', 'stone-tablets.html'), 'utf8');
 const reactionSource = fs.readFileSync(path.join(projectRoot, 'frontend', 'app', 'characters', 'reactions.ts'), 'utf8');
+const mapSource = fs.readFileSync(path.join(projectRoot, 'frontend', 'app', 'map.ts'), 'utf8');
 const roomSource = fs.readFileSync(path.join(projectRoot, 'src', 'server', 'room.js'), 'utf8');
+const styleCss = fs.readFileSync(path.join(projectRoot, 'public', 'style.css'), 'utf8');
 
 assert.strictEqual(sourceFiles.length, 18, 'The frontend manifest should include every feature and bootstrap file.');
 assert.match(bundle, /^\/\/ GENERATED FILE/, 'public/app.js must be generated from the TypeScript sources.');
@@ -21,6 +23,11 @@ assert.ok(bundle.lastIndexOf('socket.connect()') > bundle.lastIndexOf('initializ
 assert.ok(bundle.lastIndexOf('socket.connect()') > bundle.lastIndexOf('initializeReactionPresetControls()'), 'Reaction presets must initialize before the socket connects.');
 assert.match(bundle, /function openSpellPreparation\(/, 'The generated app is missing spell preparation.');
 assert.match(bundle, /function renderMap\(/, 'The generated app is missing the map feature.');
+assert.match(mapSource, /let mapRenderReady = false;/, 'Map rendering should gate content until the image and fog are ready.');
+assert.match(mapSource, /stage\.classList\.toggle\('map-loading'/, 'Player map loading should activate a concealment cover.');
+assert.match(mapSource, /if \(!mapRenderReady\) return;/, 'Map tokens must wait for the map render to be ready.');
+assert.match(styleCss, /#map-stage\.map-loading::after/, 'The map needs a loading concealment layer.');
+assert.match(indexHtml, /id="map-image"[^>]+style="display:none;visibility:hidden;"/, 'The map image should start hidden until its concealment layer is ready.');
 assert.match(indexHtml, /id="combat-reactions"/, 'The Fight tab needs a reactions list.');
 assert.match(indexHtml, /id="combat-reaction-refresh-btn"/, 'The Fight tab needs a reaction refresh control.');
 assert.match(bundle, /function renderCombatReactions\(/, 'The generated app is missing Fight tab reaction cards.');

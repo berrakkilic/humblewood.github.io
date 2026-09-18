@@ -429,6 +429,14 @@ body[data-role="dm"] .token-tray.dm-detailed .token-list-details { display: flex
 #map-stage.measuring { cursor: crosshair; }
 #map-stage.pinging { cursor: cell; }
 #map-stage.fog-editing { cursor: crosshair; }
+#map-stage.map-loading::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  pointer-events: none;
+  background: rgb(18, 23, 19);
+}
 #map-image { position: absolute; top: 0; left: 0; z-index: 0; user-select: none; pointer-events: none; }
 #empty-map { touch-action: none; }
 #doodle-canvas { position: absolute; top: 0; left: 0; z-index: 2; touch-action: none; }

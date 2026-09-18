@@ -1,6 +1,7 @@
 /** Map rendering, token positioning, gestures, grid, fog, doodles, pointers, and zoom. */
-
 // ================= MAP =================
+// Gate map content until image dimensions and fog are ready, preventing a refresh flash.
+let mapRenderReady = false;
 const mapUpload = document.getElementById('map-upload');
 mapUpload.onchange = async () => {
   const file = mapUpload.files[0];
@@ -8,9 +9,9 @@ mapUpload.onchange = async () => {
   const url = await uploadFile(file);
   socket.emit('scene:setMap', { mapUrl: url, mapName: file.name });
 };
-
 function renderMap() {
   const img = document.getElementById('map-image');
+  const stage = document.getElementById('map-stage');
   const empty = document.getElementById('empty-map');
   const grid = document.getElementById('grid-overlay');
   const gridSize = Math.max(10, Number(state.scene.gridSize) || 50);
@@ -32,8 +33,13 @@ function renderMap() {
   if (!Array.isArray(state.scene.fogShapes)) state.scene.fogShapes = [];
   updateMapPermissionControls();
   applyMapTransform();
+  // Hide the old image before loading the next one; players get a CSS cover until fog is painted.
+  mapRenderReady = false; img.style.display = 'none'; img.style.visibility = 'hidden';
+  stage.classList.toggle('map-loading', myRole === 'player' && !!state.scene.mapUrl && !!state.scene.fogEnabled);
+  renderMapTokens();
   if (state.scene.mapUrl) {
     const sizeMapStage = () => {
+      if (state?.scene?.mapUrl !== requestedMapUrl) return;
       const stage = document.getElementById('map-stage');
       stage.style.width = img.naturalWidth + 'px';
       stage.style.height = img.naturalHeight + 'px';
@@ -47,29 +53,37 @@ function renderMap() {
       fogCanvas.height = img.naturalHeight;
       redrawAllDoodles();
       renderFog();
+      mapRenderReady = true;
+      img.style.display = 'block'; img.style.visibility = 'visible'; stage.classList.remove('map-loading');
       renderMapTokens();
       if (lastFittedMapUrl !== state.scene.mapUrl) {
         lastFittedMapUrl = state.scene.mapUrl;
         fitMapToViewport();
       }
     };
+    const requestedMapUrl = state.scene.mapUrl;
     img.onload = sizeMapStage;
+    img.onerror = () => {
+      if (state?.scene?.mapUrl !== requestedMapUrl) return;
+      mapRenderReady = false; stage.classList.remove('map-loading');
+      img.style.display = 'none'; img.style.visibility = 'hidden'; empty.style.display = 'flex'; renderMapTokens();
+    };
     img.src = state.scene.mapUrl;
-    img.style.display = 'block';
     empty.style.display = 'none';
     if (img.complete && img.naturalWidth) sizeMapStage();
   } else {
     lastFittedMapUrl = null;
-    img.style.display = 'none';
+    img.style.display = 'none'; img.style.visibility = 'hidden';
+    stage.classList.remove('map-loading');
     empty.style.display = 'flex';
     renderFog();
     renderMapTokens();
   }
 }
-
 function renderMapTokens() {
   document.querySelectorAll('.token-on-map').forEach(el => el.remove());
   const stage = document.getElementById('map-stage');
+  if (!mapRenderReady) return;
   const current = currentInitiativeEntry();
   state.tokens.forEach(t => {
     if (myRole === 'player' && t.visibleToPlayers === false) return;
@@ -965,7 +979,6 @@ function removeSharedPointer(id) {
   clearTimeout(pointerFadeTimers.get(id));
   pointerFadeTimers.delete(id);
 }
-
 function findSharedPointer(id) {
   return [...document.querySelectorAll('.shared-pointer')]
     .find(pointer => pointer.dataset.pointerId === String(id));
