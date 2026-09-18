@@ -71,6 +71,8 @@ assert.match(stoneTablets, /id="fullscreen-puzzle"/, 'The Stone Tablets handout 
 assert.match(bundle, /setAttribute\("allowfullscreen", ""\)/, 'HTML handouts should be allowed to enter full screen.');
 assert.match(stoneTablets, /humblewood:puzzle-complete/, 'The Stone Tablets handout should report completion to its host.');
 assert.strictEqual((stoneTablets.match(/id: 'tablet-\d'/g) || []).length, 8, 'The Stone Tablets puzzle should contain eight movable pieces.');
+assert.match(stoneTablets, /id="moth-paint"/, 'The completed Stone Tablets puzzle should reveal a moth painting.');
+assert.match(stoneTablets, /moth-clip-\$\{piece\.id\}/, 'Each tablet should carry its clipped fragment of the moth painting.');
 assert.doesNotMatch(stoneTablets, /(?:src|href)="https?:\/\//, 'The Stone Tablets handout must remain self-contained.');
 
 for (const relativeFile of sourceFiles) {

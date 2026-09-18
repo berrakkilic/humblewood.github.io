@@ -157,11 +157,16 @@
     .piece:hover, .piece.selected { filter: url(#selected-shadow); }
     .piece.dragging { cursor: grabbing; }
     .piece.locked { cursor: default; filter: url(#locked-glow); }
-    .stone-face { fill: url(#stone); stroke: #3b3933; stroke-width: 4; vector-effect: non-scaling-stroke; }
-    .piece.selected .stone-face { stroke: var(--rose-deep); stroke-width: 6; }
-    .piece.locked .stone-face { stroke: #617857; }
+    .stone-face { fill: url(#stone); }
+    .stone-outline { fill: none; stroke: #3b3027; stroke-width: 4; vector-effect: non-scaling-stroke; }
+    .moth-fragment { opacity: .86; pointer-events: none; transition: opacity .28s ease, filter .28s ease; }
+    .piece.selected .stone-outline { stroke: var(--rose-deep); stroke-width: 6; }
+    .piece.locked .stone-outline { stroke: #617857; }
+    .piece.locked .moth-fragment { opacity: .95; }
     .stone-mark { fill: rgba(50, 61, 48, .5); font: 800 24px/1 Georgia, serif; text-anchor: middle; dominant-baseline: central; pointer-events: none; }
     .piece.locked .stone-mark { opacity: .25; }
+    #tablet-board.puzzle-complete .moth-fragment { opacity: 1; filter: drop-shadow(0 0 8px rgba(255, 250, 224, .72)); }
+    #tablet-board.puzzle-complete .stone-mark { opacity: .08; }
 
     .status-bar {
       display: flex;
@@ -223,7 +228,7 @@
     <section class="tablet-intro" aria-labelledby="page-title">
       <span class="eyebrow">An ancient woodland mechanism</span>
       <h1 id="page-title">Stone Tablets</h1>
-      <p class="lede">Eight weathered tablets rest beside a square wooden frame. Fit every piece inside without gaps or overlaps.</p>
+      <p class="lede">Eight weathered wooden tablets rest beside a square frame. Fit every piece inside without gaps or overlaps.</p>
       <div class="button-row">
         <button class="primary" id="open-puzzle" type="button">Approach the frame</button>
         <button class="secondary" type="button" popovertarget="instructions-popover">How to play</button>
@@ -259,11 +264,26 @@
         <div class="board-wrap">
           <svg id="tablet-board" viewBox="0 0 1280 760" role="application" aria-label="A pile of eight movable stone pieces beside a square wooden frame">
             <defs>
-              <linearGradient id="stone" x1="0" y1="0" x2="1" y2="1">
-                <stop offset="0" stop-color="#b9b2a3"/>
-                <stop offset=".46" stop-color="#918d83"/>
-                <stop offset="1" stop-color="#77766e"/>
-              </linearGradient>
+              <pattern id="stone" width="96" height="64" patternUnits="userSpaceOnUse">
+                <rect width="96" height="64" fill="#a77d55"/>
+                <path d="M-8 13C17 1 43 23 104 8M-15 42C28 25 52 54 110 34M8 61C35 46 67 68 93 54" fill="none" stroke="#c69a6d" stroke-width="5" opacity=".55"/>
+                <path d="M-8 20C22 8 47 29 104 15M-12 49C31 34 56 60 108 42" fill="none" stroke="#79583d" stroke-width="2" opacity=".46"/>
+                <ellipse cx="25" cy="17" rx="8" ry="3" fill="none" stroke="#765239" stroke-width="2" opacity=".35"/>
+              </pattern>
+              <g id="moth-paint" fill="#fffdf2" stroke="#eee3cb" stroke-linejoin="round">
+                <path d="M287 251C263 174 194 101 84 91C103 185 164 265 279 307C263 286 266 267 287 251Z" stroke-width="5"/>
+                <path d="M313 251C337 174 406 101 516 91C497 185 436 265 321 307C337 286 334 267 313 251Z" stroke-width="5"/>
+                <path d="M280 300C198 276 117 318 79 434C148 413 181 494 269 450C291 402 292 348 280 300Z" stroke-width="5"/>
+                <path d="M320 300C402 276 483 318 521 434C452 413 419 494 331 450C309 402 308 348 320 300Z" stroke-width="5"/>
+                <path d="M300 190C277 214 280 255 289 287C275 339 278 439 300 536C322 439 325 339 311 287C320 255 323 214 300 190Z" fill="#f7efd9" stroke-width="5"/>
+                <circle cx="300" cy="207" r="22" fill="#fffdf2" stroke-width="5"/>
+                <path d="M293 199C273 158 244 138 215 126M307 199C327 158 356 138 385 126" fill="none" stroke="#fffdf2" stroke-linecap="round" stroke-width="9"/>
+                <path d="M259 190C220 164 175 146 127 137M341 190C380 164 425 146 473 137M244 342C191 341 145 365 111 405M356 342C409 341 455 365 489 405" fill="none" stroke="#e6d9bd" stroke-linecap="round" stroke-width="8" opacity=".82"/>
+                <circle cx="188" cy="213" r="13" fill="#e9dec6" stroke="none"/>
+                <circle cx="412" cy="213" r="13" fill="#e9dec6" stroke="none"/>
+                <circle cx="177" cy="385" r="15" fill="#e9dec6" stroke="none"/>
+                <circle cx="423" cy="385" r="15" fill="#e9dec6" stroke="none"/>
+              </g>
               <pattern id="sand" width="34" height="34" patternUnits="userSpaceOnUse">
                 <rect width="34" height="34" fill="#c9bda4"/>
                 <circle cx="8" cy="10" r="1.3" fill="#9f947f" opacity=".55"/>
@@ -322,7 +342,7 @@
         <button class="icon-button" type="button" popovertarget="hints-popover" popovertargetaction="hide" aria-label="Close hints">×</button>
       </div>
       <p>Reveal these only when the Dungeon Master grants a clue.</p>
-      <div class="hint-card" id="hint-1" hidden>The tablets are not making a picture. Together, their outer edges become one perfect square.</div>
+      <div class="hint-card" id="hint-1" hidden>The pale brushstrokes belong to one picture. Their broken lines meet only when the tablets form a perfect square.</div>
       <div class="hint-card" id="hint-2" hidden>Begin with a long straight edge against the wooden frame; the broad, shallow triangle knows the lower edge.</div>
       <div class="hint-card" id="hint-3" hidden>The small diamond-shaped tablet rests near the upper middle of the finished square.</div>
       <button class="primary" id="reveal-hint" type="button">Reveal a hint</button>
@@ -439,7 +459,8 @@
         progress.textContent = `${settled} / 8 settled`;
         if (settled !== pieces.length) return;
         status.classList.add('success-message');
-        status.textContent = 'The final seam vanishes. Green-gold light races through the completed square!';
+        status.textContent = 'The final seam vanishes. The white markings join into a great moth, its wings aglow!';
+        svg.classList.add('puzzle-complete');
         svg.classList.add('completion-flare');
         window.parent.postMessage({ type: 'humblewood:puzzle-complete', puzzleId: 'stone-tablets', name: 'Stone Tablets' }, '*');
       }
@@ -458,6 +479,14 @@
           'data-locked': 'false'
         });
         group.appendChild(makeSvgElement('polygon', { class: 'stone-face', points: piece.points }));
+        const clipId = `moth-clip-${piece.id}`;
+        const clip = makeSvgElement('clipPath', { id: clipId, clipPathUnits: 'userSpaceOnUse' });
+        clip.appendChild(makeSvgElement('polygon', { points: piece.points }));
+        svg.querySelector('defs').appendChild(clip);
+        const mothFragment = makeSvgElement('g', { class: 'moth-fragment', 'clip-path': `url(#${clipId})` });
+        mothFragment.appendChild(makeSvgElement('use', { href: '#moth-paint' }));
+        group.appendChild(mothFragment);
+        group.appendChild(makeSvgElement('polygon', { class: 'stone-outline', points: piece.points }));
         const mark = makeSvgElement('text', { class: 'stone-mark', x: piece.center[0], y: piece.center[1] });
         mark.textContent = piece.label.replace('Tablet ', '');
         group.appendChild(mark);
@@ -520,6 +549,7 @@
       function resetPuzzle() {
         drag = null;
         status.classList.remove('success-message');
+        svg.classList.remove('puzzle-complete');
         svg.classList.remove('completion-flare');
         pieces.forEach(piece => {
           const group = document.querySelector(`[data-id="${piece.id}"]`);
