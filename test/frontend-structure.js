@@ -43,6 +43,7 @@ assert.match(indexHtml, /id="combat-damage-type"/, 'Combat damage needs a type s
 assert.match(indexHtml, /id="doodle-corner"/, 'The map needs a player doodle corner.');
 assert.match(indexHtml, /id="doodle-corner-canvas"/, 'The player doodle corner needs its own canvas.');
 assert.match(indexHtml, /id="doodle-corner-toggle"/, 'The doodle corner needs an open/close button.');
+assert.match(indexHtml, /id="doodle-corner-toggle"[^>]*>Doodle corner/, 'The doodle corner button must be outside the gated map-doodle tools.');
 assert.match(indexHtml, /id="doodle-corner-eraser-btn"/, 'The doodle corner needs an eraser mode.');
 assert.doesNotMatch(indexHtml, /Shared sketch space/, 'The doodle corner should not show redundant helper text.');
 assert.doesNotMatch(indexHtml, />Map marks</, 'The map toolbar should not label its drawing controls as a doodle corner.');
