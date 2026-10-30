@@ -1367,6 +1367,9 @@ body[data-role="player"] .dm-only { display: none !important; }
 .combat-adjust-row { display: grid; grid-template-columns: auto 90px auto minmax(135px, auto) repeat(3, minmax(110px, auto)); align-items: center; gap: 8px; margin-bottom: 16px; }
 .combat-adjust-row label { font-size: 12px; color: var(--forest); font-weight: 700; }
 .combat-adjust-row .btn-primary { width: auto; padding: 9px 14px; }
+.stored-track-list { display: flex; flex-direction: column; gap: 5px; margin-top: 8px; }
+.stored-track-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 8px; border-radius: 8px; background: var(--parchment-dark); color: var(--ink-soft); font-size: 12px; }
+.stored-track-row button { width: auto; padding: 5px 8px; font-size: 11px; }
 .combat-rolls-section { margin-bottom: 14px; }
 .combat-roll-mode { display: flex; align-items: center; gap: 7px; color: var(--forest); font-size: 12px; font-weight: 700; }
 .combat-roll-mode select { width: auto; padding: 6px 28px 6px 9px; font-size: 12px; }

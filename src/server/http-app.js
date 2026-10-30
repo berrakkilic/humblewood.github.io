@@ -102,6 +102,14 @@ function createHttpApp(config, getRoom = () => null) {
   const app = express();
   const authAttempts = new Map();
 
+  async function dmIdentity(req) {
+    const room = getRoom();
+    const token = cookieValue(req.headers.cookie, AUTH_COOKIE_NAME);
+    if (!room || !token) return null;
+    const identity = await room.authSessionIdentity(token);
+    return identity?.role === 'dm' ? { room, identity } : null;
+  }
+
   app.set('trust proxy', config.proxyTrust);
   app.use(express.json());
   app.use(express.static(config.publicDir));
@@ -238,6 +246,40 @@ function createHttpApp(config, getRoom = () => null) {
     // Continue listing them so existing campaigns are not broken by the move.
     const legacy = listMp3Tracks(config.uploadDir, '/uploads', 'Server (legacy)');
     res.json({ tracks: [...stored, ...legacy].sort((a, b) => a.title.localeCompare(b.title)) });
+  });
+
+  app.delete('/api/music/:source/:filename', async (req, res) => {
+    try {
+      const access = await dmIdentity(req);
+      if (!access) return res.status(403).json({ error: 'Only the Dungeon Master can delete stored tracks.' });
+      const source = req.params.source === 'music' ? 'music' : req.params.source === 'uploads' ? 'uploads' : '';
+      const filename = decodeURIComponent(req.params.filename || '');
+      if (!source || path.basename(filename) !== filename || path.extname(filename).toLowerCase() !== '.mp3') {
+        return res.status(400).json({ error: 'That stored track cannot be deleted.' });
+      }
+      const directory = source === 'music' ? config.musicDir : config.uploadDir;
+      const filePath = path.join(directory, filename);
+      if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'That stored track no longer exists.' });
+      fs.unlinkSync(filePath);
+      const url = `/${source}/${encodeURIComponent(filename)}`;
+      const jukebox = access.room.state.jukebox;
+      const removedIndex = jukebox.playlist.findIndex(track => track.url === url);
+      jukebox.playlist = jukebox.playlist.filter(track => track.url !== url);
+      if (removedIndex >= 0) {
+        if (jukebox.currentIndex === removedIndex) {
+          jukebox.currentIndex = jukebox.playlist.length ? Math.min(removedIndex, jukebox.playlist.length - 1) : -1;
+          jukebox.isPlaying = false;
+          jukebox.seek = 0;
+        } else if (removedIndex < jukebox.currentIndex) {
+          jukebox.currentIndex -= 1;
+        }
+      }
+      access.room.persistState();
+      access.room.io.emit('jukebox:update', jukebox);
+      return res.json({ ok: true, url });
+    } catch (error) {
+      return res.status(500).json({ error: 'The stored track could not be deleted.' });
+    }
   });
 
   // History API fallback for every client-side page. This makes refreshes and

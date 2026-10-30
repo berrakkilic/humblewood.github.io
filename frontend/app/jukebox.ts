@@ -49,11 +49,36 @@ window.addEventListener('storage', event => {
 
 function renderMusicTrackOptions() {
   trackPresetSelect.innerHTML = '<option value="">Choose an existing track…</option>';
+  const storedList = document.getElementById('stored-track-list');
+  storedList.innerHTML = '';
+  if (!availableMusicTracks.length) {
+    storedList.textContent = 'No server tracks stored.';
+    return;
+  }
   availableMusicTracks.forEach((track, index) => {
     const option = document.createElement('option');
     option.value = String(index);
     option.textContent = `${track.title} · ${track.source}`;
     trackPresetSelect.appendChild(option);
+    const row = document.createElement('div');
+    row.className = 'stored-track-row';
+    row.innerHTML = `<span>${escapeHtml(track.title)}</span><button class="btn-danger-soft" type="button">Delete</button>`;
+    row.querySelector('button').onclick = async () => {
+      if (!confirm(`Delete ${track.title} from the server?`)) return;
+      const parts = track.url.split('/');
+      const source = parts[1];
+      const filename = parts.slice(2).join('/');
+      try {
+        const response = await fetch(`/api/music/${source}/${filename}`, { method: 'DELETE' });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(result.error || 'The track could not be deleted.');
+        await loadMusicTracks();
+        showToast('Track deleted from the server.');
+      } catch (error) {
+        alert(error.message || 'The track could not be deleted.');
+      }
+    };
+    storedList.appendChild(row);
   });
 }
 

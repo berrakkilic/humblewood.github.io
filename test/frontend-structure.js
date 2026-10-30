@@ -71,7 +71,10 @@ assert.match(bundle, /reactionAvailable/, 'The frontend must track reaction avai
 assert.match(bundle, /function rollPopupText\(/, 'Roll popups should format the roller and roll label together.');
 assert.match(bundle, /rolled \$\{rollLabel\}: \$\{entry\.total\}/, 'Roll popups should identify who rolled what.');
 assert.match(indexHtml, /id="jukebox-volume"[^>]+type="range"/, 'The jukebox needs a per-device volume slider.');
+assert.match(indexHtml, /id="stored-track-list"/, 'The jukebox needs a stored-track management list.');
 assert.match(bundle, /humblewood:jukebox-volume/, 'The jukebox should persist the local volume preference.');
+assert.match(bundle, /\/api\/music\//, 'The jukebox must request stored-track deletion.');
+assert.match(bundle, /response\.json\(\)\.catch/, 'The jukebox must handle non-JSON delete failures cleanly.');
 assert.match(bundle, /audioEl\.volume = percent \/ 100/, 'The local volume preference should control the audio element.');
 assert.doesNotMatch(bundle, /socket\.emit\("jukebox:volume"/, 'Device volume must not be synchronized to other users.');
 assert.match(indexHtml, /<summary>Reactions<\/summary>/, 'The character sheet needs a dedicated reactions section.');
