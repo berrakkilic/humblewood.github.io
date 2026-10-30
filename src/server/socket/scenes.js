@@ -1,17 +1,58 @@
 function registerSceneHandlers(socket, room) {
   const {
     broadcastState, cleanDoodlePath, cleanFogShape, cloneJson, defaultState, deny,
-    doodleAuthorKey, emitNpcRoster, emitSavedScenes, emitSceneUpdate, isDm,
+    doodleAuthorKey, emitNpcRoster, emitSavedScenes, emitSceneUpdate, isDm, pointToSegmentDistance,
     markSceneDirty, normalizeToken, persistState, publicDoodlePath, setSceneDirty,
     snapCoordinateToCell, syncCharacterTokens, syncNpcRosterFromTokens
   } = room;
   const { io, state } = room;
+
+  function doodlePathsFor(layer) {
+    return layer === 'corner' ? state.scene.doodleCornerPaths : state.scene.doodlePaths;
+  }
+
+  function doodleHistoryFor(layer) {
+    if (!socket.data.doodleUndoHistory) socket.data.doodleUndoHistory = { map: [], corner: [] };
+    return socket.data.doodleUndoHistory[layer];
+  }
+
+  function rememberDoodleAction(layer, action) {
+    const history = doodleHistoryFor(layer);
+    history.push(cloneJson(action));
+    if (history.length > 100) history.shift();
+  }
+
+  function emitDoodleRedraw(layer) {
+    const paths = doodlePathsFor(layer);
+    io.emit(layer === 'corner' ? 'scene:doodleCorner:redrawAll' : 'scene:doodle:redrawAll', paths.map(publicDoodlePath));
+  }
+
+  function undoDoodleAction(layer) {
+    const action = doodleHistoryFor(layer).pop();
+    if (!action) return false;
+    const paths = doodlePathsFor(layer);
+    if (action.type === 'add') {
+      const index = paths.findIndex(path => path.id === action.path.id);
+      if (index >= 0) paths.splice(index, 1);
+    } else if (action.type === 'erase') {
+      if (!paths.some(path => path.id === action.path.id)) paths.splice(Math.min(action.index, paths.length), 0, action.path);
+    } else if (action.type === 'clear') {
+      action.paths.forEach(entry => {
+        if (!paths.some(path => path.id === entry.path.id)) paths.splice(Math.min(entry.index, paths.length), 0, entry.path);
+      });
+    }
+    markSceneDirty();
+    persistState();
+    emitDoodleRedraw(layer);
+    return true;
+  }
 
   socket.on('scene:setMap', ({ mapUrl, mapName } = {}) => {
     if (!isDm(socket)) return deny(socket, 'Only the Dungeon Master can change the map.');
     state.scene.mapUrl = String(mapUrl || '').slice(0, 1000) || null;
     state.scene.mapName = String(mapName || 'Map').slice(0, 140);
     state.scene.doodlePaths = [];
+    if (socket.data.doodleUndoHistory) socket.data.doodleUndoHistory.map = [];
     state.scene.fogShapes = [];
     markSceneDirty();
     persistState();
@@ -45,6 +86,15 @@ function registerSceneHandlers(socket, room) {
     markSceneDirty();
     persistState();
     broadcastState();
+  });
+
+  socket.on('scene:setTimeOfDay', ({ timeOfDay } = {}) => {
+    if (!isDm(socket)) return deny(socket, 'Only the Dungeon Master can change the time of day.');
+    if (!['morning', 'afternoon', 'night'].includes(timeOfDay)) return;
+    state.scene.timeOfDay = timeOfDay;
+    markSceneDirty();
+    persistState();
+    emitSceneUpdate();
   });
 
   socket.on('scene:save', ({ name } = {}) => {
@@ -158,6 +208,7 @@ function registerSceneHandlers(socket, room) {
     const doodlePath = cleanDoodlePath(requested, socket);
     if (!doodlePath) return;
     state.scene.doodlePaths.push(doodlePath);
+    rememberDoodleAction('map', { type: 'add', path: doodlePath });
     state.scene.doodlePaths = state.scene.doodlePaths.slice(-1000);
     markSceneDirty();
     persistState();
@@ -168,20 +219,32 @@ function registerSceneHandlers(socket, room) {
     if (!isDm(socket) && !(socket.data.identified && state.scene.playerDoodlingEnabled)) {
       return deny(socket, 'The Dungeon Master has not enabled player doodling for this scene.');
     }
-    if (isDm(socket)) {
-      state.scene.doodlePaths.pop();
-    } else {
-      const authorKey = doodleAuthorKey(socket);
-      let index = -1;
-      for (let i = state.scene.doodlePaths.length - 1; i >= 0; i -= 1) {
-        if (state.scene.doodlePaths[i].authorKey === authorKey) {
-          index = i;
-          break;
+    if (!undoDoodleAction('map')) return deny(socket, 'You do not have a drawing stroke or doodle action to undo.');
+  });
+
+  socket.on('scene:doodle:erase', ({ x, y } = {}) => {
+    if (!isDm(socket) && !(socket.data.identified && state.scene.playerDoodlingEnabled)) {
+      return deny(socket, 'The Dungeon Master has not enabled player doodling for this scene.');
+    }
+    const point = { x: Number(x), y: Number(y) };
+    if (!Number.isFinite(point.x) || !Number.isFinite(point.y)) return;
+    const authorKey = doodleAuthorKey(socket);
+    const maxDistance = 18;
+    let nearestIndex = -1;
+    let nearestDistance = maxDistance;
+    state.scene.doodlePaths.forEach((path, index) => {
+      if (!isDm(socket) && path.authorKey !== authorKey) return;
+      for (let pointIndex = 1; pointIndex < path.points.length; pointIndex += 1) {
+        const distance = pointToSegmentDistance(point, path.points[pointIndex - 1], path.points[pointIndex]);
+        if (distance < nearestDistance) {
+          nearestDistance = distance;
+          nearestIndex = index;
         }
       }
-      if (index < 0) return deny(socket, 'You do not have a drawing stroke to undo.');
-      state.scene.doodlePaths.splice(index, 1);
-    }
+    });
+    if (nearestIndex < 0) return;
+    const [removed] = state.scene.doodlePaths.splice(nearestIndex, 1);
+    rememberDoodleAction('map', { type: 'erase', path: removed, index: nearestIndex });
     markSceneDirty();
     persistState();
     io.emit('scene:doodle:redrawAll', state.scene.doodlePaths.map(publicDoodlePath));
@@ -189,10 +252,79 @@ function registerSceneHandlers(socket, room) {
 
   socket.on('scene:doodle:clear', () => {
     if (!isDm(socket)) return deny(socket, 'Only the Dungeon Master can edit map drawings.');
+    rememberDoodleAction('map', {
+      type: 'clear',
+      paths: state.scene.doodlePaths.map((path, index) => ({ path, index }))
+    });
     state.scene.doodlePaths = [];
     markSceneDirty();
     persistState();
     io.emit('scene:doodle:clear');
+  });
+
+  socket.on('scene:doodleCorner:add', requested => {
+    if (!socket.data.identified) return deny(socket, 'You must be logged in to use the doodle corner.');
+    const doodlePath = cleanDoodlePath(requested, socket);
+    if (!doodlePath) return;
+    state.scene.doodleCornerPaths.push(doodlePath);
+    rememberDoodleAction('corner', { type: 'add', path: doodlePath });
+    state.scene.doodleCornerPaths = state.scene.doodleCornerPaths.slice(-500);
+    markSceneDirty();
+    persistState();
+    io.emit('scene:doodleCorner:add', publicDoodlePath(doodlePath));
+  });
+
+  socket.on('scene:doodleCorner:undo', () => {
+    if (!socket.data.identified) return deny(socket, 'You must be logged in to use the doodle corner.');
+    if (!undoDoodleAction('corner')) return deny(socket, 'You do not have a doodle action to undo.');
+  });
+
+  socket.on('scene:doodleCorner:erase', ({ x, y } = {}) => {
+    if (!socket.data.identified) return deny(socket, 'You must be logged in to use the doodle corner.');
+    const point = { x: Number(x), y: Number(y) };
+    if (!Number.isFinite(point.x) || !Number.isFinite(point.y)) return;
+    const authorKey = doodleAuthorKey(socket);
+    let nearestIndex = -1;
+    let nearestDistance = 18;
+    state.scene.doodleCornerPaths.forEach((path, index) => {
+      if (!isDm(socket) && path.authorKey !== authorKey) return;
+      for (let pointIndex = 1; pointIndex < path.points.length; pointIndex += 1) {
+        const distance = pointToSegmentDistance(point, path.points[pointIndex - 1], path.points[pointIndex]);
+        if (distance < nearestDistance) {
+          nearestDistance = distance;
+          nearestIndex = index;
+        }
+      }
+    });
+    if (nearestIndex < 0) return;
+    const [removed] = state.scene.doodleCornerPaths.splice(nearestIndex, 1);
+    rememberDoodleAction('corner', { type: 'erase', path: removed, index: nearestIndex });
+    markSceneDirty();
+    persistState();
+    io.emit('scene:doodleCorner:redrawAll', state.scene.doodleCornerPaths.map(publicDoodlePath));
+  });
+
+  socket.on('scene:doodleCorner:clear', () => {
+    if (!socket.data.identified) return deny(socket, 'You must be logged in to use the doodle corner.');
+    if (isDm(socket)) {
+      rememberDoodleAction('corner', {
+        type: 'clear',
+        paths: state.scene.doodleCornerPaths.map((path, index) => ({ path, index }))
+      });
+      state.scene.doodleCornerPaths = [];
+    } else {
+      const authorKey = doodleAuthorKey(socket);
+      const removed = [];
+      state.scene.doodleCornerPaths = state.scene.doodleCornerPaths.filter((path, index) => {
+        if (path.authorKey !== authorKey) return true;
+        removed.push({ path, index });
+        return false;
+      });
+      rememberDoodleAction('corner', { type: 'clear', paths: removed });
+    }
+    markSceneDirty();
+    persistState();
+    io.emit('scene:doodleCorner:redrawAll', state.scene.doodleCornerPaths.map(publicDoodlePath));
   });
 }
 

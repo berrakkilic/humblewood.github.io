@@ -27,6 +27,9 @@ function registerRollHandlers(socket, room) {
     if (payload.tokenId && !validCharacterToken && !validNpcToken) {
       return deny(socket, 'You cannot roll for that token.');
     }
+    if (character?.combat?.rage?.active && (payload.spell === true || /\bspell\b/i.test(String(payload.label || '')))) {
+      return deny(socket, 'You cannot cast spells while raging.');
+    }
 
     const count = Math.max(1, Math.min(20, Number(payload.count) || 1));
     const sides = Math.max(2, Math.min(1000, Number(payload.sides) || 20));

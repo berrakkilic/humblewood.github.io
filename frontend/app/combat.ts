@@ -86,6 +86,8 @@ function renderCombatManager() {
   document.getElementById('combat-temp-hp').textContent = Number(entity.tempHp) || 0;
   document.getElementById('combat-ac').textContent = Number(entity.ac) || 0;
   document.getElementById('combat-life-status').textContent = combat.dead ? 'Dead' : combat.stable ? 'Stable' : entity.hp <= 0 ? 'Down' : 'Ready';
+  renderCombatRage(entity, isNpc);
+  renderCombatMovement(entity, isNpc);
   const notes = document.getElementById('combat-notes');
   notes.classList.toggle('hidden', !isNpc || !entity.notes);
   notes.textContent = isNpc ? (entity.notes || '') : '';
@@ -98,7 +100,9 @@ function renderCombatManager() {
     : (preparesSpells ? 'Long rest & prepare spells' : 'Complete long rest');
   renderCombatRolls(entity, isNpc);
   renderCombatReactions(entity, isNpc);
-  document.getElementById('combat-concentration').checked = !!combat.concentration;
+  const concentration = document.getElementById('combat-concentration');
+  concentration.checked = !!combat.concentration;
+  concentration.disabled = !isNpc && !!combat.rage?.active;
   document.getElementById('combat-exhaustion').textContent = Number(combat.exhaustion) || 0;
   document.getElementById('combat-death-successes').textContent = `${Number(combat.deathSaves?.successes) || 0} / 3`;
   document.getElementById('combat-death-failures').textContent = `${Number(combat.deathSaves?.failures) || 0} / 3`;
@@ -119,14 +123,17 @@ function renderCombatManager() {
   Object.entries(combat.spellSlots || {}).filter(([, slot]) => Number(slot.total) > 0).forEach(([level, slot]) => {
     const row = document.createElement('div');
     row.className = 'combat-slot-row';
+    const total = Number(slot.total) || 0;
+    const used = Math.max(0, Math.min(total, Number(slot.used) || 0));
+    const available = total - used;
     row.innerHTML = `
       <span class="slot-level">Level ${level}</span>
-      <button class="counter-btn recover-slot" type="button" title="Recover one slot">−</button>
-      <strong>${Number(slot.total) - Number(slot.used)} / ${Number(slot.total)} available</strong>
-      <button class="counter-btn use-slot" type="button" title="Use one slot">+</button>
+      <button class="counter-btn deduct-slot" type="button" title="Deduct one available slot" ${available <= 0 ? 'disabled' : ''}>−</button>
+      <strong>${available} / ${total} available</strong>
+      <button class="counter-btn restore-slot" type="button" title="Restore one available slot" ${available >= total ? 'disabled' : ''}>+</button>
     `;
-    row.querySelector('.recover-slot').onclick = () => combatAction('spellSlot', { level: Number(level), delta: -1 });
-    row.querySelector('.use-slot').onclick = () => combatAction('spellSlot', { level: Number(level), delta: 1 });
+    row.querySelector('.deduct-slot').onclick = () => combatAction('spellSlot', { level: Number(level), delta: 1 });
+    row.querySelector('.restore-slot').onclick = () => combatAction('spellSlot', { level: Number(level), delta: -1 });
     slots.appendChild(row);
   });
   if (!slots.children.length) slots.innerHTML = '<p class="empty-roll-options">No spell slots are configured on this sheet.</p>';
@@ -135,6 +142,92 @@ function renderCombatManager() {
   const checkButton = document.getElementById('combat-concentration-roll');
   checkButton.classList.toggle('hidden', !check);
   if (check) checkButton.textContent = `Roll Constitution save · DC ${check.dc}`;
+}
+
+function renderCombatMovement(entity, isNpc = false) {
+  const container = document.getElementById('combat-movement');
+  if (!container) return;
+  const fields = isNpc ? (entity.sheet?.fields || {}) : (entity.fields || {});
+  const speed = entity.speed || fields.speed || entity.sheet?.speed || '';
+  const movementSources = [
+    fields['racial-traits'], fields.feats, fields.features,
+    entity.racialTraits, entity.feats, entity.features
+  ];
+  const movementPattern = /\b(speed|movement|move|glide|flying|flight|fly|burrow|climb|swim|jump|leap|terrain|dash|teleport)\b/i;
+  const abilities = [...new Set(movementSources
+    .flatMap(value => String(value || '').split(/\n|;/))
+    .map(value => value.trim())
+    .filter(value => value && movementPattern.test(value)))];
+
+  container.innerHTML = '';
+  if (speed) {
+    const speedValue = document.createElement('strong');
+    speedValue.className = 'combat-movement-speed';
+    speedValue.textContent = `Speed ${speed}`;
+    container.appendChild(speedValue);
+  }
+  abilities.forEach(ability => {
+    const detail = document.createElement('span');
+    detail.className = 'combat-movement-ability';
+    detail.textContent = ability;
+    container.appendChild(detail);
+  });
+  if (!container.children.length) container.innerHTML = '<p class="empty-roll-options">No movement details are listed on the sheet.</p>';
+}
+
+function barbarianClass(character) {
+  return String(character?.charClass || character?.fields?.class || '').trim().toLowerCase() === 'barbarian';
+}
+
+function barbarianRageMaxUses(level) {
+  const value = Number(level) || 1;
+  if (value >= 17) return 6;
+  if (value >= 12) return 5;
+  if (value >= 6) return 4;
+  if (value >= 3) return 3;
+  return 2;
+}
+
+function barbarianRageDamageBonus(level) {
+  const value = Number(level) || 1;
+  return value >= 16 ? 4 : value >= 9 ? 3 : 2;
+}
+
+function rageUsesRemaining(character) {
+  const rage = character.combat?.rage || {};
+  return Math.max(0, Math.min(Number(rage.maxUses) || barbarianRageMaxUses(character.level || character.fields?.level), Number(rage.used) || 0));
+}
+
+function characterWearsHeavyArmor(character) {
+  return String(character.fields?.['ac-method'] || '').toLowerCase() === 'heavy';
+}
+
+function renderCombatRage(character, isNpc = false) {
+  const section = document.getElementById('combat-rage-section');
+  if (!section) return;
+  const available = !isNpc && barbarianClass(character);
+  section.classList.toggle('hidden', !available);
+  if (!available) return;
+  const rage = character.combat?.rage || {};
+  const active = !!rage.active;
+  const maxUses = barbarianRageMaxUses(character.level || character.fields?.level);
+  const used = Math.min(maxUses, Math.max(0, Number(rage.used) || 0));
+  const remaining = maxUses - used;
+  const stateLabel = document.getElementById('combat-rage-state');
+  const usesLabel = document.getElementById('combat-rage-uses');
+  const toggle = document.getElementById('combat-rage-toggle');
+  const note = document.getElementById('combat-rage-note');
+  stateLabel.textContent = active ? 'Active' : 'Inactive';
+  stateLabel.classList.toggle('active', active);
+  usesLabel.textContent = `${remaining} / ${maxUses} uses remaining`;
+  toggle.textContent = active ? 'End rage' : 'Enter rage';
+  toggle.disabled = !active && (remaining <= 0 || characterWearsHeavyArmor(character));
+  note.textContent = characterWearsHeavyArmor(character)
+    ? 'Rage benefits are unavailable while wearing heavy armor.'
+    : active
+      ? `Strength checks and saves have advantage, melee Strength attacks deal +${barbarianRageDamageBonus(character.level)} damage, and bludgeoning, piercing, and slashing damage is resisted.`
+      : 'Rage lasts until you end it manually or it ends under the normal rules.';
+  toggle.onclick = () => combatAction('rage:toggle', { active: !active });
 }
 
 function renderCombatRolls(character, isNpc = false) {
@@ -147,24 +240,41 @@ function renderCombatRolls(character, isNpc = false) {
   const spellAttackValue = character.spellcasting?.attackBonus ?? character.fields?.['spell-attack'];
   const hasSpellAttack = spellAttackValue !== '' && spellAttackValue !== undefined && spellAttackValue !== null;
   const spellAttackButton = document.getElementById('combat-spell-attack-roll');
-  spellAttackButton.classList.toggle('hidden', !hasSpellAttack);
+  const rageActive = !isNpc && barbarianClass(character) && character.combat?.rage?.active && !characterWearsHeavyArmor(character);
+  spellAttackButton.classList.toggle('hidden', !hasSpellAttack || rageActive);
   if (hasSpellAttack) {
     const spellModifier = Number(spellAttackValue) || 0;
     spellAttackButton.textContent = `Spell attack ${signed(spellModifier)}`;
     spellAttackButton.onclick = () => {
       if (isNpc) rollNpcD20(character, 'Spell attack', spellModifier, mode());
-      else rollCharacterD20(character, 'Spell attack', spellModifier, { mode: mode() });
+      else rollCharacterD20(character, 'Spell attack', spellModifier, { mode: mode(), spell: true });
     };
   }
 
   const spellDcValue = character.spellcasting?.saveDc ?? character.fields?.['spell-dc'];
   const spellDc = document.getElementById('combat-spell-dc');
   const hasSpellDc = spellDcValue !== '' && spellDcValue !== undefined && spellDcValue !== null;
-  spellDc.classList.toggle('hidden', !hasSpellDc);
+  spellDc.classList.toggle('hidden', !hasSpellDc || rageActive);
   if (hasSpellDc) spellDc.textContent = `Spell save DC ${Number(spellDcValue) || 0}`;
+
+  const strengthCheck = document.getElementById('combat-strength-check');
+  const strengthSave = document.getElementById('combat-strength-save');
+  const showRageRolls = rageActive;
+  strengthCheck.classList.toggle('hidden', !showRageRolls);
+  strengthSave.classList.toggle('hidden', !showRageRolls);
+  if (showRageRolls) {
+    const strengthModifier = abilityModifier(character.abilities?.str ?? character.fields?.str);
+    strengthCheck.textContent = `Strength check ${signed(strengthModifier)} · Rage advantage`;
+    strengthSave.textContent = `Strength save ${signed(characterSaveModifier(character, 'str'))} · Rage advantage`;
+    strengthCheck.onclick = () => rollCharacterD20(character, 'Strength check', strengthModifier, { mode: 'advantage' });
+    strengthSave.onclick = () => rollCharacterD20(character, 'Strength save', characterSaveModifier(character, 'str'), { mode: 'advantage' });
+  }
 
   const attacks = document.getElementById('combat-attacks');
   attacks.innerHTML = '';
+  const rageBonus = rageActive ? barbarianRageDamageBonus(character.level) : 0;
+  const rageAttackMode = mode() === 'disadvantage' ? 'normal' : rageActive ? 'advantage' : mode();
+  const rageAttackLabel = rageActive ? ' · Rage advantage' : '';
   (character.attacks || []).filter(attack => attack.name).forEach(attack => {
     const row = document.createElement('div');
     row.className = 'combat-roll-row';
@@ -176,14 +286,18 @@ function renderCombatRolls(character, isNpc = false) {
     const bonusMatch = String(attack.bonus || '').match(/[+-]?\d+/);
     if (bonusMatch) {
       const modifier = Number(bonusMatch[0]);
-      row.appendChild(makeCombatRollButton(`Hit ${signed(modifier)}`, () => {
+      const rageEligible = rageActive && isRageMeleeStrengthAttack(attack);
+      row.appendChild(makeCombatRollButton(`Hit ${signed(modifier)}${rageEligible ? rageAttackLabel : ''}`, () => {
         if (isNpc) rollNpcD20(character, `${attack.name} attack`, modifier, mode());
-        else rollCharacterD20(character, `${attack.name} attack`, modifier, { mode: mode() });
+        else rollCharacterD20(character, `${attack.name} attack`, modifier, { mode: rageEligible ? rageAttackMode : mode() });
       }));
     }
     const damage = parseDiceExpression(attack.damage);
     if (damage) {
-      row.appendChild(makeCombatRollButton(damage.expression, () => rollDice(damage.count, damage.sides, damage.modifier, {
+      const rageEligible = rageActive && isRageMeleeStrengthAttack(attack);
+      const damageModifier = damage.modifier + (rageEligible ? rageBonus : 0);
+      const damageLabel = formatDiceExpression(damage.count, damage.sides, damageModifier);
+      row.appendChild(makeCombatRollButton(damageLabel, () => rollDice(damage.count, damage.sides, damageModifier, {
         characterName: isNpc ? null : character.name,
         tokenId: isNpc ? character.id : null,
         label: `${attack.name} damage`
@@ -195,6 +309,10 @@ function renderCombatRolls(character, isNpc = false) {
 
   const spells = document.getElementById('combat-spells');
   spells.innerHTML = '';
+  if (rageActive) {
+    spells.innerHTML = '<p class="empty-roll-options">Spells cannot be cast while raging.</p>';
+    return;
+  }
   (isNpc ? normalizeSpellList(character.spells) : characterSpellEntries(character)).forEach(spell => {
     const row = document.createElement('div');
     row.className = 'combat-roll-row combat-spell-card';
@@ -241,7 +359,7 @@ function renderCombatRolls(character, isNpc = false) {
       const modifier = Number(spellAttackValue) || 0;
       actions.appendChild(makeCombatRollButton(`Attack ${signed(modifier)}`, () => {
         if (isNpc) rollNpcD20(character, `${spell.name} spell attack`, modifier, mode());
-        else rollCharacterD20(character, `${spell.name} spell attack`, modifier, { mode: mode() });
+        else rollCharacterD20(character, `${spell.name} spell attack`, modifier, { mode: mode(), spell: true });
       }));
     }
     const damage = parseDiceExpression(spell.damage || spell.effect || spell.name);
@@ -249,13 +367,24 @@ function renderCombatRolls(character, isNpc = false) {
       actions.appendChild(makeCombatRollButton(`Roll ${damage.expression}`, () => rollDice(damage.count, damage.sides, damage.modifier, {
         characterName: isNpc ? null : character.name,
         tokenId: isNpc ? character.id : null,
-        label: `${spell.name} damage`
+        label: `${spell.name} damage`, spell: true
       }), true));
     }
     if (actions.children.length) row.appendChild(actions);
     spells.appendChild(row);
   });
   if (!spells.children.length) spells.innerHTML = '<p class="empty-roll-options">No spells are listed on the sheet.</p>';
+}
+
+function isRageMeleeStrengthAttack(attack) {
+  const details = String(attack.details || '').toLowerCase();
+  if (/ranged weapon attack|ranged attack|ammunition|range\s+\d|\d+\/\d+\s*ft/.test(details)) return false;
+  if (/using dexterity|dexterity-based|finesse/.test(details)) return false;
+  return /melee weapon attack|melee attack|reach \d|strength/.test(details) || !details;
+}
+
+function formatDiceExpression(count, sides, modifier) {
+  return `${count}d${sides}${modifier ? (modifier > 0 ? `+${modifier}` : modifier) : ''}`;
 }
 
 function renderCombatReactions(character, isNpc = false) {
@@ -506,7 +635,10 @@ document.addEventListener('keydown', event => {
   if (pendingSpellPreparation) closeSpellPreparation();
   else if (activeCombatTarget) closeCombatManager();
 });
-document.getElementById('combat-damage-btn').onclick = () => combatAction('damage', { amount: Number(document.getElementById('combat-amount').value) || 0 });
+document.getElementById('combat-damage-btn').onclick = () => combatAction('damage', {
+  amount: Number(document.getElementById('combat-amount').value) || 0,
+  damageType: document.getElementById('combat-damage-type').value
+});
 document.getElementById('combat-heal-btn').onclick = () => combatAction('heal', { amount: Number(document.getElementById('combat-amount').value) || 0 });
 document.getElementById('combat-temp-btn').onclick = () => combatAction('tempHp', { amount: Number(document.getElementById('combat-amount').value) || 0 });
 document.getElementById('combat-concentration').onchange = event => combatAction('concentration:set', { value: event.target.checked });

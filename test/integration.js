@@ -504,6 +504,46 @@ async function run() {
   const restedHazel = await pending;
   assert.equal(restedHazel.inventory.find(item => item.id === 'torches').usage.remaining, 3);
 
+  pending = once(playerOne.socket, 'character:update', character => character.name === 'Brakka Barbarian');
+  playerOne.socket.emit('character:save', {
+    name: 'Brakka Barbarian', hp: 20, maxHp: 20,
+    fields: {
+      name: 'Brakka Barbarian', species: 'Strig (birdfolk)', subrace: 'Stout Strig',
+      class: 'Barbarian', subclass: 'Path of the Berserker', level: '1', hp: '20', maxhp: '20', ac: '13',
+      'ac-method': 'light', str: '16', dex: '12', con: '14', int: '8', wis: '10', cha: '10'
+    },
+    attacks: [{ name: 'Greataxe', bonus: '+5', damage: '1d12+3', details: 'Melee weapon attack using Strength' }]
+  });
+  const brakka = await pending;
+  assert.deepEqual(brakka.combat.rage, { active: false, used: 0, maxUses: 2 });
+  pending = once(playerOne.socket, 'character:update', character => character.name === 'Brakka Barbarian' && character.combat.rage.active);
+  playerOne.socket.emit('character:combat:update', { name: 'Brakka Barbarian', action: 'rage:toggle', active: true });
+  const ragingBrakka = await pending;
+  assert.equal(ragingBrakka.combat.rage.used, 1);
+  assert.equal(ragingBrakka.combat.rage.maxUses, 2);
+  pending = once(playerOne.socket, 'character:update', character => character.name === 'Brakka Barbarian' && character.hp === 18);
+  playerOne.socket.emit('character:combat:update', { name: 'Brakka Barbarian', action: 'damage', amount: 5, damageType: 'bludgeoning' });
+  await pending;
+  pending = once(playerOne.socket, 'action:denied', denial => /cannot cast spells while raging/i.test(denial.message));
+  playerOne.socket.emit('roll:make', { characterName: 'Brakka Barbarian', label: 'Spell attack', count: 1, sides: 20 });
+  await pending;
+  pending = once(playerOne.socket, 'character:update', character => character.name === 'Brakka Barbarian' && !character.combat.rage.active);
+  playerOne.socket.emit('character:combat:update', { name: 'Brakka Barbarian', action: 'rage:toggle', active: false });
+  await pending;
+  pending = once(playerOne.socket, 'character:update', character => character.name === 'Brakka Barbarian' && character.combat.rage.active);
+  playerOne.socket.emit('character:combat:update', { name: 'Brakka Barbarian', action: 'rage:toggle', active: true });
+  await pending;
+  pending = once(playerOne.socket, 'character:update', character => character.name === 'Brakka Barbarian' && !character.combat.rage.active);
+  playerOne.socket.emit('character:combat:update', { name: 'Brakka Barbarian', action: 'rage:toggle', active: false });
+  await pending;
+  pending = once(playerOne.socket, 'action:denied', denial => /no rage uses remaining/i.test(denial.message));
+  playerOne.socket.emit('character:combat:update', { name: 'Brakka Barbarian', action: 'rage:toggle', active: true });
+  await pending;
+  pending = once(playerOne.socket, 'character:update', character => character.name === 'Brakka Barbarian' && character.combat.rage.used === 0);
+  playerOne.socket.emit('character:combat:update', { name: 'Brakka Barbarian', action: 'longRest' });
+  const restedBrakka = await pending;
+  assert.equal(restedBrakka.combat.rage.active, false);
+
   const clericSpellList = [
     { id: 'guidance', name: 'Guidance', level: 0 },
     { id: 'bless', name: 'Bless', level: 1, alwaysPrepared: true },
@@ -643,6 +683,56 @@ async function run() {
   await pending;
   pending = once(playerOne.socket, 'scene:doodle:add');
   dm.socket.emit('scene:doodle:add', { color: '#abcdef', points: [{ x: 1, y: 2 }, { x: 5, y: 8 }] });
+  await pending;
+  pending = once(playerOne.socket, 'scene:doodle:redrawAll', paths => paths.length === 0);
+  dm.socket.emit('scene:doodle:erase', { x: 1, y: 2 });
+  await pending;
+  pending = once(playerOne.socket, 'scene:doodle:redrawAll', paths => paths.length === 1);
+  dm.socket.emit('scene:doodle:undo');
+  await pending;
+
+  pending = once(playerTwo.socket, 'scene:doodleCorner:add');
+  playerOne.socket.emit('scene:doodleCorner:add', {
+    color: '#123456', points: [{ x: 10, y: 20 }, { x: 30, y: 40 }]
+  });
+  await pending;
+  pending = once(playerTwo.socket, 'scene:doodleCorner:redrawAll', paths => paths.length === 0);
+  playerOne.socket.emit('scene:doodleCorner:undo');
+  await pending;
+  pending = once(playerTwo.socket, 'scene:doodleCorner:add');
+  playerOne.socket.emit('scene:doodleCorner:add', {
+    color: '#123456', points: [{ x: 10, y: 20 }, { x: 30, y: 40 }]
+  });
+  await pending;
+  pending = once(playerTwo.socket, 'scene:doodleCorner:redrawAll', paths => paths.length === 0);
+  playerOne.socket.emit('scene:doodleCorner:clear');
+  await pending;
+  pending = once(playerOne.socket, 'scene:doodleCorner:add');
+  dm.socket.emit('scene:doodleCorner:add', {
+    color: '#abcdef', points: [{ x: 10, y: 20 }, { x: 30, y: 40 }]
+  });
+  await pending;
+  pending = once(playerOne.socket, 'scene:doodleCorner:redrawAll', paths => paths.length === 0);
+  dm.socket.emit('scene:doodleCorner:undo');
+  await pending;
+  pending = once(playerOne.socket, 'scene:doodleCorner:add');
+  dm.socket.emit('scene:doodleCorner:add', {
+    color: '#abcdef', points: [{ x: 10, y: 20 }, { x: 30, y: 40 }]
+  });
+  await pending;
+  pending = once(playerOne.socket, 'scene:doodleCorner:redrawAll', paths => paths.length === 0);
+  dm.socket.emit('scene:doodleCorner:erase', { x: 10, y: 20 });
+  await pending;
+  pending = once(playerOne.socket, 'scene:doodleCorner:redrawAll', paths => paths.length === 1);
+  dm.socket.emit('scene:doodleCorner:undo');
+  await pending;
+  pending = once(playerOne.socket, 'scene:doodleCorner:add');
+  dm.socket.emit('scene:doodleCorner:add', {
+    color: '#abcdef', points: [{ x: 10, y: 20 }, { x: 30, y: 40 }]
+  });
+  await pending;
+  pending = once(playerOne.socket, 'scene:doodleCorner:redrawAll', paths => paths.length === 0);
+  dm.socket.emit('scene:doodleCorner:clear');
   await pending;
 
   pending = once(playerOne.socket, 'action:denied', denial => /only the dungeon master can control fog/i.test(denial.message));

@@ -243,13 +243,24 @@
           <button id="tool-grid-move" class="dm-only" title="Drag to align the grid to your map art.">Move grid</button>
           <button id="tool-ruler" title="Drag to measure, or if you're on mobile, tap a start square and then an end square. Counts 5 ft per horizontal or vertical square.">Ruler</button>
           <button id="tool-ping">Ping</button>
-          <button id="tool-doodle" class="doodle-control hidden">Doodle</button>
-          <input type="color" id="doodle-color" value="#d98a9e" class="doodle-control hidden" title="Drawing color" style="width:30px; border:none; background:none;">
-          <button id="undo-doodle-btn" class="doodle-control hidden" title="Undo your latest doodle stroke">Undo draw</button>
+          <div class="map-doodle-tools doodle-control hidden">
+            <button id="tool-doodle" type="button">Draw</button>
+            <button id="tool-eraser" type="button" title="Erase a doodle stroke">Eraser</button>
+            <button class="doodle-corner-toggle" id="doodle-corner-toggle" type="button" aria-expanded="false" aria-controls="doodle-corner">Doodle corner</button>
+            <input type="color" id="doodle-color" value="#d98a9e" title="Doodle color" aria-label="Doodle color" style="width:30px; border:none; background:none;">
+            <button id="undo-doodle-btn" type="button" title="Undo your latest doodle stroke">Undo</button>
+          </div>
           <button id="tool-fog-reveal" class="dm-only fog-tool hidden">Reveal</button>
           <button id="tool-fog-hide" class="dm-only fog-tool hidden">Cover</button>
         </div>
         <div class="map-toolbar map-toolbar-right dm-only">
+          <label class="grid-toggle time-of-day-control" for="time-of-day-select">Time
+            <select id="time-of-day-select" aria-label="Time of day">
+              <option value="morning">Morning</option>
+              <option value="afternoon">Afternoon</option>
+              <option value="night">Night</option>
+            </select>
+          </label>
           <label class="grid-toggle"><input type="checkbox" id="grid-toggle"> Grid</label>
           <input type="number" id="grid-size" value="50" min="10" max="300" title="Grid size (px)" style="width:56px;">
           <label class="grid-toggle grid-color-control" title="Choose the grid line colour">
@@ -258,6 +269,11 @@
           <label class="grid-toggle"><input type="checkbox" id="snap-toggle" checked> Snap</label>
           <label class="grid-toggle"><input type="checkbox" id="fit-token-toggle" checked> Fit tokens</label>
           <button id="grid-offset-reset" class="btn-ghost" type="button" title="Reset grid alignment to the map's top-left corner">Reset grid</button>
+        </div>
+        <div class="map-time-indicator" id="map-time-indicator" aria-label="Morning">
+          <span class="map-time-clock" aria-hidden="true"><span class="map-time-hand"></span></span>
+          <span class="map-time-icon" id="map-time-icon" aria-hidden="true">☀️</span>
+          <strong id="map-time-label">Morning</strong>
         </div>
         <div class="map-toolbar map-toolbar-bottom">
           <button id="zoom-out">−</button>
@@ -285,6 +301,21 @@
           <p class="hand" style="font-size:20px;">No map has bloomed here yet</p>
         </div>
       </div>
+      <section class="doodle-corner-panel panel hidden" id="doodle-corner" aria-labelledby="doodle-corner-title">
+          <div class="doodle-corner-heading" id="doodle-corner-drag-handle">
+            <div>
+              <h2 id="doodle-corner-title">Doodle corner</h2>
+            </div>
+            <div class="doodle-corner-actions">
+              <button class="btn-ghost active" id="doodle-corner-draw-btn" type="button">Draw</button>
+              <button class="btn-ghost" id="doodle-corner-eraser-btn" type="button">Eraser</button>
+              <input type="color" id="doodle-corner-color" value="#d98a9e" title="Doodle corner color" aria-label="Doodle corner color">
+              <button class="btn-ghost" id="doodle-corner-undo-btn" type="button">Undo</button>
+              <button class="btn-ghost" id="doodle-corner-clear-btn" type="button">Clear</button>
+            </div>
+          </div>
+          <canvas id="doodle-corner-canvas" width="640" height="360" aria-label="Shared player doodle corner"></canvas>
+        </section>
 
       <aside class="initiative-panel map-initiative-panel panel" id="map-initiative-panel">
         <div class="initiative-header">
@@ -1151,11 +1182,33 @@
       <div class="combat-vital"><span>Armor class</span><strong id="combat-ac">0</strong></div>
       <div class="combat-vital"><span>Status</span><strong id="combat-life-status">Ready</strong></div>
     </div>
+    <section class="combat-section combat-rage-section hidden" id="combat-rage-section">
+      <div class="combat-section-title">
+        <h3>Rage</h3>
+        <span class="combat-rage-state" id="combat-rage-state">Inactive</span>
+      </div>
+      <div class="combat-rage-controls">
+        <strong id="combat-rage-uses">0 / 0 uses</strong>
+        <button class="btn-primary" id="combat-rage-toggle" type="button">Enter rage</button>
+      </div>
+      <p class="combat-rage-note" id="combat-rage-note"></p>
+    </section>
+    <section class="combat-section combat-movement-section">
+      <div class="combat-section-title"><h3>Movement</h3></div>
+      <div id="combat-movement" class="combat-movement-list"></div>
+    </section>
     <p class="combat-notes hidden" id="combat-notes"></p>
 
     <div class="combat-adjust-row">
       <label for="combat-amount">Amount</label>
       <input type="number" id="combat-amount" min="0" value="1">
+      <label for="combat-damage-type">Damage type</label>
+      <select id="combat-damage-type">
+        <option value="">Unspecified</option>
+        <option value="bludgeoning">Bludgeoning</option>
+        <option value="piercing">Piercing</option>
+        <option value="slashing">Slashing</option>
+      </select>
       <button class="btn-rose" id="combat-damage-btn" type="button">Take damage</button>
       <button class="btn-primary" id="combat-heal-btn" type="button">Heal</button>
       <button class="btn-ghost" id="combat-temp-btn" type="button">Set temp HP</button>
@@ -1174,6 +1227,8 @@
       </div>
       <div class="combat-roll-highlights">
         <button class="btn-rose" id="combat-initiative-roll" type="button">Roll initiative</button>
+        <button class="btn-ghost hidden" id="combat-strength-check" type="button">Strength check</button>
+        <button class="btn-ghost hidden" id="combat-strength-save" type="button">Strength save</button>
         <button class="btn-ghost hidden" id="combat-spell-attack-roll" type="button">Spell attack</button>
         <span class="combat-spell-dc hidden" id="combat-spell-dc"></span>
       </div>

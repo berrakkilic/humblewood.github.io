@@ -15,6 +15,8 @@
     "frontend/app/ui/overlays.ts",
     "frontend/app/session.ts",
     "frontend/app/map.ts",
+    "frontend/app/map-doodles.ts",
+    "frontend/app/doodle-corner.ts",
     "frontend/app/library.ts",
     "frontend/app/tokens.ts",
     "frontend/app/characters/sheet.ts",

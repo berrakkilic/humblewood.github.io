@@ -72,7 +72,8 @@ function registerCharacterHandlers(socket, room) {
   const {
     CONDITIONS, deny, emitCharacterUpdate, emitToken, isDm, normalizeCharacter,
     ownsCharacter, persistState, removeInitiativeForTokenIds, syncCharacterTokens,
-    syncCombatFields, resetLongRestItemUsage
+    syncCombatFields, resetLongRestItemUsage, barbarianCharacter,
+    characterWearsHeavyArmor
   } = room;
   const { io, state } = room;
 
@@ -176,14 +177,20 @@ function registerCharacterHandlers(socket, room) {
     const combat = character.combat;
     const amount = Math.max(0, Math.min(9999, Number(payload.amount) || 0));
     if (payload.action === 'damage' && amount) {
-      const absorbed = Math.min(character.tempHp, amount);
+      const damageType = String(payload.damageType || '').toLowerCase();
+      const raging = combat.rage?.active && barbarianCharacter(character) && !characterWearsHeavyArmor(character);
+      const effectiveAmount = raging && ['bludgeoning', 'piercing', 'slashing'].includes(damageType)
+        ? Math.floor(amount / 2)
+        : amount;
+      const absorbed = Math.min(character.tempHp, effectiveAmount);
       character.tempHp -= absorbed;
-      character.hp = Math.max(0, character.hp - (amount - absorbed));
-      if (combat.concentration) {
-        const dc = Math.max(10, Math.floor(amount / 2));
+      character.hp = Math.max(0, character.hp - (effectiveAmount - absorbed));
+      if (character.hp <= 0) combat.rage.active = false;
+      if (combat.concentration && effectiveAmount > 0) {
+        const dc = Math.max(10, Math.floor(effectiveAmount / 2));
         for (const client of io.sockets.sockets.values()) {
           if (ownsCharacter(client, character)) {
-            client.emit('concentration:required', { name: character.name, damage: amount, dc });
+            client.emit('concentration:required', { name: character.name, damage: effectiveAmount, dc });
           }
         }
       }
@@ -201,7 +208,19 @@ function registerCharacterHandlers(socket, room) {
         ? combat.conditions.filter(condition => condition !== payload.condition)
         : [...combat.conditions, payload.condition];
     } else if (payload.action === 'concentration:set') {
+      if (payload.value && combat.rage?.active) return deny(socket, 'You cannot concentrate on spells while raging.');
       combat.concentration = !!payload.value;
+    } else if (payload.action === 'rage:toggle') {
+      if (!barbarianCharacter(character)) return deny(socket, 'Only Barbarians can enter Rage.');
+      if (characterWearsHeavyArmor(character)) return deny(socket, 'You cannot enter Rage while wearing heavy armor.');
+      if (payload.active === false) combat.rage.active = false;
+      else if (combat.rage.active) return;
+      else if (combat.rage.used >= combat.rage.maxUses) return deny(socket, 'You have no Rage uses remaining until a long rest.');
+      else {
+        combat.rage.active = true;
+        combat.rage.used += 1;
+        combat.concentration = false;
+      }
     } else if (payload.action === 'exhaustion') {
       combat.exhaustion = Math.max(0, Math.min(6, combat.exhaustion + Math.sign(Number(payload.delta) || 0)));
     } else if (payload.action === 'deathSave') {
@@ -237,6 +256,8 @@ function registerCharacterHandlers(socket, room) {
       combat.stable = false;
       combat.dead = false;
       combat.reactionAvailable = true;
+      combat.rage.active = false;
+      combat.rage.used = 0;
       combat.exhaustion = Math.max(0, combat.exhaustion - 1);
       Object.values(combat.spellSlots).forEach(slot => { slot.used = 0; });
       character.inventory = resetLongRestItemUsage(character.inventory);

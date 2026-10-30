@@ -401,15 +401,42 @@ body[data-role="dm"] .token-tray.dm-detailed .token-list-details { display: flex
   padding: 6px; border-radius: 10px; box-shadow: var(--panel-shadow);
 }
 .map-toolbar-right { top: 58px; left: auto; right: 10px; }
+.time-of-day-control select { width: auto; padding: 5px 24px 5px 7px; font-size: 12px; }
 .map-toolbar-bottom { top: auto; bottom: 10px; left: 10px; }
 .map-toolbar button {
   border: none; background: transparent; padding: 6px 10px; border-radius: 8px;
   cursor: pointer; font-weight: 600; color: var(--forest);
 }
 .map-toolbar button.active { background: var(--forest); color: #fff; }
+.map-doodle-tools { display: flex; align-items: center; gap: 5px; padding-left: 6px; border-left: 1px solid var(--tan); }
+.map-doodle-tools strong { color: var(--rose-deep); font-size: 11px; white-space: nowrap; }
+.map-doodle-tools input[type="color"] { cursor: pointer; }
+.doodle-corner-panel { flex: 0 0 min(320px, 28vw); align-self: flex-start; padding: 14px; }
+.doodle-corner-toggle { align-self: flex-start; }
+.doodle-corner-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; cursor: grab; }
+.doodle-corner-heading:active { cursor: grabbing; }
+.doodle-corner-heading h2 { margin: 0; color: var(--forest-deep); font-size: 19px; }
+.doodle-corner-actions { display: flex; align-items: center; gap: 5px; }
+.doodle-corner-actions input[type="color"] { width: 28px; height: 28px; padding: 1px; border: 1px solid var(--tan); border-radius: 6px; cursor: pointer; }
+.doodle-corner-actions .btn-ghost.active { background: var(--forest); color: #fff; }
+#doodle-corner-canvas { display: block; width: 100%; height: auto; margin-top: 12px; border: 1px solid rgba(58,46,37,.16); border-radius: 9px; background: #fffdf8; cursor: crosshair; touch-action: none; }
 .map-toolbar #zoom-level { font-size: 13px; font-weight: 700; color: var(--forest); min-width: 42px; text-align: center; }
 .grid-toggle { display: flex; align-items: center; gap: 4px; font-size: 13px; font-weight: 600; color: var(--forest); cursor: pointer; }
 .grid-toggle input { width: auto; }
+.map-time-indicator {
+  position: absolute; top: 10px; right: 10px; z-index: 20;
+  display: flex; align-items: center; gap: 7px; padding: 6px 9px;
+  border: 1px solid rgba(58,46,37,.14); border-radius: 999px;
+  background: rgba(255,253,248,.92); box-shadow: var(--panel-shadow); color: var(--forest-deep);
+}
+.map-time-clock { position: relative; width: 20px; height: 20px; border: 2px solid var(--forest); border-radius: 50%; }
+.map-time-clock::before { content: ''; position: absolute; left: 8px; top: 3px; width: 2px; height: 7px; background: var(--forest); transform-origin: 50% 7px; transform: rotate(35deg); }
+.map-time-clock::after { content: ''; position: absolute; left: 8px; top: 8px; width: 6px; height: 2px; background: var(--forest); transform-origin: 0 50%; transform: rotate(15deg); }
+.map-time-hand { position: absolute; inset: 2px; border: 1px solid rgba(58,46,37,.18); border-radius: 50%; }
+.map-time-icon { font-size: 18px; line-height: 1; }
+.map-time-indicator strong { font-size: 11px; }
+.map-time-indicator[data-time-of-day="afternoon"] { color: #a3542a; }
+.map-time-indicator[data-time-of-day="night"] { color: #3c4d83; }
 .grid-color-control input[type="color"] {
   width: 28px; height: 24px; padding: 1px; border: 1px solid var(--tan);
   border-radius: 6px; background: #fff; cursor: pointer;
@@ -424,6 +451,7 @@ body[data-role="dm"] .token-tray.dm-detailed .token-list-details { display: flex
   user-select: none;
 }
 #map-stage.doodling { cursor: crosshair; }
+#map-stage.erasing { cursor: cell; }
 #map-stage.panning { cursor: grabbing; }
 #map-stage.grid-moving { cursor: move; }
 #map-stage.measuring { cursor: crosshair; }
@@ -1323,8 +1351,20 @@ body[data-role="player"] .dm-only { display: none !important; }
 .combat-vital { background: var(--parchment-dark); border-radius: 12px; padding: 12px 14px; }
 .combat-vital span { display: block; color: var(--ink-soft); font-size: 11px; font-weight: 700; text-transform: uppercase; }
 .combat-vital strong { display: block; margin-top: 2px; color: var(--forest-deep); font-size: 19px; }
+.combat-rage-section { margin-bottom: 14px; }
+.combat-rage-state { padding: 5px 9px; border-radius: 999px; background: var(--parchment-dark); color: var(--ink-soft); font-size: 11px; font-weight: 800; }
+.combat-rage-state.active { background: rgba(177,94,114,.16); color: var(--rose-deep); }
+.combat-rage-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 9px; }
+.combat-rage-controls strong { color: var(--forest-deep); font-size: 13px; }
+.combat-rage-controls button { width: auto; padding: 7px 12px; }
+.combat-rage-note { margin: 8px 0 0; color: var(--ink-soft); font-size: 11px; line-height: 1.4; }
+.combat-movement-section { margin-bottom: 14px; }
+.combat-movement-list { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.combat-movement-speed, .combat-movement-ability { padding: 6px 9px; border-radius: 8px; background: #fffdf8; color: var(--forest); font-size: 12px; }
+.combat-movement-speed { color: var(--forest-deep); font-weight: 800; }
+.combat-movement-ability { color: var(--ink-soft); }
 .combat-notes { margin: 0 0 14px; padding: 9px 11px; border-left: 3px solid var(--gold); background: var(--parchment-dark); color: var(--ink-soft); font-size: 12px; white-space: pre-wrap; }
-.combat-adjust-row { display: grid; grid-template-columns: auto 90px repeat(3, minmax(110px, auto)); align-items: center; gap: 8px; margin-bottom: 16px; }
+.combat-adjust-row { display: grid; grid-template-columns: auto 90px auto minmax(135px, auto) repeat(3, minmax(110px, auto)); align-items: center; gap: 8px; margin-bottom: 16px; }
 .combat-adjust-row label { font-size: 12px; color: var(--forest); font-weight: 700; }
 .combat-adjust-row .btn-primary { width: auto; padding: 9px 14px; }
 .combat-rolls-section { margin-bottom: 14px; }

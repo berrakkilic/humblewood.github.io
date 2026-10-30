@@ -12,11 +12,13 @@ function createDefaultState() {
       gridColor: '#3a2e25',
       snapToGrid: true,
       fitTokensToGrid: true,
+      timeOfDay: 'morning',
       playerDoodlingEnabled: false,
       showTokenLabelsToPlayers: true,
       fogEnabled: true,
       fogShapes: [],
-      doodlePaths: []
+      doodlePaths: [],
+      doodleCornerPaths: []
     },
     tokens: [],
     npcs: {},

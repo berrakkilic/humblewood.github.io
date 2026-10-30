@@ -179,6 +179,7 @@ socket.on('state:full', (s) => {
   }
   onlineUsers = Array.isArray(s.onlineUsers) ? s.onlineUsers : [];
   renderMap();
+  renderDoodleCorner();
   renderTokenTray();
   renderNpcRoster();
   renderSavedScenes();
@@ -200,6 +201,7 @@ socket.on('scene:update', (scene) => {
   if (!state) return;
   state.scene = scene;
   renderMap();
+  renderDoodleCorner();
   renderTokenTray();
   renderSavedScenes();
   renderDmSidebarSummary();

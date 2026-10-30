@@ -494,6 +494,8 @@ function createRoom({ dataDir, dmPin, io, uploadDir }) {
     character.maxHp = Math.max(0, Number(character.maxHp ?? character.fields.maxhp) || 0);
     character.tempHp = Math.max(0, Number(character.tempHp ?? character.fields.temphp) || 0);
     const previous = character.combat && typeof character.combat === 'object' ? character.combat : {};
+    const rageMaxUses = barbarianRageMaxUses(character.level ?? character.fields.level);
+    const rage = previous.rage && typeof previous.rage === 'object' ? previous.rage : {};
     const successes = previous.deathSaves?.successes ?? [1, 2, 3].filter(i => character.fields[`death-success-${i}`]).length;
     const failures = previous.deathSaves?.failures ?? [1, 2, 3].filter(i => character.fields[`death-failure-${i}`]).length;
     const spellSlots = {};
@@ -516,10 +518,37 @@ function createRoom({ dataDir, dmPin, io, uploadDir }) {
       stable: !!previous.stable,
       dead: !!previous.dead,
       reactionAvailable: previous.reactionAvailable !== false,
+      rage: {
+        active: barbarianCharacter(character) && !characterWearsHeavyArmor(character) && rage.active === true,
+        used: Math.max(0, Math.min(rageMaxUses, Number(rage.used) || 0)),
+        maxUses: rageMaxUses
+      },
       spellSlots
     };
     syncCombatFields(character);
     return character;
+  }
+
+  function barbarianCharacter(character) {
+    return String(character?.charClass || character?.fields?.class || '').trim().toLowerCase() === 'barbarian';
+  }
+
+  function characterWearsHeavyArmor(character) {
+    return String(character?.fields?.['ac-method'] || '').trim().toLowerCase() === 'heavy';
+  }
+
+  function barbarianRageMaxUses(level) {
+    const value = Number(level) || 1;
+    if (value >= 17) return 6;
+    if (value >= 12) return 5;
+    if (value >= 6) return 4;
+    if (value >= 3) return 3;
+    return 2;
+  }
+
+  function barbarianRageDamageBonus(level) {
+    const value = Number(level) || 1;
+    return value >= 16 ? 4 : value >= 9 ? 3 : 2;
   }
 
   function syncCombatFields(character) {
@@ -545,6 +574,7 @@ function createRoom({ dataDir, dmPin, io, uploadDir }) {
       if (!name) return;
       const scene = { ...defaultState.scene, ...(saved.scene || {}) };
       if (!Array.isArray(scene.doodlePaths)) scene.doodlePaths = [];
+      if (!Array.isArray(scene.doodleCornerPaths)) scene.doodleCornerPaths = [];
       if (!Array.isArray(scene.fogShapes)) scene.fogShapes = [];
       const tokens = Array.isArray(saved.tokens) ? saved.tokens : [];
       tokens.forEach(normalizeToken);
@@ -585,6 +615,7 @@ function createRoom({ dataDir, dmPin, io, uploadDir }) {
         state.scene.gridColor = defaultState.scene.gridColor;
       }
       if (!Array.isArray(state.scene.doodlePaths)) state.scene.doodlePaths = [];
+      if (!Array.isArray(state.scene.doodleCornerPaths)) state.scene.doodleCornerPaths = [];
       if (!Array.isArray(state.scene.fogShapes)) state.scene.fogShapes = [];
       if (!Array.isArray(state.initiative.entries)) state.initiative.entries = [];
       normalizeLibrary(state.library);
@@ -1190,6 +1221,15 @@ function createRoom({ dataDir, dmPin, io, uploadDir }) {
     };
   }
 
+  function pointToSegmentDistance(point, start, end) {
+    const dx = end.x - start.x;
+    const dy = end.y - start.y;
+    const lengthSquared = dx * dx + dy * dy;
+    if (!lengthSquared) return Math.hypot(point.x - start.x, point.y - start.y);
+    const ratio = Math.max(0, Math.min(1, ((point.x - start.x) * dx + (point.y - start.y) * dy) / lengthSquared));
+    return Math.hypot(point.x - (start.x + ratio * dx), point.y - (start.y + ratio * dy));
+  }
+
   function cleanFogShape(requested) {
     if (!requested || !['reveal', 'hide'].includes(requested.mode)) return null;
     return {
@@ -1251,6 +1291,7 @@ function createRoom({ dataDir, dmPin, io, uploadDir }) {
     authSessionIdentity,
     broadcastState,
     cleanDoodlePath,
+    pointToSegmentDistance,
     cleanFogShape,
     cleanLibraryFile,
     cleanLibraryFolder,
@@ -1306,6 +1347,10 @@ function createRoom({ dataDir, dmPin, io, uploadDir }) {
     upsertInitiativeEntry,
     validPassword,
     validUsername,
+    barbarianCharacter,
+    characterWearsHeavyArmor,
+    barbarianRageMaxUses,
+    barbarianRageDamageBonus,
     verifyPassword
   };
 }

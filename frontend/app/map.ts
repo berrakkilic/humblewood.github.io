@@ -29,6 +29,19 @@ function renderMap() {
   document.getElementById('grid-color').value = gridColor;
   document.getElementById('snap-toggle').checked = state.scene.snapToGrid !== false;
   document.getElementById('fit-token-toggle').checked = state.scene.fitTokensToGrid !== false;
+  const timeOfDay = ['morning', 'afternoon', 'night'].includes(state.scene.timeOfDay) ? state.scene.timeOfDay : 'morning';
+  const timeOfDaySelect = document.getElementById('time-of-day-select');
+  if (timeOfDaySelect) timeOfDaySelect.value = timeOfDay;
+  const timeDetails = {
+    morning: { label: 'Morning', icon: '☀️' },
+    afternoon: { label: 'Afternoon', icon: '🌤️' },
+    night: { label: 'Night', icon: '🌙' }
+  }[timeOfDay];
+  const timeIndicator = document.getElementById('map-time-indicator');
+  timeIndicator.dataset.timeOfDay = timeOfDay;
+  timeIndicator.setAttribute('aria-label', timeDetails.label);
+  document.getElementById('map-time-icon').textContent = timeDetails.icon;
+  document.getElementById('map-time-label').textContent = timeDetails.label;
   if (!Array.isArray(state.scene.doodlePaths)) state.scene.doodlePaths = [];
   if (!Array.isArray(state.scene.fogShapes)) state.scene.fogShapes = [];
   updateMapPermissionControls();
@@ -316,21 +329,21 @@ document.getElementById('tool-pan').onclick = () => setTool('pan');
 document.getElementById('tool-grid-move').onclick = () => setTool('grid-move');
 document.getElementById('tool-ruler').onclick = () => setTool('ruler');
 document.getElementById('tool-ping').onclick = () => setTool('ping');
-document.getElementById('tool-doodle').onclick = () => setTool('doodle');
+document.getElementById('tool-doodle').onclick = () => setTool('doodle'); document.getElementById('tool-eraser').onclick = () => setTool('eraser');
 document.getElementById('tool-fog-reveal').onclick = () => setTool('fog-reveal');
 document.getElementById('tool-fog-hide').onclick = () => setTool('fog-hide');
 function setTool(tool) {
-  if (tool === 'doodle' && !canDoodle()) return showToast('Player doodling is not enabled for this scene.');
+  if ((tool === 'doodle' || tool === 'eraser') && !canDoodle()) return showToast('Player doodling is not enabled for this scene.');
   if (tool.startsWith('fog-') && (myRole !== 'dm' || !state.scene.fogEnabled)) return showToast('Enable fog of war first.');
   if (tool === 'grid-move' && myRole !== 'dm') return;
   const previousTool = selectedTool;
   selectedTool = tool;
-  if (previousTool === 'doodle' && tool !== 'doodle') cancelDoodle();
-  ['move', 'pan', 'grid-move', 'ruler', 'ping', 'doodle', 'fog-reveal', 'fog-hide'].forEach(name => {
+  if ((previousTool === 'doodle' || previousTool === 'eraser') && tool !== previousTool) cancelDoodle();
+  ['move', 'pan', 'grid-move', 'ruler', 'ping', 'doodle', 'eraser', 'fog-reveal', 'fog-hide'].forEach(name => {
     document.getElementById(`tool-${name}`)?.classList.toggle('active', tool === name);
   });
   const stage = document.getElementById('map-stage');
-  stage.classList.toggle('doodling', tool === 'doodle');
+  stage.classList.toggle('doodling', tool === 'doodle' || tool === 'eraser'); stage.classList.toggle('erasing', tool === 'eraser');
   stage.classList.toggle('panning', tool === 'pan');
   stage.classList.toggle('grid-moving', tool === 'grid-move');
   stage.classList.toggle('measuring', tool === 'ruler');
@@ -341,11 +354,9 @@ function setTool(tool) {
   if (tool === 'ruler' && previousTool !== 'ruler') showToast('Drag to measure, or if you\'re on mobile, tap a start square and then an end square.');
   clearMapAreaSelection();
 }
-
 function canDoodle() {
   return myRole === 'dm' || !!state?.scene?.playerDoodlingEnabled;
 }
-
 function updateMapPermissionControls() {
   if (!state) return;
   document.getElementById('player-doodling-toggle').checked = !!state.scene.playerDoodlingEnabled;
@@ -353,10 +364,9 @@ function updateMapPermissionControls() {
   document.getElementById('fog-enabled-toggle').checked = !!state.scene.fogEnabled;
   document.querySelectorAll('.doodle-control').forEach(element => element.classList.toggle('hidden', !canDoodle()));
   document.querySelectorAll('.fog-tool').forEach(element => element.classList.toggle('hidden', myRole !== 'dm' || !state.scene.fogEnabled));
-  if (selectedTool === 'doodle' && !canDoodle()) setTool('move');
+  if ((selectedTool === 'doodle' || selectedTool === 'eraser') && !canDoodle()) setTool('move');
   if (selectedTool.startsWith('fog-') && !state.scene.fogEnabled) setTool('move');
 }
-
 document.getElementById('clear-doodles-btn').onclick = () => socket.emit('scene:doodle:clear');
 document.getElementById('undo-doodle-btn').onclick = () => socket.emit('scene:doodle:undo');
 document.getElementById('player-doodling-toggle').onchange = event => socket.emit('scene:setPlayerDoodling', { enabled: event.target.checked });
@@ -366,7 +376,6 @@ document.getElementById('undo-fog-btn').onclick = () => socket.emit('scene:fog:u
 document.getElementById('reset-fog-btn').onclick = () => {
   if (confirm('Reset fog to fully covered?')) socket.emit('scene:fog:reset');
 };
-
 const mapStageWrap = document.getElementById('map-stage-wrap');
 mapStageWrap.addEventListener('mousedown', (e) => {
   const canStartPan = (selectedTool === 'pan' && e.button === 0) || e.button === 1 || (spacePanPressed && e.button === 0);
@@ -450,9 +459,10 @@ mapStageWrap.addEventListener('touchstart', event => {
     cancelDoodle();
     if (touchGesture?.type === 'ruler' || rulerAnchorPoint) clearRuler();
     touchGesture = createPinchGesture(event.touches);
-  } else if (event.touches.length === 1 && selectedTool === 'ruler') {
+  } else if (event.touches.length === 1 && (selectedTool === 'ruler' || selectedTool === 'eraser')) {
     event.preventDefault();
     const touch = event.touches[0];
+    if (selectedTool === 'eraser') { socket.emit('scene:doodle:erase', getCanvasPos(touch)); touchGesture = null; return; }
     const point = getCanvasPos(touch);
     const completingTap = !!rulerAnchorPoint;
     touchGesture = {
@@ -597,6 +607,9 @@ mapStage.addEventListener('mousedown', event => {
   } else if (selectedTool === 'ping') {
     event.preventDefault();
     socket.emit('pointer:ping', point);
+  } else if (selectedTool === 'eraser') {
+    event.preventDefault();
+    socket.emit('scene:doodle:erase', point);
   } else if (selectedTool === 'fog-reveal' || selectedTool === 'fog-hide') {
     event.preventDefault();
     mapAreaDrag = { start: point, current: point, mode: selectedTool === 'fog-reveal' ? 'reveal' : 'hide' };
@@ -739,6 +752,9 @@ document.getElementById('fit-token-toggle').onchange = () => {
     fitTokensToGrid: document.getElementById('fit-token-toggle').checked
   });
 };
+document.getElementById('time-of-day-select').onchange = event => {
+  socket.emit('scene:setTimeOfDay', { timeOfDay: event.target.value });
+};
 document.getElementById('grid-offset-reset').onclick = () => {
   socket.emit('scene:setGrid', {
     gridSize: Number(document.getElementById('grid-size').value) || 50,
@@ -810,119 +826,6 @@ function applyMapTransform() {
   if (!stage) return;
   stage.style.transform = `translate(${mapPan.x}px, ${mapPan.y}px) scale(${mapScale})`;
   document.getElementById('zoom-level').textContent = Math.round(mapScale * 100) + '%';
-}
-
-// ---- Doodling ----
-let isDrawing = false;
-let currentPath = null;
-let doodleTouchId = null;
-const doodleCanvas = document.getElementById('doodle-canvas');
-const doodleCtx = doodleCanvas.getContext('2d');
-
-doodleCanvas.onmousedown = (e) => {
-  if (e.button !== 0) return;
-  startDoodle(getCanvasPos(e));
-};
-doodleCanvas.onmousemove = (e) => {
-  continueDoodle(getCanvasPos(e));
-};
-document.addEventListener('mouseup', () => finishDoodle());
-
-doodleCanvas.addEventListener('touchstart', event => {
-  if (selectedTool !== 'doodle') return;
-  if (event.touches.length !== 1) {
-    cancelDoodle();
-    return;
-  }
-  const touch = event.touches[0];
-  event.preventDefault();
-  if (startDoodle(getCanvasPos(touch))) doodleTouchId = touch.identifier;
-}, { passive: false });
-doodleCanvas.addEventListener('touchmove', event => {
-  if (!isDrawing || doodleTouchId === null) return;
-  if (event.touches.length !== 1) {
-    cancelDoodle();
-    return;
-  }
-  const touch = Array.from(event.touches as TouchList).find(entry => entry.identifier === doodleTouchId);
-  if (!touch) return;
-  event.preventDefault();
-  continueDoodle(getCanvasPos(touch));
-}, { passive: false });
-doodleCanvas.addEventListener('touchend', event => {
-  if (!isDrawing || doodleTouchId === null) return;
-  const touch = Array.from(event.changedTouches as TouchList).find(entry => entry.identifier === doodleTouchId);
-  if (!touch) return;
-  event.preventDefault();
-  continueDoodle(getCanvasPos(touch));
-  finishDoodle();
-}, { passive: false });
-doodleCanvas.addEventListener('touchcancel', event => {
-  if (doodleTouchId === null) return;
-  const cancelled = Array.from(event.changedTouches as TouchList).some(entry => entry.identifier === doodleTouchId);
-  if (cancelled) cancelDoodle();
-}, { passive: false });
-
-function startDoodle(point) {
-  if (selectedTool !== 'doodle' || !canDoodle()) return false;
-  isDrawing = true;
-  currentPath = {
-    id: 'd' + Date.now(),
-    color: document.getElementById('doodle-color').value,
-    width: 3,
-    points: [point]
-  };
-  return true;
-}
-
-function continueDoodle(point) {
-  if (!isDrawing || !currentPath) return;
-  const previous = currentPath.points[currentPath.points.length - 1];
-  if (previous && Math.hypot(point.x - previous.x, point.y - previous.y) < 0.25) return;
-  currentPath.points.push(point);
-  drawDoodlePath(currentPath, true);
-}
-
-function finishDoodle() {
-  if (isDrawing && currentPath && currentPath.points.length > 1) {
-    socket.emit('scene:doodle:add', currentPath);
-  }
-  isDrawing = false;
-  currentPath = null;
-  doodleTouchId = null;
-}
-
-function cancelDoodle() {
-  if (!isDrawing && doodleTouchId === null) return;
-  isDrawing = false;
-  currentPath = null;
-  doodleTouchId = null;
-  if (state?.scene) redrawAllDoodles();
-}
-
-function getCanvasPos(e) {
-  const rect = doodleCanvas.getBoundingClientRect();
-  return { x: (e.clientX - rect.left) / mapScale, y: (e.clientY - rect.top) / mapScale };
-}
-
-function drawDoodlePath(path, liveOnly = false) {
-  doodleCtx.strokeStyle = path.color;
-  doodleCtx.lineWidth = path.width;
-  doodleCtx.lineCap = 'round';
-  doodleCtx.lineJoin = 'round';
-  doodleCtx.beginPath();
-  path.points.forEach((p, i) => {
-    if (i === 0) doodleCtx.moveTo(p.x, p.y); else doodleCtx.lineTo(p.x, p.y);
-  });
-  doodleCtx.stroke();
-}
-
-function clearDoodleCanvas() {
-  doodleCtx.clearRect(0, 0, doodleCanvas.width, doodleCanvas.height);
-}
-function redrawAllDoodles() {
-  clearDoodleCanvas();
-  state.scene.doodlePaths.forEach(p => drawDoodlePath(p));
 }
 
 function renderFog() {

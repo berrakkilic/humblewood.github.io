@@ -408,6 +408,7 @@
     }
     onlineUsers = Array.isArray(s.onlineUsers) ? s.onlineUsers : [];
     renderMap();
+    renderDoodleCorner();
     renderTokenTray();
     renderNpcRoster();
     renderSavedScenes();
@@ -428,6 +429,7 @@
     if (!state) return;
     state.scene = scene;
     renderMap();
+    renderDoodleCorner();
     renderTokenTray();
     renderSavedScenes();
     renderDmSidebarSummary();
@@ -698,6 +700,19 @@
     document.getElementById("grid-color").value = gridColor;
     document.getElementById("snap-toggle").checked = state.scene.snapToGrid !== false;
     document.getElementById("fit-token-toggle").checked = state.scene.fitTokensToGrid !== false;
+    const timeOfDay = ["morning", "afternoon", "night"].includes(state.scene.timeOfDay) ? state.scene.timeOfDay : "morning";
+    const timeOfDaySelect = document.getElementById("time-of-day-select");
+    if (timeOfDaySelect) timeOfDaySelect.value = timeOfDay;
+    const timeDetails = {
+      morning: { label: "Morning", icon: "\u2600\uFE0F" },
+      afternoon: { label: "Afternoon", icon: "\u{1F324}\uFE0F" },
+      night: { label: "Night", icon: "\u{1F319}" }
+    }[timeOfDay];
+    const timeIndicator = document.getElementById("map-time-indicator");
+    timeIndicator.dataset.timeOfDay = timeOfDay;
+    timeIndicator.setAttribute("aria-label", timeDetails.label);
+    document.getElementById("map-time-icon").textContent = timeDetails.icon;
+    document.getElementById("map-time-label").textContent = timeDetails.label;
     if (!Array.isArray(state.scene.doodlePaths)) state.scene.doodlePaths = [];
     if (!Array.isArray(state.scene.fogShapes)) state.scene.fogShapes = [];
     updateMapPermissionControls();
@@ -979,20 +994,22 @@
   document.getElementById("tool-ruler").onclick = () => setTool("ruler");
   document.getElementById("tool-ping").onclick = () => setTool("ping");
   document.getElementById("tool-doodle").onclick = () => setTool("doodle");
+  document.getElementById("tool-eraser").onclick = () => setTool("eraser");
   document.getElementById("tool-fog-reveal").onclick = () => setTool("fog-reveal");
   document.getElementById("tool-fog-hide").onclick = () => setTool("fog-hide");
   function setTool(tool) {
-    if (tool === "doodle" && !canDoodle()) return showToast("Player doodling is not enabled for this scene.");
+    if ((tool === "doodle" || tool === "eraser") && !canDoodle()) return showToast("Player doodling is not enabled for this scene.");
     if (tool.startsWith("fog-") && (myRole !== "dm" || !state.scene.fogEnabled)) return showToast("Enable fog of war first.");
     if (tool === "grid-move" && myRole !== "dm") return;
     const previousTool = selectedTool;
     selectedTool = tool;
-    if (previousTool === "doodle" && tool !== "doodle") cancelDoodle();
-    ["move", "pan", "grid-move", "ruler", "ping", "doodle", "fog-reveal", "fog-hide"].forEach((name) => {
+    if ((previousTool === "doodle" || previousTool === "eraser") && tool !== previousTool) cancelDoodle();
+    ["move", "pan", "grid-move", "ruler", "ping", "doodle", "eraser", "fog-reveal", "fog-hide"].forEach((name) => {
       document.getElementById(`tool-${name}`)?.classList.toggle("active", tool === name);
     });
     const stage = document.getElementById("map-stage");
-    stage.classList.toggle("doodling", tool === "doodle");
+    stage.classList.toggle("doodling", tool === "doodle" || tool === "eraser");
+    stage.classList.toggle("erasing", tool === "eraser");
     stage.classList.toggle("panning", tool === "pan");
     stage.classList.toggle("grid-moving", tool === "grid-move");
     stage.classList.toggle("measuring", tool === "ruler");
@@ -1013,7 +1030,7 @@
     document.getElementById("fog-enabled-toggle").checked = !!state.scene.fogEnabled;
     document.querySelectorAll(".doodle-control").forEach((element) => element.classList.toggle("hidden", !canDoodle()));
     document.querySelectorAll(".fog-tool").forEach((element) => element.classList.toggle("hidden", myRole !== "dm" || !state.scene.fogEnabled));
-    if (selectedTool === "doodle" && !canDoodle()) setTool("move");
+    if ((selectedTool === "doodle" || selectedTool === "eraser") && !canDoodle()) setTool("move");
     if (selectedTool.startsWith("fog-") && !state.scene.fogEnabled) setTool("move");
   }
   document.getElementById("clear-doodles-btn").onclick = () => socket.emit("scene:doodle:clear");
@@ -1106,9 +1123,14 @@
       cancelDoodle();
       if (touchGesture?.type === "ruler" || rulerAnchorPoint) clearRuler();
       touchGesture = createPinchGesture(event.touches);
-    } else if (event.touches.length === 1 && selectedTool === "ruler") {
+    } else if (event.touches.length === 1 && (selectedTool === "ruler" || selectedTool === "eraser")) {
       event.preventDefault();
       const touch = event.touches[0];
+      if (selectedTool === "eraser") {
+        socket.emit("scene:doodle:erase", getCanvasPos(touch));
+        touchGesture = null;
+        return;
+      }
       const point = getCanvasPos(touch);
       const completingTap = !!rulerAnchorPoint;
       touchGesture = {
@@ -1247,6 +1269,9 @@
     } else if (selectedTool === "ping") {
       event.preventDefault();
       socket.emit("pointer:ping", point);
+    } else if (selectedTool === "eraser") {
+      event.preventDefault();
+      socket.emit("scene:doodle:erase", point);
     } else if (selectedTool === "fog-reveal" || selectedTool === "fog-hide") {
       event.preventDefault();
       mapAreaDrag = { start: point, current: point, mode: selectedTool === "fog-reveal" ? "reveal" : "hide" };
@@ -1384,6 +1409,9 @@
       fitTokensToGrid: document.getElementById("fit-token-toggle").checked
     });
   };
+  document.getElementById("time-of-day-select").onchange = (event) => {
+    socket.emit("scene:setTimeOfDay", { timeOfDay: event.target.value });
+  };
   document.getElementById("grid-offset-reset").onclick = () => {
     socket.emit("scene:setGrid", {
       gridSize: Number(document.getElementById("grid-size").value) || 50,
@@ -1449,109 +1477,6 @@
     if (!stage) return;
     stage.style.transform = `translate(${mapPan.x}px, ${mapPan.y}px) scale(${mapScale})`;
     document.getElementById("zoom-level").textContent = Math.round(mapScale * 100) + "%";
-  }
-  let isDrawing = false;
-  let currentPath = null;
-  let doodleTouchId = null;
-  const doodleCanvas = document.getElementById("doodle-canvas");
-  const doodleCtx = doodleCanvas.getContext("2d");
-  doodleCanvas.onmousedown = (e) => {
-    if (e.button !== 0) return;
-    startDoodle(getCanvasPos(e));
-  };
-  doodleCanvas.onmousemove = (e) => {
-    continueDoodle(getCanvasPos(e));
-  };
-  document.addEventListener("mouseup", () => finishDoodle());
-  doodleCanvas.addEventListener("touchstart", (event) => {
-    if (selectedTool !== "doodle") return;
-    if (event.touches.length !== 1) {
-      cancelDoodle();
-      return;
-    }
-    const touch = event.touches[0];
-    event.preventDefault();
-    if (startDoodle(getCanvasPos(touch))) doodleTouchId = touch.identifier;
-  }, { passive: false });
-  doodleCanvas.addEventListener("touchmove", (event) => {
-    if (!isDrawing || doodleTouchId === null) return;
-    if (event.touches.length !== 1) {
-      cancelDoodle();
-      return;
-    }
-    const touch = Array.from(event.touches).find((entry) => entry.identifier === doodleTouchId);
-    if (!touch) return;
-    event.preventDefault();
-    continueDoodle(getCanvasPos(touch));
-  }, { passive: false });
-  doodleCanvas.addEventListener("touchend", (event) => {
-    if (!isDrawing || doodleTouchId === null) return;
-    const touch = Array.from(event.changedTouches).find((entry) => entry.identifier === doodleTouchId);
-    if (!touch) return;
-    event.preventDefault();
-    continueDoodle(getCanvasPos(touch));
-    finishDoodle();
-  }, { passive: false });
-  doodleCanvas.addEventListener("touchcancel", (event) => {
-    if (doodleTouchId === null) return;
-    const cancelled = Array.from(event.changedTouches).some((entry) => entry.identifier === doodleTouchId);
-    if (cancelled) cancelDoodle();
-  }, { passive: false });
-  function startDoodle(point) {
-    if (selectedTool !== "doodle" || !canDoodle()) return false;
-    isDrawing = true;
-    currentPath = {
-      id: "d" + Date.now(),
-      color: document.getElementById("doodle-color").value,
-      width: 3,
-      points: [point]
-    };
-    return true;
-  }
-  function continueDoodle(point) {
-    if (!isDrawing || !currentPath) return;
-    const previous = currentPath.points[currentPath.points.length - 1];
-    if (previous && Math.hypot(point.x - previous.x, point.y - previous.y) < 0.25) return;
-    currentPath.points.push(point);
-    drawDoodlePath(currentPath, true);
-  }
-  function finishDoodle() {
-    if (isDrawing && currentPath && currentPath.points.length > 1) {
-      socket.emit("scene:doodle:add", currentPath);
-    }
-    isDrawing = false;
-    currentPath = null;
-    doodleTouchId = null;
-  }
-  function cancelDoodle() {
-    if (!isDrawing && doodleTouchId === null) return;
-    isDrawing = false;
-    currentPath = null;
-    doodleTouchId = null;
-    if (state?.scene) redrawAllDoodles();
-  }
-  function getCanvasPos(e) {
-    const rect = doodleCanvas.getBoundingClientRect();
-    return { x: (e.clientX - rect.left) / mapScale, y: (e.clientY - rect.top) / mapScale };
-  }
-  function drawDoodlePath(path, liveOnly = false) {
-    doodleCtx.strokeStyle = path.color;
-    doodleCtx.lineWidth = path.width;
-    doodleCtx.lineCap = "round";
-    doodleCtx.lineJoin = "round";
-    doodleCtx.beginPath();
-    path.points.forEach((p, i) => {
-      if (i === 0) doodleCtx.moveTo(p.x, p.y);
-      else doodleCtx.lineTo(p.x, p.y);
-    });
-    doodleCtx.stroke();
-  }
-  function clearDoodleCanvas() {
-    doodleCtx.clearRect(0, 0, doodleCanvas.width, doodleCanvas.height);
-  }
-  function redrawAllDoodles() {
-    clearDoodleCanvas();
-    state.scene.doodlePaths.forEach((p) => drawDoodlePath(p));
   }
   function renderFog() {
     const canvas = document.getElementById("fog-canvas");
@@ -1621,6 +1546,269 @@
     document.getElementById("map-stage").appendChild(ping);
     setTimeout(() => ping.remove(), 1500);
   }
+  let isDrawing = false;
+  let isErasing = false;
+  let currentPath = null;
+  let lastErasePoint = null;
+  let doodleTouchId = null;
+  const doodleCanvas = document.getElementById("doodle-canvas");
+  const doodleCtx = doodleCanvas.getContext("2d");
+  doodleCanvas.onmousedown = (event) => {
+    if (event.button !== 0) return;
+    startDoodle(getCanvasPos(event));
+  };
+  doodleCanvas.onmousemove = (event) => continueDoodle(getCanvasPos(event));
+  document.addEventListener("mouseup", () => finishDoodle());
+  doodleCanvas.addEventListener("touchstart", (event) => {
+    if (selectedTool !== "doodle" && selectedTool !== "eraser") return;
+    if (event.touches.length !== 1) {
+      cancelDoodle();
+      return;
+    }
+    const touch = event.touches[0];
+    event.preventDefault();
+    if (startDoodle(getCanvasPos(touch))) doodleTouchId = touch.identifier;
+  }, { passive: false });
+  doodleCanvas.addEventListener("touchmove", (event) => {
+    if (!isDrawing && !isErasing || doodleTouchId === null) return;
+    if (event.touches.length !== 1) {
+      cancelDoodle();
+      return;
+    }
+    const touch = Array.from(event.touches).find((entry) => entry.identifier === doodleTouchId);
+    if (!touch) return;
+    event.preventDefault();
+    continueDoodle(getCanvasPos(touch));
+  }, { passive: false });
+  doodleCanvas.addEventListener("touchend", (event) => {
+    if (!isDrawing && !isErasing || doodleTouchId === null) return;
+    const touch = Array.from(event.changedTouches).find((entry) => entry.identifier === doodleTouchId);
+    if (!touch) return;
+    event.preventDefault();
+    continueDoodle(getCanvasPos(touch));
+    finishDoodle();
+  }, { passive: false });
+  doodleCanvas.addEventListener("touchcancel", (event) => {
+    if (doodleTouchId === null) return;
+    const cancelled = Array.from(event.changedTouches).some((entry) => entry.identifier === doodleTouchId);
+    if (cancelled) cancelDoodle();
+  }, { passive: false });
+  function startDoodle(point) {
+    if (!canDoodle()) return false;
+    if (selectedTool === "eraser") {
+      isErasing = true;
+      lastErasePoint = point;
+      socket.emit("scene:doodle:erase", point);
+      return true;
+    }
+    if (selectedTool !== "doodle") return false;
+    isDrawing = true;
+    currentPath = {
+      id: "d" + Date.now(),
+      color: document.getElementById("doodle-color").value,
+      width: 3,
+      points: [point]
+    };
+    return true;
+  }
+  function continueDoodle(point) {
+    if (isErasing) {
+      if (lastErasePoint && Math.hypot(point.x - lastErasePoint.x, point.y - lastErasePoint.y) >= 3) {
+        lastErasePoint = point;
+        socket.emit("scene:doodle:erase", point);
+      }
+      return;
+    }
+    if (!isDrawing || !currentPath) return;
+    const previous = currentPath.points[currentPath.points.length - 1];
+    if (previous && Math.hypot(point.x - previous.x, point.y - previous.y) < 0.25) return;
+    currentPath.points.push(point);
+    drawDoodlePath(currentPath);
+  }
+  function finishDoodle() {
+    if (isErasing) {
+      isErasing = false;
+      lastErasePoint = null;
+      doodleTouchId = null;
+      return;
+    }
+    if (isDrawing && currentPath && currentPath.points.length > 1) socket.emit("scene:doodle:add", currentPath);
+    isDrawing = false;
+    currentPath = null;
+    doodleTouchId = null;
+  }
+  function cancelDoodle() {
+    if (!isDrawing && !isErasing && doodleTouchId === null) return;
+    isDrawing = false;
+    isErasing = false;
+    currentPath = null;
+    lastErasePoint = null;
+    doodleTouchId = null;
+    if (state?.scene) redrawAllDoodles();
+  }
+  function getCanvasPos(event) {
+    const rect = doodleCanvas.getBoundingClientRect();
+    return { x: (event.clientX - rect.left) / mapScale, y: (event.clientY - rect.top) / mapScale };
+  }
+  function drawDoodlePath(path) {
+    doodleCtx.strokeStyle = path.color;
+    doodleCtx.lineWidth = path.width;
+    doodleCtx.lineCap = "round";
+    doodleCtx.lineJoin = "round";
+    doodleCtx.beginPath();
+    path.points.forEach((point, index) => {
+      if (index === 0) doodleCtx.moveTo(point.x, point.y);
+      else doodleCtx.lineTo(point.x, point.y);
+    });
+    doodleCtx.stroke();
+  }
+  function clearDoodleCanvas() {
+    doodleCtx.clearRect(0, 0, doodleCanvas.width, doodleCanvas.height);
+  }
+  function redrawAllDoodles() {
+    clearDoodleCanvas();
+    state.scene.doodlePaths.forEach((path) => drawDoodlePath(path));
+  }
+  const doodleCornerCanvas = document.getElementById("doodle-corner-canvas");
+  const doodleCornerContext = doodleCornerCanvas.getContext("2d");
+  let doodleCornerDrawing = false;
+  let doodleCornerPath = null;
+  let doodleCornerErasing = false;
+  let doodleCornerLastErasePoint = null;
+  let doodleCornerOpen = false;
+  let doodleCornerTool = "draw";
+  let doodleCornerDrag = null;
+  const doodleCornerPanel = document.getElementById("doodle-corner");
+  const doodleCornerToggle = document.getElementById("doodle-corner-toggle");
+  const doodleCornerDragHandle = document.getElementById("doodle-corner-drag-handle");
+  const doodleCornerDrawButton = document.getElementById("doodle-corner-draw-btn");
+  const doodleCornerEraserButton = document.getElementById("doodle-corner-eraser-btn");
+  function setDoodleCornerOpen(open) {
+    doodleCornerOpen = !!open;
+    doodleCornerPanel.classList.toggle("hidden", !doodleCornerOpen);
+    doodleCornerToggle.setAttribute("aria-expanded", String(doodleCornerOpen));
+  }
+  function setDoodleCornerTool(tool) {
+    doodleCornerTool = tool === "eraser" ? "eraser" : "draw";
+    doodleCornerDrawButton.classList.toggle("active", doodleCornerTool === "draw");
+    doodleCornerEraserButton.classList.toggle("active", doodleCornerTool === "eraser");
+    doodleCornerCanvas.classList.toggle("erasing", doodleCornerTool === "eraser");
+  }
+  function renderDoodleCorner() {
+    if (!doodleCornerContext || !state) return;
+    doodleCornerContext.clearRect(0, 0, doodleCornerCanvas.width, doodleCornerCanvas.height);
+    (state.scene.doodleCornerPaths || []).forEach((path) => drawDoodleCornerPath(path));
+  }
+  function drawDoodleCornerPath(path) {
+    if (!doodleCornerContext || !Array.isArray(path?.points) || path.points.length < 2) return;
+    doodleCornerContext.strokeStyle = path.color || "#d98a9e";
+    doodleCornerContext.lineWidth = Number(path.width) || 3;
+    doodleCornerContext.lineCap = "round";
+    doodleCornerContext.lineJoin = "round";
+    doodleCornerContext.beginPath();
+    path.points.forEach((point, index) => {
+      if (index === 0) doodleCornerContext.moveTo(point.x, point.y);
+      else doodleCornerContext.lineTo(point.x, point.y);
+    });
+    doodleCornerContext.stroke();
+  }
+  function doodleCornerPoint(event) {
+    const rect = doodleCornerCanvas.getBoundingClientRect();
+    return {
+      x: (event.clientX - rect.left) * doodleCornerCanvas.width / rect.width,
+      y: (event.clientY - rect.top) * doodleCornerCanvas.height / rect.height
+    };
+  }
+  doodleCornerCanvas.onpointerdown = (event) => {
+    if (!state || !joined) return;
+    event.preventDefault();
+    if (doodleCornerTool === "eraser") {
+      doodleCornerErasing = true;
+      doodleCornerLastErasePoint = doodleCornerPoint(event);
+      doodleCornerCanvas.setPointerCapture(event.pointerId);
+      socket.emit("scene:doodleCorner:erase", doodleCornerLastErasePoint);
+      return;
+    }
+    doodleCornerDrawing = true;
+    doodleCornerCanvas.setPointerCapture(event.pointerId);
+    doodleCornerPath = {
+      color: document.getElementById("doodle-corner-color").value,
+      width: 3,
+      points: [doodleCornerPoint(event)]
+    };
+  };
+  doodleCornerCanvas.onpointermove = (event) => {
+    if (doodleCornerErasing) {
+      const point2 = doodleCornerPoint(event);
+      if (Math.hypot(point2.x - doodleCornerLastErasePoint.x, point2.y - doodleCornerLastErasePoint.y) >= 3) {
+        doodleCornerLastErasePoint = point2;
+        socket.emit("scene:doodleCorner:erase", point2);
+      }
+      return;
+    }
+    if (!doodleCornerDrawing || !doodleCornerPath) return;
+    const point = doodleCornerPoint(event);
+    const previous = doodleCornerPath.points[doodleCornerPath.points.length - 1];
+    if (Math.hypot(point.x - previous.x, point.y - previous.y) < 1) return;
+    doodleCornerPath.points.push(point);
+    drawDoodleCornerPath(doodleCornerPath);
+  };
+  function finishDoodleCorner(event) {
+    if (doodleCornerErasing) {
+      doodleCornerErasing = false;
+      doodleCornerLastErasePoint = null;
+      if (event) doodleCornerCanvas.releasePointerCapture?.(event.pointerId);
+      return;
+    }
+    if (!doodleCornerDrawing || !doodleCornerPath) return;
+    doodleCornerDrawing = false;
+    if (doodleCornerPath.points.length > 1) socket.emit("scene:doodleCorner:add", doodleCornerPath);
+    doodleCornerPath = null;
+    if (event) doodleCornerCanvas.releasePointerCapture?.(event.pointerId);
+  }
+  doodleCornerCanvas.onpointerup = finishDoodleCorner;
+  doodleCornerCanvas.onpointercancel = finishDoodleCorner;
+  doodleCornerDrawButton.onclick = () => setDoodleCornerTool("draw");
+  doodleCornerEraserButton.onclick = () => setDoodleCornerTool("eraser");
+  doodleCornerToggle.onclick = () => setDoodleCornerOpen(!doodleCornerOpen);
+  document.getElementById("doodle-corner-undo-btn").onclick = () => socket.emit("scene:doodleCorner:undo");
+  document.getElementById("doodle-corner-clear-btn").onclick = () => socket.emit("scene:doodleCorner:clear");
+  doodleCornerDragHandle.onpointerdown = (event) => {
+    if (event.target.closest("button, input")) return;
+    const rect = doodleCornerPanel.getBoundingClientRect();
+    doodleCornerPanel.style.position = "fixed";
+    doodleCornerPanel.style.left = `${rect.left}px`;
+    doodleCornerPanel.style.top = `${rect.top}px`;
+    doodleCornerPanel.style.margin = "0";
+    doodleCornerDrag = { clientX: event.clientX, clientY: event.clientY, left: rect.left, top: rect.top };
+    doodleCornerDragHandle.setPointerCapture(event.pointerId);
+  };
+  doodleCornerDragHandle.onpointermove = (event) => {
+    if (!doodleCornerDrag) return;
+    doodleCornerPanel.style.left = `${doodleCornerDrag.left + event.clientX - doodleCornerDrag.clientX}px`;
+    doodleCornerPanel.style.top = `${doodleCornerDrag.top + event.clientY - doodleCornerDrag.clientY}px`;
+  };
+  doodleCornerDragHandle.onpointerup = () => {
+    doodleCornerDrag = null;
+  };
+  doodleCornerDragHandle.onpointercancel = () => {
+    doodleCornerDrag = null;
+  };
+  socket.on("scene:doodleCorner:add", (path) => {
+    if (!state) return;
+    state.scene.doodleCornerPaths.push(path);
+    drawDoodleCornerPath(path);
+  });
+  socket.on("scene:doodleCorner:redrawAll", (paths) => {
+    if (!state) return;
+    state.scene.doodleCornerPaths = Array.isArray(paths) ? paths : [];
+    renderDoodleCorner();
+  });
+  socket.on("scene:doodleCorner:clear", () => {
+    if (!state) return;
+    state.scene.doodleCornerPaths = [];
+    renderDoodleCorner();
+  });
   function savedSceneList() {
     return Array.isArray(state?.savedScenes) ? state.savedScenes : [];
   }
@@ -5858,6 +6046,8 @@ ${choices}`,
     document.getElementById("combat-temp-hp").textContent = Number(entity.tempHp) || 0;
     document.getElementById("combat-ac").textContent = Number(entity.ac) || 0;
     document.getElementById("combat-life-status").textContent = combat.dead ? "Dead" : combat.stable ? "Stable" : entity.hp <= 0 ? "Down" : "Ready";
+    renderCombatRage(entity, isNpc);
+    renderCombatMovement(entity, isNpc);
     const notes = document.getElementById("combat-notes");
     notes.classList.toggle("hidden", !isNpc || !entity.notes);
     notes.textContent = isNpc ? entity.notes || "" : "";
@@ -5868,7 +6058,9 @@ ${choices}`,
     document.getElementById("combat-long-rest-btn").textContent = isNpc ? "Restore NPC" : preparesSpells ? "Long rest & prepare spells" : "Complete long rest";
     renderCombatRolls(entity, isNpc);
     renderCombatReactions(entity, isNpc);
-    document.getElementById("combat-concentration").checked = !!combat.concentration;
+    const concentration = document.getElementById("combat-concentration");
+    concentration.checked = !!combat.concentration;
+    concentration.disabled = !isNpc && !!combat.rage?.active;
     document.getElementById("combat-exhaustion").textContent = Number(combat.exhaustion) || 0;
     document.getElementById("combat-death-successes").textContent = `${Number(combat.deathSaves?.successes) || 0} / 3`;
     document.getElementById("combat-death-failures").textContent = `${Number(combat.deathSaves?.failures) || 0} / 3`;
@@ -5887,14 +6079,17 @@ ${choices}`,
     Object.entries(combat.spellSlots || {}).filter(([, slot]) => Number(slot.total) > 0).forEach(([level, slot]) => {
       const row = document.createElement("div");
       row.className = "combat-slot-row";
+      const total = Number(slot.total) || 0;
+      const used = Math.max(0, Math.min(total, Number(slot.used) || 0));
+      const available = total - used;
       row.innerHTML = `
       <span class="slot-level">Level ${level}</span>
-      <button class="counter-btn recover-slot" type="button" title="Recover one slot">\u2212</button>
-      <strong>${Number(slot.total) - Number(slot.used)} / ${Number(slot.total)} available</strong>
-      <button class="counter-btn use-slot" type="button" title="Use one slot">+</button>
+      <button class="counter-btn deduct-slot" type="button" title="Deduct one available slot" ${available <= 0 ? "disabled" : ""}>\u2212</button>
+      <strong>${available} / ${total} available</strong>
+      <button class="counter-btn restore-slot" type="button" title="Restore one available slot" ${available >= total ? "disabled" : ""}>+</button>
     `;
-      row.querySelector(".recover-slot").onclick = () => combatAction("spellSlot", { level: Number(level), delta: -1 });
-      row.querySelector(".use-slot").onclick = () => combatAction("spellSlot", { level: Number(level), delta: 1 });
+      row.querySelector(".deduct-slot").onclick = () => combatAction("spellSlot", { level: Number(level), delta: 1 });
+      row.querySelector(".restore-slot").onclick = () => combatAction("spellSlot", { level: Number(level), delta: -1 });
       slots.appendChild(row);
     });
     if (!slots.children.length) slots.innerHTML = '<p class="empty-roll-options">No spell slots are configured on this sheet.</p>';
@@ -5902,6 +6097,77 @@ ${choices}`,
     const checkButton = document.getElementById("combat-concentration-roll");
     checkButton.classList.toggle("hidden", !check);
     if (check) checkButton.textContent = `Roll Constitution save \xB7 DC ${check.dc}`;
+  }
+  function renderCombatMovement(entity, isNpc = false) {
+    const container = document.getElementById("combat-movement");
+    if (!container) return;
+    const fields = isNpc ? entity.sheet?.fields || {} : entity.fields || {};
+    const speed = entity.speed || fields.speed || entity.sheet?.speed || "";
+    const movementSources = [
+      fields["racial-traits"],
+      fields.feats,
+      fields.features,
+      entity.racialTraits,
+      entity.feats,
+      entity.features
+    ];
+    const movementPattern = /\b(speed|movement|move|glide|flying|flight|fly|burrow|climb|swim|jump|leap|terrain|dash|teleport)\b/i;
+    const abilities = [...new Set(movementSources.flatMap((value) => String(value || "").split(/\n|;/)).map((value) => value.trim()).filter((value) => value && movementPattern.test(value)))];
+    container.innerHTML = "";
+    if (speed) {
+      const speedValue = document.createElement("strong");
+      speedValue.className = "combat-movement-speed";
+      speedValue.textContent = `Speed ${speed}`;
+      container.appendChild(speedValue);
+    }
+    abilities.forEach((ability) => {
+      const detail = document.createElement("span");
+      detail.className = "combat-movement-ability";
+      detail.textContent = ability;
+      container.appendChild(detail);
+    });
+    if (!container.children.length) container.innerHTML = '<p class="empty-roll-options">No movement details are listed on the sheet.</p>';
+  }
+  function barbarianClass(character) {
+    return String(character?.charClass || character?.fields?.class || "").trim().toLowerCase() === "barbarian";
+  }
+  function barbarianRageMaxUses(level) {
+    const value = Number(level) || 1;
+    if (value >= 17) return 6;
+    if (value >= 12) return 5;
+    if (value >= 6) return 4;
+    if (value >= 3) return 3;
+    return 2;
+  }
+  function barbarianRageDamageBonus(level) {
+    const value = Number(level) || 1;
+    return value >= 16 ? 4 : value >= 9 ? 3 : 2;
+  }
+  function characterWearsHeavyArmor(character) {
+    return String(character.fields?.["ac-method"] || "").toLowerCase() === "heavy";
+  }
+  function renderCombatRage(character, isNpc = false) {
+    const section = document.getElementById("combat-rage-section");
+    if (!section) return;
+    const available = !isNpc && barbarianClass(character);
+    section.classList.toggle("hidden", !available);
+    if (!available) return;
+    const rage = character.combat?.rage || {};
+    const active = !!rage.active;
+    const maxUses = barbarianRageMaxUses(character.level || character.fields?.level);
+    const used = Math.min(maxUses, Math.max(0, Number(rage.used) || 0));
+    const remaining = maxUses - used;
+    const stateLabel = document.getElementById("combat-rage-state");
+    const usesLabel = document.getElementById("combat-rage-uses");
+    const toggle = document.getElementById("combat-rage-toggle");
+    const note = document.getElementById("combat-rage-note");
+    stateLabel.textContent = active ? "Active" : "Inactive";
+    stateLabel.classList.toggle("active", active);
+    usesLabel.textContent = `${remaining} / ${maxUses} uses remaining`;
+    toggle.textContent = active ? "End rage" : "Enter rage";
+    toggle.disabled = !active && (remaining <= 0 || characterWearsHeavyArmor(character));
+    note.textContent = characterWearsHeavyArmor(character) ? "Rage benefits are unavailable while wearing heavy armor." : active ? `Strength checks and saves have advantage, melee Strength attacks deal +${barbarianRageDamageBonus(character.level)} damage, and bludgeoning, piercing, and slashing damage is resisted.` : "Rage lasts until you end it manually or it ends under the normal rules.";
+    toggle.onclick = () => combatAction("rage:toggle", { active: !active });
   }
   function renderCombatRolls(character, isNpc = false) {
     const mode = () => document.getElementById("combat-roll-mode").value;
@@ -5912,22 +6178,38 @@ ${choices}`,
     const spellAttackValue = character.spellcasting?.attackBonus ?? character.fields?.["spell-attack"];
     const hasSpellAttack = spellAttackValue !== "" && spellAttackValue !== void 0 && spellAttackValue !== null;
     const spellAttackButton = document.getElementById("combat-spell-attack-roll");
-    spellAttackButton.classList.toggle("hidden", !hasSpellAttack);
+    const rageActive = !isNpc && barbarianClass(character) && character.combat?.rage?.active && !characterWearsHeavyArmor(character);
+    spellAttackButton.classList.toggle("hidden", !hasSpellAttack || rageActive);
     if (hasSpellAttack) {
       const spellModifier = Number(spellAttackValue) || 0;
       spellAttackButton.textContent = `Spell attack ${signed(spellModifier)}`;
       spellAttackButton.onclick = () => {
         if (isNpc) rollNpcD20(character, "Spell attack", spellModifier, mode());
-        else rollCharacterD20(character, "Spell attack", spellModifier, { mode: mode() });
+        else rollCharacterD20(character, "Spell attack", spellModifier, { mode: mode(), spell: true });
       };
     }
     const spellDcValue = character.spellcasting?.saveDc ?? character.fields?.["spell-dc"];
     const spellDc = document.getElementById("combat-spell-dc");
     const hasSpellDc = spellDcValue !== "" && spellDcValue !== void 0 && spellDcValue !== null;
-    spellDc.classList.toggle("hidden", !hasSpellDc);
+    spellDc.classList.toggle("hidden", !hasSpellDc || rageActive);
     if (hasSpellDc) spellDc.textContent = `Spell save DC ${Number(spellDcValue) || 0}`;
+    const strengthCheck = document.getElementById("combat-strength-check");
+    const strengthSave = document.getElementById("combat-strength-save");
+    const showRageRolls = rageActive;
+    strengthCheck.classList.toggle("hidden", !showRageRolls);
+    strengthSave.classList.toggle("hidden", !showRageRolls);
+    if (showRageRolls) {
+      const strengthModifier = abilityModifier(character.abilities?.str ?? character.fields?.str);
+      strengthCheck.textContent = `Strength check ${signed(strengthModifier)} \xB7 Rage advantage`;
+      strengthSave.textContent = `Strength save ${signed(characterSaveModifier(character, "str"))} \xB7 Rage advantage`;
+      strengthCheck.onclick = () => rollCharacterD20(character, "Strength check", strengthModifier, { mode: "advantage" });
+      strengthSave.onclick = () => rollCharacterD20(character, "Strength save", characterSaveModifier(character, "str"), { mode: "advantage" });
+    }
     const attacks = document.getElementById("combat-attacks");
     attacks.innerHTML = "";
+    const rageBonus = rageActive ? barbarianRageDamageBonus(character.level) : 0;
+    const rageAttackMode = mode() === "disadvantage" ? "normal" : rageActive ? "advantage" : mode();
+    const rageAttackLabel = rageActive ? " \xB7 Rage advantage" : "";
     (character.attacks || []).filter((attack) => attack.name).forEach((attack) => {
       const row = document.createElement("div");
       row.className = "combat-roll-row";
@@ -5939,14 +6221,18 @@ ${choices}`,
       const bonusMatch = String(attack.bonus || "").match(/[+-]?\d+/);
       if (bonusMatch) {
         const modifier = Number(bonusMatch[0]);
-        row.appendChild(makeCombatRollButton(`Hit ${signed(modifier)}`, () => {
+        const rageEligible = rageActive && isRageMeleeStrengthAttack(attack);
+        row.appendChild(makeCombatRollButton(`Hit ${signed(modifier)}${rageEligible ? rageAttackLabel : ""}`, () => {
           if (isNpc) rollNpcD20(character, `${attack.name} attack`, modifier, mode());
-          else rollCharacterD20(character, `${attack.name} attack`, modifier, { mode: mode() });
+          else rollCharacterD20(character, `${attack.name} attack`, modifier, { mode: rageEligible ? rageAttackMode : mode() });
         }));
       }
       const damage = parseDiceExpression(attack.damage);
       if (damage) {
-        row.appendChild(makeCombatRollButton(damage.expression, () => rollDice(damage.count, damage.sides, damage.modifier, {
+        const rageEligible = rageActive && isRageMeleeStrengthAttack(attack);
+        const damageModifier = damage.modifier + (rageEligible ? rageBonus : 0);
+        const damageLabel = formatDiceExpression(damage.count, damage.sides, damageModifier);
+        row.appendChild(makeCombatRollButton(damageLabel, () => rollDice(damage.count, damage.sides, damageModifier, {
           characterName: isNpc ? null : character.name,
           tokenId: isNpc ? character.id : null,
           label: `${attack.name} damage`
@@ -5957,6 +6243,10 @@ ${choices}`,
     if (!attacks.children.length) attacks.innerHTML = '<p class="empty-roll-options">No attacks are configured.</p>';
     const spells = document.getElementById("combat-spells");
     spells.innerHTML = "";
+    if (rageActive) {
+      spells.innerHTML = '<p class="empty-roll-options">Spells cannot be cast while raging.</p>';
+      return;
+    }
     (isNpc ? normalizeSpellList(character.spells) : characterSpellEntries(character)).forEach((spell) => {
       const row = document.createElement("div");
       row.className = "combat-roll-row combat-spell-card";
@@ -6001,7 +6291,7 @@ ${choices}`,
         const modifier = Number(spellAttackValue) || 0;
         actions.appendChild(makeCombatRollButton(`Attack ${signed(modifier)}`, () => {
           if (isNpc) rollNpcD20(character, `${spell.name} spell attack`, modifier, mode());
-          else rollCharacterD20(character, `${spell.name} spell attack`, modifier, { mode: mode() });
+          else rollCharacterD20(character, `${spell.name} spell attack`, modifier, { mode: mode(), spell: true });
         }));
       }
       const damage = parseDiceExpression(spell.damage || spell.effect || spell.name);
@@ -6009,13 +6299,23 @@ ${choices}`,
         actions.appendChild(makeCombatRollButton(`Roll ${damage.expression}`, () => rollDice(damage.count, damage.sides, damage.modifier, {
           characterName: isNpc ? null : character.name,
           tokenId: isNpc ? character.id : null,
-          label: `${spell.name} damage`
+          label: `${spell.name} damage`,
+          spell: true
         }), true));
       }
       if (actions.children.length) row.appendChild(actions);
       spells.appendChild(row);
     });
     if (!spells.children.length) spells.innerHTML = '<p class="empty-roll-options">No spells are listed on the sheet.</p>';
+  }
+  function isRageMeleeStrengthAttack(attack) {
+    const details = String(attack.details || "").toLowerCase();
+    if (/ranged weapon attack|ranged attack|ammunition|range\s+\d|\d+\/\d+\s*ft/.test(details)) return false;
+    if (/using dexterity|dexterity-based|finesse/.test(details)) return false;
+    return /melee weapon attack|melee attack|reach \d|strength/.test(details) || !details;
+  }
+  function formatDiceExpression(count, sides, modifier) {
+    return `${count}d${sides}${modifier ? modifier > 0 ? `+${modifier}` : modifier : ""}`;
   }
   function renderCombatReactions(character, isNpc = false) {
     const section = document.getElementById("combat-reactions-section");
@@ -6236,7 +6536,10 @@ ${choices}`,
     if (pendingSpellPreparation) closeSpellPreparation();
     else if (activeCombatTarget) closeCombatManager();
   });
-  document.getElementById("combat-damage-btn").onclick = () => combatAction("damage", { amount: Number(document.getElementById("combat-amount").value) || 0 });
+  document.getElementById("combat-damage-btn").onclick = () => combatAction("damage", {
+    amount: Number(document.getElementById("combat-amount").value) || 0,
+    damageType: document.getElementById("combat-damage-type").value
+  });
   document.getElementById("combat-heal-btn").onclick = () => combatAction("heal", { amount: Number(document.getElementById("combat-amount").value) || 0 });
   document.getElementById("combat-temp-btn").onclick = () => combatAction("tempHp", { amount: Number(document.getElementById("combat-amount").value) || 0 });
   document.getElementById("combat-concentration").onchange = (event) => combatAction("concentration:set", { value: event.target.checked });
