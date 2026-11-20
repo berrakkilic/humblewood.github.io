@@ -363,6 +363,53 @@
       let drag = null;
       let hintCount = 0;
 
+      function puzzleState() {
+        return {
+          pieces: pieces.map(piece => {
+            const group = document.querySelector(`[data-id="${piece.id}"]`);
+            return {
+              id: piece.id,
+              x: Number(group?.dataset.x),
+              y: Number(group?.dataset.y),
+              angle: Number(group?.dataset.angle),
+              locked: group?.dataset.locked === 'true'
+            };
+          })
+        };
+      }
+
+      function sendPuzzleState() {
+        window.parent.postMessage({
+          type: 'humblewood:puzzle-state',
+          puzzleId: 'stone-tablets',
+          state: puzzleState()
+        }, '*');
+      }
+
+      window.addEventListener('message', event => {
+        if (!event.data || event.data.type !== 'humblewood:puzzle-sync') return;
+        const state = event.data.state;
+        if (!state || !Array.isArray(state.pieces)) return;
+        state.pieces.forEach(saved => {
+          const piece = pieces.find(entry => entry.id === saved.id);
+          const group = document.querySelector(`[data-id="${saved.id}"]`);
+          if (!piece || !group) return;
+          group.dataset.x = String(Number.isFinite(Number(saved.x)) ? saved.x : piece.start[0]);
+          group.dataset.y = String(Number.isFinite(Number(saved.y)) ? saved.y : piece.start[1]);
+          group.dataset.angle = String(normalizedAngle(saved.angle));
+          group.dataset.locked = saved.locked ? 'true' : 'false';
+          group.classList.toggle('locked', saved.locked);
+          group.classList.toggle('selected', false);
+          group.setAttribute('aria-label', saved.locked
+            ? `${piece.label}, settled correctly`
+            : `${piece.label}, movable stone`);
+          applyTransform(group);
+          if (saved.locked) lockedLayer.appendChild(group);
+          else pieceLayer.appendChild(group);
+        });
+        updateProgress();
+      });
+
       const pieces = [
         { id: 'tablet-1', label: 'Tablet I', points: '0,0 300,0 150,150', center: [150, 50], start: [55, 95, 180] },
         { id: 'tablet-2', label: 'Tablet II', points: '300,0 450,150 300,300 150,150', center: [300, 150], start: [-55, 195, 45] },
@@ -433,6 +480,7 @@
         group.dataset.angle = String(normalizedAngle(Number(group.dataset.angle) + amount));
         applyTransform(group);
         status.textContent = `${group.getAttribute('aria-label')} rotated to ${group.dataset.angle}°.`;
+        sendPuzzleState();
       }
 
       function settleIfCorrect(group, announce = true) {
@@ -451,6 +499,7 @@
         selectedId = '';
         updateProgress();
         if (announce) status.textContent = `${group.dataset.label} settles into an ancient groove.`;
+        sendPuzzleState();
         return true;
       }
 
@@ -511,7 +560,10 @@
           group.classList.remove('dragging');
           if (group.hasPointerCapture(event.pointerId)) group.releasePointerCapture(event.pointerId);
           drag = null;
-          if (!settleIfCorrect(group)) status.textContent = `${piece.label} rests loosely. The old seams do not answer yet.`;
+          if (!settleIfCorrect(group)) {
+            status.textContent = `${piece.label} rests loosely. The old seams do not answer yet.`;
+            sendPuzzleState();
+          }
         });
         group.addEventListener('pointercancel', () => { drag = null; group.classList.remove('dragging'); });
         group.addEventListener('dblclick', event => { event.preventDefault(); rotatePiece(group); });
@@ -530,6 +582,7 @@
           if (directions[event.key]) {
             event.preventDefault();
             movePiece(group, Number(group.dataset.x) + directions[event.key][0], Number(group.dataset.y) + directions[event.key][1]);
+            sendPuzzleState();
           } else if (event.key.toLowerCase() === 'r') {
             event.preventDefault();
             rotatePiece(group);
@@ -566,6 +619,7 @@
         picker.value = selectedId;
         updateProgress();
         status.textContent = 'The eight tablets scatter across the work surface.';
+        sendPuzzleState();
       }
 
       pieces.forEach(addPiece);
@@ -594,6 +648,7 @@
           fullscreenButton.textContent = document.fullscreenElement ? 'Exit full screen' : 'Full screen';
         });
       }
+      window.parent.postMessage({ type: 'humblewood:puzzle-ready', puzzleId: 'stone-tablets' }, '*');
       document.getElementById('reveal-hint').addEventListener('click', event => {
         hintCount = Math.min(3, hintCount + 1);
         document.getElementById(`hint-${hintCount}`).hidden = false;

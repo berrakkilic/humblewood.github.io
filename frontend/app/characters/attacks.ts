@@ -27,6 +27,7 @@ function initializeAttackPresetControls() {
     option.textContent = `${preset.name}${preset.properties ? ` · ${preset.properties}` : ''}`;
     select.appendChild(option);
   });
+  applyPresetSearch('attack-preset-select', 'attack-preset-search');
   document.getElementById('attack-add-btn').onclick = () => openAttackForm(null);
   document.getElementById('attack-form-cancel').onclick = closeAttackForm;
   document.getElementById('attack-preset-load').onclick = () => {
@@ -127,6 +128,7 @@ function initializeNpcPresetControls() {
     option.textContent = preset.name;
     groups.get(preset.source).appendChild(option);
   });
+  applyPresetSearch('npc-sheet-preset', 'npc-preset-search');
   document.getElementById('npc-sheet-preset-load').onclick = () => {
     const preset = creationPresets.NPC_PRESETS.find(entry => entry.id === select.value);
     if (!preset) return showToast('Choose an NPC preset first.');

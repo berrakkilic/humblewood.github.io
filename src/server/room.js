@@ -111,6 +111,13 @@ function createRoom({ dataDir, dmPin, io, uploadDir }) {
     });
   }
 
+  function resetLongRestFeatureUses(features) {
+    return cleanFeatureUses(features).map(feature => {
+      if (feature.reset === 'long-rest') feature.remaining = feature.max;
+      return feature;
+    });
+  }
+
   const LIBRARY_TEXT_EXTENSIONS = new Set([
     '.txt', '.md', '.markdown', '.json', '.csv', '.js', '.ts', '.css', '.html', '.xml', '.yaml', '.yml'
   ]);
@@ -256,6 +263,28 @@ function createRoom({ dataDir, dmPin, io, uploadDir }) {
     })).filter(reaction => reaction.name);
   }
 
+  function cleanFeatureUses(features) {
+    if (!Array.isArray(features)) return [];
+    const seen = new Set();
+    return features.slice(0, 80).map((feature, index) => {
+      const requestedId = String(feature?.id || `feature-${index}`).slice(0, 140);
+      let id = requestedId || `feature-${index}`;
+      if (seen.has(id)) id = `feature-${index}-${Math.random().toString(36).slice(2, 7)}`;
+      seen.add(id);
+      const max = Math.max(0, Math.min(999, Math.floor(Number(feature?.max) || 0)));
+      const reset = ['long-rest', 'short-rest', 'manual'].includes(String(feature?.reset || '').trim())
+        ? String(feature.reset).trim()
+        : 'long-rest';
+      return {
+        id,
+        name: String(feature?.name || '').trim().slice(0, 100),
+        max,
+        remaining: Math.max(0, Math.min(max, Math.floor(Number(feature?.remaining) || 0))),
+        reset
+      };
+    }).filter(feature => feature.name);
+  }
+
   function cleanSpells(spells) {
     if (!Array.isArray(spells)) return [];
     return spells.slice(0, 300).map((spell, index) => {
@@ -372,6 +401,7 @@ function createRoom({ dataDir, dmPin, io, uploadDir }) {
       concentration: !!combat.concentration,
       exhaustion: Math.max(0, Math.min(6, Number(combat.exhaustion) || 0)),
       reactionAvailable: combat.reactionAvailable !== false,
+      featureUses: cleanFeatureUses(combat.featureUses),
       spellSlots
     };
     return npc;
@@ -523,6 +553,7 @@ function createRoom({ dataDir, dmPin, io, uploadDir }) {
         used: Math.max(0, Math.min(rageMaxUses, Number(rage.used) || 0)),
         maxUses: rageMaxUses
       },
+      featureUses: cleanFeatureUses(previous.featureUses),
       spellSlots
     };
     syncCombatFields(character);
@@ -597,6 +628,7 @@ function createRoom({ dataDir, dmPin, io, uploadDir }) {
         scene: { ...defaultState.scene, ...(saved.scene || {}) },
         jukebox: { ...defaultState.jukebox, ...(saved.jukebox || {}) },
         library: saved.library && typeof saved.library === 'object' ? saved.library : defaultState.library,
+        puzzleStates: saved.puzzleStates && typeof saved.puzzleStates === 'object' ? saved.puzzleStates : {},
         notifications: Array.isArray(saved.notifications) ? saved.notifications : defaultState.notifications,
         characters: saved.characters || {},
         shopStock: normalizeShopStock(saved.shopStock),
@@ -618,6 +650,9 @@ function createRoom({ dataDir, dmPin, io, uploadDir }) {
       if (!Array.isArray(state.scene.doodleCornerPaths)) state.scene.doodleCornerPaths = [];
       if (!Array.isArray(state.scene.fogShapes)) state.scene.fogShapes = [];
       if (!Array.isArray(state.initiative.entries)) state.initiative.entries = [];
+      if (!state.puzzleStates || typeof state.puzzleStates !== 'object' || Array.isArray(state.puzzleStates)) {
+        state.puzzleStates = {};
+      }
       normalizeLibrary(state.library);
       normalizeNotifications(state.notifications);
       state.shopStock = normalizeShopStock(state.shopStock);
@@ -956,6 +991,41 @@ function createRoom({ dataDir, dmPin, io, uploadDir }) {
       files: cloneJson(state.library?.files || []),
       broadcast: publicLibraryBroadcast()
     };
+  }
+
+  function cleanPuzzleState(value) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+    try {
+      const serialized = JSON.stringify(value);
+      if (serialized.length > 100 * 1024) return null;
+      return JSON.parse(serialized);
+    } catch {
+      return null;
+    }
+  }
+
+  function emitPuzzleState(fileId, targetSocket) {
+    const id = String(fileId || state.library?.broadcast?.fileId || '').trim();
+    if (!id) return;
+    const payload = {
+      fileId: id,
+      state: cleanPuzzleState(state.puzzleStates?.[id]) || null,
+      updatedAt: Number(state.puzzleStates?.[`${id}:updatedAt`]) || 0
+    };
+    if (targetSocket) targetSocket.emit('puzzle:update', payload);
+    else io.emit('puzzle:update', payload);
+  }
+
+  function updatePuzzleState(fileId, value) {
+    const id = String(fileId || '').trim();
+    const cleaned = cleanPuzzleState(value);
+    if (!id || !cleaned) return false;
+    if (!state.puzzleStates || typeof state.puzzleStates !== 'object') state.puzzleStates = {};
+    state.puzzleStates[id] = cleaned;
+    state.puzzleStates[`${id}:updatedAt`] = Date.now();
+    persistState();
+    emitPuzzleState(id);
+    return true;
   }
 
   function emitLibraryUpdate() {
@@ -1305,6 +1375,8 @@ function createRoom({ dataDir, dmPin, io, uploadDir }) {
     emitCharacterUpdate,
     emitLibraryBroadcast,
     emitLibraryUpdate,
+    emitPuzzleState,
+    updatePuzzleState,
     emitNotifications,
     emitOnlineUsers,
     emitNpcRoster,
@@ -1321,6 +1393,7 @@ function createRoom({ dataDir, dmPin, io, uploadDir }) {
     normalizeToken,
     cleanInventory,
     resetLongRestItemUsage,
+    resetLongRestFeatureUses,
     onlineUsers,
     normalizeUsername,
     npcFromToken,

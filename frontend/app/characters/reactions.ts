@@ -305,6 +305,46 @@ const REACTION_PRESETS: any[] = [
   }
 ];
 
+const BONUS_ACTION_PRESET_GROUPS = [
+  'Class features',
+  'Bonus action spells',
+  'Weapons',
+  'Feats'
+];
+
+const BONUS_ACTION_PRESETS: any[] = [
+  { id: 'ba-monk-flurry', group: 'Class features', name: 'Flurry of Blows', requirement: 'Monk', resource: 'Spend 1 ki', source: "2024 core rules", effect: 'Immediately make two Unarmed Strikes after taking the Attack action.' },
+  { id: 'ba-monk-patient', group: 'Class features', name: 'Patient Defense', requirement: 'Monk', resource: 'Spend 1 ki', source: "2024 core rules", effect: 'Take the Disengage action and gain advantage on Dexterity saving throws until the start of your next turn.' },
+  { id: 'ba-monk-wind', group: 'Class features', name: 'Step of the Wind', requirement: 'Monk', resource: 'Spend 1 ki', source: "2024 core rules", effect: 'Take the Disengage or Dash action and double your jump distance for the turn.' },
+  { id: 'ba-rogue-cunning', group: 'Class features', name: 'Cunning Action', requirement: 'Rogue', resource: 'One bonus action', source: "2024 core rules", effect: 'Dash, Disengage, or Hide.' },
+  { id: 'ba-rogue-steady', group: 'Class features', name: 'Steady Aim', requirement: 'Rogue', resource: 'One bonus action', source: "2024 core rules", effect: 'Give yourself advantage on your next attack roll before the end of the turn; your Speed becomes 0 until the end of the current turn.' },
+  { id: 'ba-barbarian-rage', group: 'Class features', name: 'Rage', requirement: 'Barbarian', resource: 'One bonus action; limited uses', source: "2024 core rules", effect: 'Enter Rage. Strength checks and saves have advantage, melee Strength damage is increased, and resistance applies to bludgeoning, piercing, and slashing damage.' },
+  { id: 'ba-barbarian-maintain', group: 'Class features', name: 'Maintain Rage', requirement: 'Barbarian', resource: 'Bonus action when required', source: "2024 core rules", effect: 'Extend Rage through an additional turn by attacking or damaging a hostile creature or by using a bonus action to maintain it.' },
+  { id: 'ba-bard-inspiration', group: 'Class features', name: 'Bardic Inspiration', requirement: 'Bard', resource: 'One bonus action; Bardic Inspiration dice', source: "2024 core rules", effect: 'Give a visible or audible creature within 60 feet one Bardic Inspiration die.' },
+  { id: 'ba-druid-wild', group: 'Class features', name: 'Wild Shape', requirement: 'Druid', resource: 'One bonus action', source: "2024 core rules", effect: 'Transform into a known beast form or use Wild Shape to assume an appropriate Wild Shape effect.' },
+  { id: 'ba-ranger-natures-veil', group: 'Class features', name: "Nature's Veil", requirement: 'Ranger', resource: 'Bonus action; limited uses', source: "2024 core rules", effect: 'Turn Invisible as a bonus action until the end of your next turn.' },
+  { id: 'ba-ranger-beast', group: 'Class features', name: 'Command Beast Companion', requirement: 'Beast Master Ranger', resource: 'One bonus action', source: "2024 core rules", effect: 'Order or direct your beast companion to take its action or attack.' },
+  { id: 'ba-sorcerer-inate', group: 'Class features', name: 'Innate Sorcery', requirement: 'Sorcerer', resource: 'One bonus action; limited uses', source: "2024 core rules", effect: 'Activate Innate Sorcery for 1 minute, gaining sorcerous potency against creatures and advantage on Sorcery checks.' },
+  { id: 'ba-sorcerer-quickened', group: 'Class features', name: 'Quickened Spell', requirement: 'Sorcerer', resource: 'Metamagic; 2 sorcery points', source: "2024 core rules", effect: 'Cast a spell with a casting time of an action as a bonus action; only one leveled spell may be cast on the turn.' },
+  { id: 'ba-fighter-second-wind', group: 'Class features', name: 'Second Wind', requirement: 'Fighter', resource: 'One bonus action; limited uses', source: "2024 core rules", effect: 'Regain Hit Points using 1d10 plus your Fighter level, or use a tactical benefit granted by a subclass.' },
+  { id: 'ba-paladin-sense', group: 'Class features', name: 'Divine Sense', requirement: 'Paladin', resource: 'Bonus action; limited uses', source: "2024 core rules", effect: 'Sense the location of Celestials, Fiends, and Undead within 60 feet that are not behind total cover.' },
+  { id: 'ba-cleric-spiritual', group: 'Bonus action spells', name: 'Spiritual Weapon', requirement: 'Cleric spell known or prepared', resource: 'One bonus action; concentration', source: "2024 / 2014 core rules", effect: 'Create a floating weapon and attack with it using a bonus action on subsequent turns.' },
+  { id: 'ba-cleric-healing', group: 'Bonus action spells', name: 'Bonus action healing spell', requirement: 'Cleric or another prepared spellcaster', resource: 'Bonus action; spell slot', source: "2024 / 2014 core rules", effect: 'Cast a spell marked for a bonus action, such as Healing Word, instead of taking another bonus action.' },
+  { id: 'ba-druid-spell', group: 'Bonus action spells', name: 'Bonus action spell', requirement: 'Druid', resource: 'Bonus action; spell slot', source: "2024 / 2014 core rules", effect: 'Cast a spell with a bonus action casting time. If you cast a leveled spell, follow the spellcasting action limitations for that turn.' },
+  { id: 'ba-ranger-spell', group: 'Bonus action spells', name: 'Bonus action damage or utility spell', requirement: 'Ranger', resource: 'Bonus action; spell slot', source: "2024 / 2014 core rules", effect: 'Cast a bonus action spell for damage, healing, utility, or battlefield control.' },
+  { id: 'ba-wizard-spell', group: 'Bonus action spells', name: 'Bonus action spell', requirement: 'Wizard', resource: 'Bonus action; spell slot', source: "2024 / 2014 core rules", effect: 'Cast a Wizard spell with a bonus action casting time and follow the normal limits on leveled spells cast on the turn.' },
+  { id: 'ba-warlock-spell', group: 'Bonus action spells', name: 'Bonus action spell', requirement: 'Warlock', resource: 'Bonus action; spell slot or pact magic', source: "2024 / 2014 core rules", effect: 'Cast a Warlock spell with a bonus action casting time.' },
+  { id: 'ba-warlock-pact', group: 'Class features', name: 'Pact of the Blade', requirement: 'Pact of the Blade Warlock', resource: 'Bonus action to summon or shift pact weapon', source: "2014 core rules", effect: 'Conjure or dismiss your pact weapon, or summon a magical weapon into it.' },
+  { id: 'ba-warlock-chain', group: 'Class features', name: 'Investment of the Chain Master', requirement: 'Investment of the Chain Master invocation', resource: 'Bonus action for the familiar', source: "2014 core rules", effect: 'Command or enhance your familiar, including giving it a bonus action attack in appropriate forms.' },
+  { id: 'ba-light-weapon', group: 'Weapons', name: 'Two-Weapon Fighting', requirement: 'Two Light weapons', resource: 'One bonus action', source: "2024 / 2014 core rules", effect: 'Make one extra attack with the other Light weapon after taking the Attack action. The 2014 rules do not add your ability modifier unless a feature grants it.' },
+  { id: 'ba-nick', group: 'Weapons', name: 'Nick Weapon Mastery', requirement: 'Nick mastery and Light weapons', resource: 'No bonus action cost', source: "2024 core rules", effect: 'When you make the extra attack from Light property weapons, treat the extra attack as part of the Attack action instead of using a bonus action.' },
+  { id: 'ba-polearm', group: 'Weapons', name: 'Polearm Master Bonus Attack', requirement: 'Polearm Master feat', resource: 'One bonus action', source: "2014 / 2024 core rules", effect: 'After taking the Attack action with the haft/hilt of a qualifying glaive, halberd, pike, quarterstaff, or spear, make a bonus action attack for 1d4 damage.' },
+  { id: 'ba-chef', group: 'Feats', name: 'Chef', requirement: 'Chef feat', resource: 'Bonus action; Chef cooking times', source: "2014 / 2024 core rules", effect: 'Feed a creature special snacks to grant Temporary Hit Points.' },
+  { id: 'ba-durable', group: 'Feats', name: 'Durable', requirement: 'Durable feat', resource: 'One bonus action; Hit Dice', source: "2014 core rules", effect: 'Use Hit Dice to heal yourself as a bonus action.' },
+  { id: 'ba-keen-observant', group: 'Feats', name: 'Keen Mind / Observant', requirement: 'Keen Mind or Observant feat', resource: 'One bonus action', source: "2014 core rules", effect: 'Turn the Study or Search action into a bonus action.' },
+  { id: 'ba-telekinetic', group: 'Feats', name: 'Telekinetic', requirement: 'Telekinetic feat', resource: 'One bonus action', source: "2014 / 2024 core rules", effect: 'Cast Mage Hand or use the feat to shove a creature away with a bonus action where the rules permit.' }
+];
+
 function normalizeReaction(reaction, index = 0) {
   if (!reaction || typeof reaction !== 'object') return null;
   const name = String(reaction.name || '').trim();
@@ -363,9 +403,102 @@ function renderReactionPresetOptions() {
     presets.forEach(preset => appendReactionPresetOption(group, preset));
     select.appendChild(group);
   });
+  applyPresetSearch('reaction-preset-select', 'reaction-preset-search');
+}
+
+function renderBonusActionPresetOptions() {
+  const search = document.getElementById('bonus-action-preset-search') as HTMLInputElement;
+  const list = document.getElementById('bonus-action-preset-list');
+  const select = document.getElementById('bonus-action-preset-select') as HTMLSelectElement;
+  const query = search.value.trim().toLowerCase();
+  const sheetText = `${String(document.getElementById('sf-class')?.value || '')} ${String(document.getElementById('sf-subclass')?.value || '')} ${String(document.getElementById('sf-feats')?.value || '')}`.toLowerCase();
+  list.innerHTML = '';
+
+  const orderedGroups = ['Suggested for this sheet', ...BONUS_ACTION_PRESET_GROUPS];
+  let matches = 0;
+  orderedGroups.forEach(groupName => {
+    const presets = groupName === 'Suggested for this sheet'
+      ? BONUS_ACTION_PRESETS.filter(preset => sheetText.includes(preset.requirement.toLowerCase().split(' ')[0]))
+      : BONUS_ACTION_PRESETS.filter(preset => preset.group === groupName);
+    const filtered = presets.filter(preset => {
+      const text = `${preset.name} ${preset.requirement} ${preset.resource} ${preset.effect} ${preset.source} ${preset.group}`.toLowerCase();
+      return !query || text.includes(query);
+    });
+    if (!filtered.length) return;
+    matches += filtered.length;
+    const heading = document.createElement('div');
+    heading.className = 'bonus-action-preset-group';
+    heading.textContent = groupName;
+    list.appendChild(heading);
+    filtered.forEach(preset => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'bonus-action-preset-option';
+      button.setAttribute('role', 'option');
+      button.dataset.presetId = preset.id;
+      const detail = [preset.requirement, preset.resource].filter(Boolean).join(' · ');
+      button.innerHTML = `<strong>${escapeHtml(preset.name)}</strong>${detail ? `<small>${escapeHtml(detail)}</small>` : ''}`;
+      button.onmousedown = event => event.preventDefault();
+      button.onclick = () => {
+        select.value = preset.id;
+        search.value = preset.name;
+        list.classList.add('hidden');
+        search.setAttribute('aria-expanded', 'false');
+      };
+      list.appendChild(button);
+    });
+  });
+  if (!matches) {
+    list.innerHTML = '<div class="bonus-action-preset-group">No matching presets</div>';
+  }
+}
+
+function initializeBonusActionPresetControls() {
+  const search = document.getElementById('bonus-action-preset-search') as HTMLInputElement;
+  const combobox = document.getElementById('bonus-action-combobox');
+  const list = document.getElementById('bonus-action-preset-list');
+  renderBonusActionPresetOptions();
+  const openList = () => {
+    renderBonusActionPresetOptions();
+    list.classList.remove('hidden');
+    search.setAttribute('aria-expanded', 'true');
+  };
+  search.onfocus = openList;
+  search.onclick = openList;
+  search.oninput = openList;
+  combobox.onkeydown = event => {
+    if (event.key === 'Escape') {
+      list.classList.add('hidden');
+      search.setAttribute('aria-expanded', 'false');
+    }
+  };
+  document.addEventListener('mousedown', event => {
+    if (!combobox.contains(event.target as Node)) {
+      list.classList.add('hidden');
+      search.setAttribute('aria-expanded', 'false');
+    }
+  });
+  document.getElementById('bonus-action-preset-add').onclick = () => {
+    const select = document.getElementById('bonus-action-preset-select') as HTMLSelectElement;
+    const preset = BONUS_ACTION_PRESETS.find(entry => entry.id === select.value);
+    if (!preset) return showToast('Choose a bonus action preset first.');
+    const textarea = document.getElementById('sf-bonus-actions') as HTMLTextAreaElement;
+    const line = `${preset.name}${preset.resource ? ` — ${preset.resource}` : ''}: ${preset.effect}`;
+    const current = textarea.value.trim();
+    if (current.split(/\n+/).some(entry => entry.toLowerCase().startsWith(`${preset.name.toLowerCase()} —`))) {
+      return showToast(`${preset.name} is already on the sheet.`);
+    }
+    textarea.value = current ? `${current}\n${line}` : line;
+    select.value = '';
+    search.value = '';
+    renderBonusActionPresetOptions();
+    list.classList.add('hidden');
+    search.setAttribute('aria-expanded', 'false');
+  };
 }
 
 function initializeReactionPresetControls() {
+  applyPresetSearch('reaction-preset-select', 'reaction-preset-search');
   document.getElementById('reaction-add-btn').onclick = () => openReactionForm(null);
   document.getElementById('reaction-form-cancel').onclick = closeReactionForm;
   document.getElementById('reaction-preset-load').onclick = () => {

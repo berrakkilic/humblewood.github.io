@@ -72,7 +72,7 @@ function registerCharacterHandlers(socket, room) {
   const {
     CONDITIONS, deny, emitCharacterUpdate, emitToken, isDm, normalizeCharacter,
     ownsCharacter, persistState, removeInitiativeForTokenIds, syncCharacterTokens,
-    syncCombatFields, resetLongRestItemUsage, barbarianCharacter,
+    syncCombatFields, resetLongRestItemUsage, resetLongRestFeatureUses, barbarianCharacter,
     characterWearsHeavyArmor
   } = room;
   const { io, state } = room;
@@ -115,6 +115,24 @@ function registerCharacterHandlers(socket, room) {
         reactionAvailable: original.combat.reactionAvailable !== false,
         spellSlots: original.combat.spellSlots
       };
+    }
+    if (sheet.combat && typeof sheet.combat === 'object') {
+      const previousSlots = sheet.combat.spellSlots && typeof sheet.combat.spellSlots === 'object'
+        ? sheet.combat.spellSlots
+        : original?.combat?.spellSlots || {};
+      sheet.combat.spellSlots = Object.fromEntries(Array.from({ length: 9 }, (_, index) => {
+        const level = index + 1;
+        const fromPrevious = previousSlots[level] || previousSlots[String(level)] || {};
+        const totalKey = `spell-slots-${level}`;
+        const usedKey = `spell-used-${level}`;
+        const total = Object.prototype.hasOwnProperty.call(sheet.fields || {}, totalKey)
+          ? Math.max(0, Number(sheet.fields[totalKey]) || 0)
+          : Math.max(0, Number(fromPrevious.total) || 0);
+        const used = Object.prototype.hasOwnProperty.call(sheet.fields || {}, usedKey)
+          ? Math.max(0, Number(sheet.fields[usedKey]) || 0)
+          : Math.max(0, Number(fromPrevious.used) || 0);
+        return [level, { total, used: Math.min(total, used) }];
+      }));
     }
     normalizeCharacter(sheet);
     if (originalName !== name && original) {
@@ -237,6 +255,17 @@ function registerCharacterHandlers(socket, room) {
       slot.used = Math.max(0, Math.min(slot.total, slot.used + Math.sign(Number(payload.delta) || 0)));
     } else if (payload.action === 'restoreAllSlots') {
       Object.values(combat.spellSlots).forEach(slot => { slot.used = 0; });
+    } else if (payload.action === 'featureUse') {
+      const featureId = String(payload.featureId || '').slice(0, 140);
+      const feature = (combat.featureUses || []).find(entry => entry.id === featureId);
+      if (!feature) return deny(socket, 'That feature charge is not configured on this character.');
+      feature.remaining = Math.max(0, Math.min(feature.max, feature.remaining + Math.sign(Number(payload.delta) || 0)));
+    } else if (payload.action === 'restoreFeatureUses') {
+      (combat.featureUses || []).forEach(feature => {
+        if (String(payload.reset || 'all') === 'all' || feature.reset === payload.reset) {
+          feature.remaining = feature.max;
+        }
+      });
     } else if (payload.action === 'reaction:use') {
       if (combat.reactionAvailable === false) return deny(socket, 'This character has already used a reaction this turn.');
       const reactionId = String(payload.reactionId || '').slice(0, 140);
@@ -261,6 +290,7 @@ function registerCharacterHandlers(socket, room) {
       combat.exhaustion = Math.max(0, combat.exhaustion - 1);
       Object.values(combat.spellSlots).forEach(slot => { slot.used = 0; });
       character.inventory = resetLongRestItemUsage(character.inventory);
+      combat.featureUses = resetLongRestFeatureUses(combat.featureUses);
     } else {
       return;
     }

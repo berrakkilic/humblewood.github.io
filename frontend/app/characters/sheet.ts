@@ -94,6 +94,7 @@ function setCharacterRuleSelections(fields: any = {}) {
 }
 
 function initializeCharacterRuleControls() {
+  moveSavingThrowsIntoAbilities();
   updateSpeciesOptions();
   replaceSelectOptions(document.getElementById('sf-class'), Object.keys(characterRules.CLASS_SUBCLASSES), 'Choose a class...');
   updateSubraceOptions();
@@ -119,6 +120,35 @@ function initializeCharacterRuleControls() {
     refreshCharacterCalculations(false, true);
     renderSpellListEditor();
   });
+}
+
+function moveSavingThrowsIntoAbilities() {
+  const slot = document.getElementById('ability-saving-throws');
+  const savingThrows = document.querySelector('.save-skill-columns > div:first-child');
+  if (!slot || !savingThrows) return;
+  slot.appendChild(savingThrows);
+}
+
+function alignBasicStatsPanels() {
+  const combat = document.querySelector('.section-combat') as HTMLElement | null;
+  const acCalculator = document.querySelector('.ac-calculator') as HTMLElement | null;
+  const savingThrows = document.querySelector('.ability-saving-throws') as HTMLElement | null;
+  if (!combat || !acCalculator || !savingThrows) return;
+
+  if (window.innerWidth <= 1450) {
+    savingThrows.style.marginTop = '';
+    return;
+  }
+
+  if (combat.offsetParent === null || acCalculator.offsetParent === null) {
+    savingThrows.style.marginTop = '';
+    return;
+  }
+
+  savingThrows.style.marginTop = '';
+  const acTop = acCalculator.getBoundingClientRect().top;
+  const savingTop = savingThrows.getBoundingClientRect().top;
+  savingThrows.style.marginTop = `${Math.max(18, acTop - savingTop + 18)}px`;
 }
 
 function applyRecommendedArmorMethod() {
@@ -176,6 +206,29 @@ function applySpellcastingDefaults() {
   document.getElementById('sf-spell-ability').value = ability.toUpperCase();
 }
 
+function initializeFeatureUsageControls() {
+  const addButton = document.getElementById('feature-use-add');
+  if (!addButton) return;
+  addButton.addEventListener('click', () => {
+    const nameInput = document.getElementById('feature-use-name');
+    const name = String(nameInput.value || '').trim();
+    if (!name) return showToast('Give the feature charge a name first.');
+    const max = Math.max(0, Math.min(999, Math.floor(Number(document.getElementById('feature-use-max').value) || 0)));
+    if (max <= 0) return showToast('Feature charges need a maximum of at least 1.');
+    editingFeatureUses.push({
+      id: `feature-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      name,
+      max,
+      remaining: max,
+      reset: document.getElementById('feature-use-reset').value
+    });
+    nameInput.value = '';
+    document.getElementById('feature-use-max').value = '1';
+    renderFeatureUsageEditor();
+  });
+  renderFeatureUsageEditor();
+}
+
 function initializeFeatPresetControls() {
   const select = document.getElementById('feat-preset-select');
   HUMBLEWOOD_FEAT_PRESETS.forEach(feat => {
@@ -185,6 +238,7 @@ function initializeFeatPresetControls() {
     option.textContent = prerequisite ? `${feat.title} · requires ${prerequisite}` : feat.title;
     select.appendChild(option);
   });
+  applyPresetSearch('feat-preset-select', 'feat-preset-search');
   document.getElementById('feat-preset-add').addEventListener('click', addFeatPresetToSheet);
 }
 
@@ -332,6 +386,54 @@ document.getElementById('close-sheet-btn').onclick = () => {
   document.getElementById('sheet-editor').classList.add('hidden');
 };
 
+function setSheetTab(tab: string, scrollToSheet = false) {
+  document.querySelectorAll('#sheet-form [data-sheet-tab]').forEach(section => {
+    section.classList.toggle('sheet-tab-hidden', section.getAttribute('data-sheet-tab') !== tab);
+  });
+  document.querySelectorAll('#sheet-section-nav [data-sheet-tab]').forEach(button => {
+    const active = button.getAttribute('data-sheet-tab') === tab;
+    button.classList.toggle('active', active);
+    if (active) button.setAttribute('aria-current', 'page');
+    else button.removeAttribute('aria-current');
+  });
+  updateSheetNavIndicator(tab);
+  if (scrollToSheet) {
+    document.getElementById('sheet-section-nav').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+}
+
+function updateSheetNavIndicator(tab: string) {
+  const nav = document.getElementById('sheet-section-nav') as HTMLElement | null;
+  const indicator = nav?.querySelector('.sheet-nav-indicator') as HTMLElement | null;
+  const activeButton = nav?.querySelector(`[data-sheet-tab="${tab}"]`) as HTMLElement | null;
+  if (!nav || !indicator || !activeButton) return;
+
+  const navRect = nav.getBoundingClientRect();
+  const buttonRect = activeButton.getBoundingClientRect();
+  indicator.style.width = `${buttonRect.width}px`;
+  indicator.style.transform = `translateX(${buttonRect.left - navRect.left - 6}px)`;
+
+  if (nav.scrollWidth > nav.clientWidth) {
+    const left = buttonRect.left - navRect.left;
+    if (left < 0 || left + buttonRect.width > nav.clientWidth) {
+      nav.scrollTo({
+        left: activeButton.offsetLeft - 6,
+        behavior: 'smooth'
+      });
+    }
+  }
+}
+
+document.querySelectorAll('#sheet-section-nav [data-sheet-tab]').forEach(button => {
+  button.addEventListener('click', () => setSheetTab(button.getAttribute('data-sheet-tab') || 'basic', true));
+});
+
+window.addEventListener('resize', () => {
+  const active = document.querySelector('#sheet-section-nav [data-sheet-tab].active');
+  if (active) updateSheetNavIndicator(active.getAttribute('data-sheet-tab') || 'basic');
+  window.requestAnimationFrame(alignBasicStatsPanels);
+});
+
 function openSheetEditor(c, options: any = {}) {
   const isNpc = !!options.npc;
   const form = document.getElementById('sheet-form');
@@ -363,13 +465,25 @@ function openSheetEditor(c, options: any = {}) {
   form.dataset.npcChallenge = isNpc ? (c?.sheet?.challenge || '') : '';
   document.getElementById('npc-statblock-import').value = '';
   document.getElementById('npc-sheet-preset').value = '';
+  setSheetTab('basic');
   ABILITIES.forEach(ability => { document.getElementById(`sf-${ability}`).max = isNpc ? '30' : '20'; });
   form.querySelectorAll('[id^="sf-"]').forEach(input => {
     if (input.type === 'file') return;
     const key = input.id.slice(3);
     if (!Object.prototype.hasOwnProperty.call(fields, key)) return;
     if (input.type === 'checkbox') input.checked = !!fields[key];
-    else input.value = fields[key] ?? '';
+    else if (input instanceof HTMLSelectElement) {
+      const savedValue = String(fields[key] ?? '');
+      if (savedValue) {
+        const optionExists = Array.from(input.options).some(option => option.value === savedValue);
+        if (!optionExists) {
+          input.add(new Option(savedValue, savedValue));
+        }
+      }
+      input.value = savedValue;
+    } else {
+      input.value = fields[key] ?? '';
+    }
   });
   setCharacterRuleSelections(fields);
   if (!c && !fields['ac-method']) applyRecommendedArmorMethod();
@@ -377,6 +491,8 @@ function openSheetEditor(c, options: any = {}) {
   inventoryExpandedContainers = new Set(editingInventory.filter(item => item.isContainer).map(item => item.id));
   inventoryEditingId = '';
   renderInventoryEditor();
+  editingFeatureUses = normalizeFeatureUses(isNpc ? c?.sheet?.combat?.featureUses : c?.combat?.featureUses);
+  renderFeatureUsageEditor();
   editingAttacks = normalizeAttackList(isNpc ? (c?.sheet?.attacks || c?.attacks) : c?.attacks);
   editingAttackId = null;
   document.getElementById('attack-add-form').classList.add('hidden');
@@ -394,6 +510,7 @@ function openSheetEditor(c, options: any = {}) {
   renderPortraitPreview(editingPortraitUrl);
   refreshCharacterCalculations(!c, !c && !isNpc);
   setSheetEditable(editingCanEdit, !!c);
+  window.requestAnimationFrame(alignBasicStatsPanels);
   document.getElementById('view-characters').scrollIntoView({ behavior: 'smooth' });
 }
 

@@ -409,8 +409,18 @@ function renderPlayerSidebar() {
     const charClass = character.charClass || character.className || '';
     const skilled = Object.keys(SKILL_ABILITIES)
       .filter(skill => character.skills?.[skill]?.proficient || character.fields?.[`skill-${skill}-prof`])
-      .slice(0, 5)
+      .slice(0, 4)
       .map(skill => `${SKILL_LABELS[skill]} ${signed(characterSkillModifier(character, skill))}`);
+    const hp = Number(character.hp) || 0;
+    const maxHp = Math.max(1, Number(character.maxHp) || 0);
+    const tempHp = Number(character.tempHp) || 0;
+    const hpPercent = Math.max(0, Math.min(100, Math.round((hp / maxHp) * 100)));
+    const savedPassivePerception = Number(character.fields?.['passive-perception']);
+    const passivePerception = Number.isFinite(savedPassivePerception) && character.fields?.['passive-perception'] !== '' && character.fields?.['passive-perception'] != null
+      ? savedPassivePerception
+      : 10 + characterSkillModifier(character, 'perception');
+    const initiative = characterInitiativeModifier(character);
+    const speed = character.speed || character.fields?.speed || '';
     const card = document.createElement('article');
     card.className = 'player-sidebar-card';
     card.innerHTML = `
@@ -419,10 +429,25 @@ function renderPlayerSidebar() {
         <div><strong>${escapeHtml(character.name)}</strong><div class="player-sidebar-meta">${escapeHtml([character.pronouns, species, charClass, `Level ${Number(character.level) || 1}`].filter(Boolean).join(' · '))}</div></div>
       </div>
       <div class="player-sidebar-vitals">
-        <span>HP ${Number(character.hp) || 0}/${Number(character.maxHp) || 0}</span>
-        <span>AC ${Number(character.ac) || 0}</span>
+        <div class="player-sidebar-vital player-sidebar-hp ${hpPercent <= 25 ? 'low' : ''}">
+          <span>Hit points</span>
+          <strong>${hp}/${maxHp}${tempHp ? ` <small>+${tempHp} temp</small>` : ''}</strong>
+          <div class="player-sidebar-hp-track" role="progressbar" aria-label="Hit points" aria-valuemin="0" aria-valuemax="${maxHp}" aria-valuenow="${Math.max(0, hp)}">
+            <span style="width:${hpPercent}%"></span>
+          </div>
+        </div>
+        <div class="player-sidebar-vital"><span>Armor class</span><strong>${Number(character.ac) || 0}</strong></div>
+        <div class="player-sidebar-vital"><span>Initiative</span><strong>${signed(initiative)}</strong></div>
+        <div class="player-sidebar-vital"><span>Speed</span><strong>${escapeHtml(speed || '—')}</strong></div>
       </div>
-      <div class="player-sidebar-skills"><strong>Best skills:</strong> ${skilled.length ? escapeHtml(skilled.join(' · ')) : 'No proficiencies marked yet'}</div>
+      <details class="player-sidebar-details">
+        <summary>Quick details</summary>
+        <dl>
+          <div><dt>Prof bonus</dt><dd>${signed(proficiencyBonus(character.level))}</dd></div>
+          <div><dt>Passive Perception</dt><dd>${Number.isFinite(passivePerception) ? passivePerception : '—'}</dd></div>
+        </dl>
+        ${skilled.length ? `<div class="player-sidebar-skills"><strong>Proficient skills</strong><span>${escapeHtml(skilled.join(' · '))}</span></div>` : ''}
+      </details>
       <div class="player-sidebar-actions">
         <button class="btn-ghost open-sheet" type="button">Sheet</button>
         <button class="btn-ghost open-rolls" type="button">🎲 Roll</button>

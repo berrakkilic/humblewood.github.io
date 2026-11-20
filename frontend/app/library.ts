@@ -369,6 +369,10 @@ function activeShopFrame() {
   return document.querySelector('#shared-handout-content iframe[data-shop-handout="true"]');
 }
 
+function activePuzzleFrame() {
+  return document.querySelector('#shared-handout-content iframe[data-puzzle-handout="true"]');
+}
+
 function postShopMessage(message, frame = activeShopFrame()) {
   if (frame?.contentWindow) frame.contentWindow.postMessage(message, '*');
 }
@@ -408,10 +412,36 @@ function choosePurchaseCharacter() {
   return characters.find(character => character.name.toLowerCase() === answer.trim().toLowerCase()) || null;
 }
 
+socket.on('puzzle:update', (payload: any) => {
+  const frame = activePuzzleFrame();
+  if (!frame?.contentWindow) return;
+  const broadcast = state?.library?.broadcast;
+  if (!broadcast || payload?.fileId !== broadcast.fileId) return;
+  frame.contentWindow.postMessage({
+    type: 'humblewood:puzzle-sync',
+    fileId: payload.fileId,
+    state: payload.state || null,
+    updatedAt: payload.updatedAt || 0
+  }, '*');
+});
+
 window.addEventListener('message', event => {
-  const frame = activeShopFrame();
+  const frame = activePuzzleFrame() || activeShopFrame();
   if (!frame || event.source !== frame.contentWindow || !event.data || typeof event.data !== 'object') return;
   const request = event.data;
+  if (request.type === 'humblewood:puzzle-ready') {
+    socket.emit('puzzle:request');
+    return;
+  }
+  if (request.type === 'humblewood:puzzle-state') {
+    const stateValue = request.state && typeof request.state === 'object' ? request.state : null;
+    if (!stateValue) return;
+    socket.emit('puzzle:update', {
+      fileId: state?.library?.broadcast?.fileId,
+      state: stateValue
+    });
+    return;
+  }
   if (request.type === 'humblewood:puzzle-complete') {
     const puzzleName = String(request.name || 'Puzzle').trim().slice(0, 80) || 'Puzzle';
     showToast(`${puzzleName} completed.`);
@@ -498,10 +528,18 @@ function renderSharedHandoutContent(broadcast) {
     frame.src = broadcast.url;
     frame.title = broadcast.name;
     frame.dataset.shopHandout = 'true';
+    frame.dataset.puzzleHandout = 'true';
     frame.setAttribute('sandbox', 'allow-scripts');
     frame.setAttribute('allow', 'fullscreen');
     frame.setAttribute('allowfullscreen', '');
-    frame.addEventListener('load', () => postShopContext(frame));
+    frame.addEventListener('load', () => {
+      postShopContext(frame);
+      frame.contentWindow?.postMessage({
+        type: 'humblewood:puzzle-ready',
+        fileId: broadcast.fileId
+      }, '*');
+      socket.emit('puzzle:request');
+    });
     content.appendChild(frame);
     return;
   }

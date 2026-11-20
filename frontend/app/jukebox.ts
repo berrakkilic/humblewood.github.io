@@ -80,6 +80,7 @@ function renderMusicTrackOptions() {
     };
     storedList.appendChild(row);
   });
+  applyPresetSearch('track-preset-select', 'track-preset-search');
 }
 
 async function loadMusicTracks() {

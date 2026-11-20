@@ -411,6 +411,17 @@ async function run() {
   assert.equal(playerBroadcast.kind, 'text');
   assert(dmBroadcast.expiresAt > dmBroadcast.startedAt);
   assert.equal(dm.state.scene.mapName, 'No map loaded', 'Broadcasting must not replace the active scene');
+  pending = once(playerTwo.socket, 'puzzle:update', payload => payload?.fileId === clueFile.id && payload?.state?.pieces);
+  dm.socket.emit('puzzle:update', {
+    fileId: clueFile.id,
+    state: { pieces: [{ id: 'tablet-1', x: 650, y: 80, angle: 0, locked: true }] }
+  });
+  const syncedPuzzle = await pending;
+  assert.equal(syncedPuzzle.state.pieces[0].locked, true);
+  pending = once(playerOne.socket, 'puzzle:update', payload => payload?.fileId === clueFile.id);
+  playerOne.socket.emit('puzzle:request');
+  const requestedPuzzle = await pending;
+  assert.equal(requestedPuzzle.state.pieces[0].x, 650);
   pending = once(playerTwo.socket, 'library:broadcast', broadcast => broadcast === null);
   dm.socket.emit('library:broadcast:clear');
   await pending;
@@ -582,6 +593,21 @@ async function run() {
   assert.equal(preparedClericSpells.find(spell => spell.id === 'cure-wounds').prepared, true);
   assert.equal(preparedClericSpells.find(spell => spell.id === 'command').prepared, true);
   assert.equal(preparedClericSpells.find(spell => spell.id === 'aid').prepared, false, 'spells above the current slot level cannot be prepared');
+
+  pending = once(playerOne.socket, 'character:update', character => (
+    character.name === 'Willow Cleric' && character.level === 2 && character.combat?.spellSlots?.[1]?.total === 3
+  ));
+  playerOne.socket.emit('character:save', {
+    name: 'Willow Cleric', hp: 9, maxHp: 9,
+    fields: {
+      name: 'Willow Cleric', species: 'Gallus (birdfolk)', subrace: 'Huden Gallus',
+      class: 'Cleric', subclass: 'Life Domain', level: '2', hp: '9', maxhp: '9', ac: '15',
+      str: '10', dex: '10', con: '10', int: '10', wis: '12', cha: '10',
+      'spell-list': JSON.stringify(preparedClericSpells), 'spell-slots-1': '3', 'spell-used-1': '0'
+    }
+  });
+  const leveledCleric = await pending;
+  assert.equal(leveledCleric.combat.spellSlots[1].total, 3, 'level-up spell-slot totals persist');
 
   pending = once(playerTwo.socket, 'shop:purchase:result', result => result.requestId === 'not-owned');
   playerTwo.socket.emit('shop:purchase', {

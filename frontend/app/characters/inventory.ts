@@ -62,6 +62,76 @@ function normalizeInventory(inventory) {
   return items;
 }
 
+function normalizeFeatureUses(features) {
+  const source = Array.isArray(features) ? features : [];
+  const seen = new Set();
+  return source.slice(0, 80).map((feature, index) => {
+    if (!feature || typeof feature !== 'object') return null;
+    let id = String(feature.id || `feature-${index}`).trim().slice(0, 140);
+    if (!id || seen.has(id)) id = `feature-${index}-${Math.random().toString(36).slice(2, 7)}`;
+    seen.add(id);
+    const max = Math.max(0, Math.min(999, Math.floor(Number(feature.max) || 0)));
+    const reset = ['long-rest', 'short-rest', 'manual'].includes(String(feature.reset || '').trim())
+      ? String(feature.reset).trim()
+      : 'long-rest';
+    return {
+      id,
+      name: String(feature.name || '').trim().slice(0, 100),
+      max,
+      remaining: Math.max(0, Math.min(max, Math.floor(Number(feature.remaining) || 0))),
+      reset
+    };
+  }).filter(feature => feature && feature.name);
+}
+
+function featureResetLabel(reset) {
+  if (reset === 'long-rest') return 'Long rest';
+  if (reset === 'short-rest') return 'Short rest';
+  return 'Manual';
+}
+
+function renderFeatureUsageEditor() {
+  const container = document.getElementById('feature-usage-editor');
+  if (!container) return;
+  container.innerHTML = '';
+  editingFeatureUses.forEach(feature => {
+    const row = document.createElement('div');
+    row.className = 'feature-usage-row';
+    const label = document.createElement('strong');
+    label.textContent = feature.name;
+    const count = document.createElement('span');
+    count.textContent = `${feature.remaining}/${feature.max} · ${featureResetLabel(feature.reset)}`;
+    const spend = document.createElement('button');
+    spend.type = 'button';
+    spend.className = 'counter-btn';
+    spend.textContent = '−';
+    spend.disabled = feature.remaining <= 0;
+    spend.onclick = () => {
+      feature.remaining = Math.max(0, feature.remaining - 1);
+      renderFeatureUsageEditor();
+    };
+    const restore = document.createElement('button');
+    restore.type = 'button';
+    restore.className = 'counter-btn';
+    restore.textContent = '+';
+    restore.disabled = feature.remaining >= feature.max;
+    restore.onclick = () => {
+      feature.remaining = Math.min(feature.max, feature.remaining + 1);
+      renderFeatureUsageEditor();
+    };
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'btn-ghost';
+    remove.textContent = 'Remove';
+    remove.onclick = () => {
+      editingFeatureUses = editingFeatureUses.filter(entry => entry.id !== feature.id);
+      renderFeatureUsageEditor();
+    };
+    row.append(label, count, spend, restore, remove);
+    container.appendChild(row);
+  });
+}
+
 function inventoryChildren(itemId) {
   return editingInventory.filter(item => item.containerId === itemId);
 }

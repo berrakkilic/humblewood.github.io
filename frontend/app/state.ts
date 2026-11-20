@@ -40,6 +40,7 @@ let spacePanPressed = false;
 let lastFittedMapUrl = null;
 let editingOriginalName = null;
 let editingInventory: any[] = [];
+let editingFeatureUses: any[] = [];
 let inventoryExpandedContainers = new Set();
 let inventoryDraggingId = '';
 let inventoryEditingId = '';

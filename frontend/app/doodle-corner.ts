@@ -19,6 +19,34 @@ function setDoodleCornerOpen(open) {
   doodleCornerOpen = !!open;
   doodleCornerPanel.classList.toggle('hidden', !doodleCornerOpen);
   doodleCornerToggle.setAttribute('aria-expanded', String(doodleCornerOpen));
+  if (doodleCornerOpen) resetDoodleCornerPosition();
+}
+
+function resetDoodleCornerPosition() {
+  const mapStageWrap = document.getElementById('map-stage-wrap');
+  if (!mapStageWrap) return;
+
+  doodleCornerPanel.style.position = 'fixed';
+  doodleCornerPanel.style.margin = '0';
+
+  const anchor = mapStageWrap.getBoundingClientRect();
+  const panelRect = doodleCornerPanel.getBoundingClientRect();
+  const gutter = 8;
+  const maxLeft = Math.max(gutter, window.innerWidth - panelRect.width - gutter);
+  const maxTop = Math.max(gutter, window.innerHeight - panelRect.height - gutter);
+
+  doodleCornerPanel.style.left = `${Math.min(Math.max(anchor.left + 10, gutter), maxLeft)}px`;
+  doodleCornerPanel.style.top = `${Math.min(Math.max(anchor.top + 10, gutter), maxTop)}px`;
+}
+
+function clampDoodleCornerPosition(left, top) {
+  const panelRect = doodleCornerPanel.getBoundingClientRect();
+  const gutter = 8;
+  const maxLeft = Math.max(gutter, window.innerWidth - panelRect.width - gutter);
+  const maxTop = Math.max(gutter, window.innerHeight - panelRect.height - gutter);
+
+  doodleCornerPanel.style.left = `${Math.min(Math.max(left, gutter), maxLeft)}px`;
+  doodleCornerPanel.style.top = `${Math.min(Math.max(top, gutter), maxTop)}px`;
 }
 
 function setDoodleCornerTool(tool) {
@@ -126,8 +154,10 @@ doodleCornerDragHandle.onpointerdown = event => {
 };
 doodleCornerDragHandle.onpointermove = event => {
   if (!doodleCornerDrag) return;
-  doodleCornerPanel.style.left = `${doodleCornerDrag.left + event.clientX - doodleCornerDrag.clientX}px`;
-  doodleCornerPanel.style.top = `${doodleCornerDrag.top + event.clientY - doodleCornerDrag.clientY}px`;
+  clampDoodleCornerPosition(
+    doodleCornerDrag.left + event.clientX - doodleCornerDrag.clientX,
+    doodleCornerDrag.top + event.clientY - doodleCornerDrag.clientY
+  );
 };
 doodleCornerDragHandle.onpointerup = () => { doodleCornerDrag = null; };
 doodleCornerDragHandle.onpointercancel = () => { doodleCornerDrag = null; };

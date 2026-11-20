@@ -250,6 +250,7 @@ const spellPresetSelect = document.getElementById('spell-preset-select');
     });
   spellPresetSelect.appendChild(group);
 });
+applyPresetSearch('spell-preset-select', 'spell-preset-search');
 
 function selectedSpellPreset() {
   const [source, ...nameParts] = spellPresetSelect.value.split('::');
@@ -407,6 +408,15 @@ document.getElementById('save-sheet-btn').onclick = async () => {
     },
     inventory: editingInventory.map(item => ({ ...item })),
     notes: fields.notes || '',
+    combat: isNpc ? undefined : {
+      featureUses: editingFeatureUses.map(feature => ({ ...feature })),
+      spellSlots: Object.fromEntries(Array.from({ length: 9 }, (_, index) => {
+        const level = index + 1;
+        const total = Math.max(0, Number(fields[`spell-slots-${level}`]) || 0);
+        const used = Math.max(0, Math.min(total, Number(fields[`spell-used-${level}`]) || 0));
+        return [level, { total, used }];
+      }))
+    },
     fields
   };
   if (isNpc) {
@@ -433,6 +443,7 @@ document.getElementById('save-sheet-btn').onclick = async () => {
       notes: fields['attacks-notes'] || fields.notes || '',
       combat: {
         ...(existing?.combat || {}),
+        featureUses: editingFeatureUses.map(feature => ({ ...feature })),
         spellSlots
       },
       sheet: {

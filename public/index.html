@@ -81,6 +81,7 @@
   </header>
 
   <nav class="tabs" aria-label="Table pages">
+    <span class="main-nav-indicator" aria-hidden="true"></span>
     <a class="tab-btn active" data-view="map" data-route="map" href="/map">Map</a>
     <a class="tab-btn" data-view="characters" data-route="characters" href="/characters">Characters</a>
     <a class="tab-btn" data-view="almanac" data-route="almanac" href="/almanac">Humble Almanac</a>
@@ -108,7 +109,7 @@
 
   <main>
     <!-- MAP VIEW -->
-    <section id="view-map" class="view active">
+    <section id="view-map" class="view active initiative-collapsed">
       <aside class="token-tray panel" id="map-sidebar">
         <section class="player-only player-sidebar" aria-labelledby="player-sidebar-title">
           <h3 id="player-sidebar-title">Your character</h3>
@@ -281,7 +282,7 @@
           <button id="zoom-in">+</button>
           <button id="zoom-reset">Reset view</button>
           <button id="zoom-fit">Fit map</button>
-          <button id="toggle-initiative-btn" aria-controls="map-initiative-panel" aria-expanded="true">⚔ Initiative <span id="initiative-count">0</span></button>
+          <button id="toggle-initiative-btn" aria-controls="map-initiative-panel" aria-expanded="false">⚔ Initiative <span id="initiative-count">0</span></button>
         </div>
         <div id="map-stage">
           <img id="map-image" src="" style="display:none;visibility:hidden;">
@@ -406,8 +407,16 @@
           </div>
         </div>
         <div class="vine-divider"></div>
+        <nav class="sheet-section-nav" id="sheet-section-nav" aria-label="Character sheet sections">
+          <span class="sheet-nav-indicator" aria-hidden="true"></span>
+          <button type="button" class="sheet-nav-button active" data-sheet-tab="basic" aria-current="page">Basic & Stats</button>
+          <button type="button" class="sheet-nav-button" data-sheet-tab="combat">Combat</button>
+          <button type="button" class="sheet-nav-button" data-sheet-tab="features">Features & Languages</button>
+          <button type="button" class="sheet-nav-button" data-sheet-tab="equipment">Equipment</button>
+          <button type="button" class="sheet-nav-button" data-sheet-tab="story">Personality & Backstory</button>
+        </nav>
         <form class="sheet-form" id="sheet-form">
-          <section class="npc-sheet-tools hidden" id="npc-sheet-tools">
+          <section class="npc-sheet-tools hidden" id="npc-sheet-tools" data-sheet-tab="basic">
             <div class="npc-sheet-tools-heading">
               <div>
                 <h4>Fast NPC creation</h4>
@@ -416,9 +425,12 @@
               <span class="npc-mode-badge">DM-only NPC</span>
             </div>
             <div class="npc-preset-controls">
-              <label class="field">NPC preset
-                <select id="npc-sheet-preset"><option value="">Choose a stat block...</option></select>
-              </label>
+              <div class="preset-combobox" id="npc-preset-combobox">
+                <input type="search" id="npc-preset-search" placeholder="Search NPC presets..." autocomplete="off" role="combobox" aria-haspopup="listbox" aria-expanded="false" aria-controls="npc-preset-list">
+                <span class="preset-combobox-arrow" aria-hidden="true">⌄</span>
+                <div class="preset-combobox-list hidden" id="npc-preset-list" role="listbox"></div>
+                <select class="hidden" id="npc-sheet-preset" aria-label="NPC preset" tabindex="-1"><option value="">Choose a stat block...</option></select>
+              </div>
               <button type="button" class="btn-ghost" id="npc-sheet-preset-load">Apply preset</button>
             </div>
             <label class="field">Paste complete stat block
@@ -432,7 +444,7 @@
           </section>
 
           <!-- IDENTITY -->
-          <div class="sheet-section section-character">
+          <div class="sheet-section section-character" data-sheet-tab="basic">
             <div class="sheet-section-title">Character</div>
             <div class="sheet-subgrid four-col">
               <div class="field span-2 portrait-field">
@@ -466,32 +478,48 @@
               <div class="field"><label>Background</label><input type="text" id="sf-background" placeholder="Background"></div>
               <div class="field">
                 <label>Alignment</label>
-                <input type="text" id="sf-path" list="path-suggestions" placeholder="Lawful Good, Chaotic Neutral...">
-                <datalist id="path-suggestions">
-                  <option value="Lawful Good"><option value="Neutral Good"><option value="Chaotic Good">
-                  <option value="Lawful Neutral"><option value="True Neutral"><option value="Chaotic Neutral">
-                  <option value="Lawful Evil"><option value="Neutral Evil"><option value="Chaotic Evil">
-                </datalist>
+                <select id="sf-path">
+                  <option value="">Choose an alignment...</option>
+                  <option value="Lawful Good">Lawful Good</option>
+                  <option value="Neutral Good">Neutral Good</option>
+                  <option value="Chaotic Good">Chaotic Good</option>
+                  <option value="Lawful Neutral">Lawful Neutral</option>
+                  <option value="True Neutral">True Neutral</option>
+                  <option value="Chaotic Neutral">Chaotic Neutral</option>
+                  <option value="Lawful Evil">Lawful Evil</option>
+                  <option value="Neutral Evil">Neutral Evil</option>
+                  <option value="Chaotic Evil">Chaotic Evil</option>
+                  <option value="Unaligned">Unaligned</option>
+                  <option value="Any alignment">Any alignment</option>
+                </select>
               </div>
               <div class="field"><label>Experience (optional)</label><input type="number" id="sf-xp" min="0" value="0" placeholder="Not used for milestones"></div>
 
               <div class="field span-2"><label>Home</label><input type="text" id="sf-home" placeholder="A hollow beneath Cedarfall Hollow..."></div>
               <div class="field">
                 <label>Faith / Amaranthine</label>
-                <input type="text" id="sf-faith" list="faith-suggestions" placeholder="Gesme, Reya, Cairith...">
-                <datalist id="faith-suggestions">
-                  <option value="Altus, the Enduring"><option value="Ardea, the Dawnmother"><option value="Cairith, the Resolute">
-                  <option value="Clhuran, the Fickle"><option value="Gaspard, the Champion"><option value="Gesme, the Brilliant">
-                  <option value="Hanera, the Provider"><option value="Hath, the Whisperer"><option value="Reya, the Explorer">
-                  <option value="Henwin, the Kind"><option value="Kren, the Sly"><option value="Tyton, the Nightfather">
-                </datalist>
+                <select id="sf-faith">
+                  <option value="">Choose a faith...</option>
+                  <option value="Altus, the Enduring">Altus, the Enduring</option>
+                  <option value="Ardea, the Dawnmother">Ardea, the Dawnmother</option>
+                  <option value="Cairith, the Resolute">Cairith, the Resolute</option>
+                  <option value="Clhuran, the Fickle">Clhuran, the Fickle</option>
+                  <option value="Gaspard, the Champion">Gaspard, the Champion</option>
+                  <option value="Gesme, the Brilliant">Gesme, the Brilliant</option>
+                  <option value="Hanera, the Provider">Hanera, the Provider</option>
+                  <option value="Hath, the Whisperer">Hath, the Whisperer</option>
+                  <option value="Reya, the Explorer">Reya, the Explorer</option>
+                  <option value="Henwin, the Kind">Henwin, the Kind</option>
+                  <option value="Kren, the Sly">Kren, the Sly</option>
+                  <option value="Tyton, the Nightfather">Tyton, the Nightfather</option>
+                </select>
               </div>
               <div class="field"><label>Player / Owner</label><input type="text" id="sf-player" placeholder="Player name"></div>
             </div>
           </div>
 
           <!-- COMBAT -->
-          <div class="sheet-section section-combat">
+          <div class="sheet-section section-combat" data-sheet-tab="basic">
             <div class="sheet-section-title">Combat & Core Stats</div>
             <div class="sheet-subgrid six-col compact-grid">
               <div class="field"><label>HP</label><input type="number" id="sf-hp" value="10"></div>
@@ -505,8 +533,18 @@
               <div class="field"><label>Hit Dice</label><input type="text" id="sf-hitdice" placeholder="1d8"></div>
               <div class="field"><label>Hit Dice Remaining</label><input type="number" id="sf-hitdice-left" min="0" value="1"></div>
               <div class="field"><label>Passive Perception</label><input type="number" id="sf-passive-perception" value="10"></div>
-              <div class="field"><label>Size</label><input type="text" id="sf-size" list="size-suggestions" placeholder="Small / Medium"></div>
-              <datalist id="size-suggestions"><option value="Tiny"><option value="Small"><option value="Medium"><option value="Large"></datalist>
+              <div class="field">
+                <label>Size</label>
+                <select id="sf-size">
+                  <option value="">Choose a size...</option>
+                  <option value="Tiny">Tiny</option>
+                  <option value="Small">Small</option>
+                  <option value="Medium">Medium</option>
+                  <option value="Large">Large</option>
+                  <option value="Huge">Huge</option>
+                  <option value="Gargantuan">Gargantuan</option>
+                </select>
+              </div>
             </div>
             <div class="ac-calculator">
               <div class="field">
@@ -541,7 +579,7 @@
           </div>
 
           <!-- ABILITIES -->
-          <div class="sheet-section section-abilities">
+          <div class="sheet-section section-abilities" data-sheet-tab="basic">
             <div class="sheet-section-title">Ability Scores</div>
             <div class="ability-grid ability-grid-complete">
               <div class="ability-box"><label>STR</label><input type="number" id="sf-str" value="10" min="1" max="20" step="1"><span class="ability-mod" id="mod-str">+0</span></div>
@@ -551,11 +589,12 @@
               <div class="ability-box"><label>WIS</label><input type="number" id="sf-wis" value="10" min="1" max="20" step="1"><span class="ability-mod" id="mod-wis">+0</span></div>
               <div class="ability-box"><label>CHA</label><input type="number" id="sf-cha" value="10" min="1" max="20" step="1"><span class="ability-mod" id="mod-cha">+0</span></div>
             </div>
+            <div class="ability-saving-throws" id="ability-saving-throws"></div>
           </div>
 
           <!-- SAVES + SKILLS -->
-          <details class="sheet-section section-skills" open>
-            <summary>Saving Throws & Skills</summary>
+          <details class="sheet-section section-skills" open data-sheet-tab="basic">
+            <summary>Skills</summary>
             <div class="save-skill-columns">
               <div>
                 <h4>Saving Throws</h4>
@@ -569,7 +608,6 @@
                 </div>
               </div>
               <div>
-                <h4>Skills</h4>
                 <div class="skills-grid">
                   <label><input type="checkbox" id="sf-skill-acrobatics-prof"> Acrobatics <span>DEX</span><input class="mini-number" type="number" id="sf-skill-acrobatics"></label>
                   <label><input type="checkbox" id="sf-skill-animal-prof"> Animal Handling <span>WIS</span><input class="mini-number" type="number" id="sf-skill-animal"></label>
@@ -595,7 +633,7 @@
           </details>
 
           <!-- ATTACKS -->
-          <details class="sheet-section section-attacks" open>
+          <details class="sheet-section section-attacks" open data-sheet-tab="combat">
             <summary>Attacks & Actions</summary>
             <div class="attack-list-heading">
               <p class="sidebar-help">Add as many attacks as the stat block needs. Presets calculate the attack and damage modifiers from the current ability scores.</p>
@@ -603,9 +641,12 @@
             </div>
             <div class="attack-add-form hidden" id="attack-add-form">
               <div class="attack-preset-row">
-                <label class="field">Weapon / natural attack preset
-                  <select id="attack-preset-select"><option value="">Choose an attack...</option></select>
-                </label>
+                <div class="preset-combobox" id="attack-preset-combobox">
+                  <input type="search" id="attack-preset-search" placeholder="Search attack presets..." autocomplete="off" role="combobox" aria-haspopup="listbox" aria-expanded="false" aria-controls="attack-preset-list">
+                  <span class="preset-combobox-arrow" aria-hidden="true">⌄</span>
+                  <div class="preset-combobox-list hidden" id="attack-preset-list" role="listbox"></div>
+                  <select class="hidden" id="attack-preset-select" aria-label="Weapon or natural attack preset" tabindex="-1"><option value="">Choose an attack...</option></select>
+                </div>
                 <button type="button" class="btn-ghost" id="attack-preset-load">Load preset</button>
               </div>
               <div class="attack-form-grid">
@@ -620,11 +661,39 @@
               </div>
             </div>
             <div class="attack-list" id="attack-list"></div>
-            <div class="field"><label>Actions, bonus actions, reactions & combat notes</label><textarea id="sf-attacks-notes" rows="4" placeholder="Sneak Attack, Talons, Glide, special actions..."></textarea></div>
+            <div class="field"><label>Actions, reactions & combat notes</label><textarea id="sf-attacks-notes" rows="4" placeholder="Sneak Attack, Talons, Glide, special actions..."></textarea></div>
+          </details>
+
+          <!-- BONUS ACTIONS -->
+          <details class="sheet-section section-bonus-actions" open data-sheet-tab="combat">
+            <summary>Bonus Actions</summary>
+            <div class="bonus-actions-grid">
+              <div class="field">
+                <label for="sf-bonus-actions">Available bonus actions</label>
+                <div class="bonus-action-preset-controls">
+                  <div class="bonus-action-combobox" id="bonus-action-combobox">
+                    <input type="search" id="bonus-action-preset-search" placeholder="Search bonus actions..." autocomplete="off" role="combobox" aria-haspopup="listbox" aria-expanded="false" aria-controls="bonus-action-preset-list">
+                    <span class="bonus-action-combobox-arrow" aria-hidden="true">⌄</span>
+                    <div class="bonus-action-preset-list hidden" id="bonus-action-preset-list" role="listbox"></div>
+                    <select class="hidden" id="bonus-action-preset-select" aria-label="Bonus action preset" tabindex="-1">
+                      <option value="">Choose a bonus action...</option>
+                    </select>
+                  </div>
+                  <button type="button" class="btn-ghost" id="bonus-action-preset-add">Add preset</button>
+                </div>
+                <textarea id="sf-bonus-actions" rows="8" placeholder="Cunning Action, bonus action spells, Two-Weapon Fighting..."></textarea>
+              </div>
+              <aside class="bonus-actions-rules">
+                <h4>Bonus Actions</h4>
+                <p>Various <a href="https://roll20.net/compendium/dnd5e/Classes%20by%20Name#content" target="_blank" rel="noopener noreferrer">class</a> features, <a href="https://roll20.net/compendium/dnd5e/Rules:Spells?expansion=34047#content" target="_blank" rel="noopener noreferrer">spells</a>, and other abilities let you take an additional action on your turn called a bonus action. You can take a bonus action only when a special ability, spell, or other feature of the game states that you can do something as a bonus action. You otherwise don't have a bonus action to take.</p>
+                <p>You can take only one bonus action on your turn, so you must choose which bonus action to use when you have more than one available.</p>
+                <p>You choose when to take a bonus action during your turn, unless the bonus action's timing is specified, and anything that deprives you of your ability to take actions also prevents you from taking a bonus action.</p>
+              </aside>
+            </div>
           </details>
 
           <!-- REACTIONS -->
-          <details class="sheet-section section-reactions" open>
+          <details class="sheet-section section-reactions" open data-sheet-tab="combat">
             <summary>Reactions</summary>
             <div class="reaction-list-heading">
               <p class="sidebar-help">Keep each trigger beside its response so you can spot it quickly. You regain your reaction at the start of your turn.</p>
@@ -632,9 +701,12 @@
             </div>
             <div class="reaction-add-form hidden" id="reaction-add-form">
               <div class="reaction-preset-row">
-                <label class="field">Core 5e / Humblewood preset
-                  <select id="reaction-preset-select"><option value="">Choose a reaction...</option></select>
-                </label>
+                <div class="preset-combobox" id="reaction-preset-combobox">
+                  <input type="search" id="reaction-preset-search" placeholder="Search reaction presets..." autocomplete="off" role="combobox" aria-haspopup="listbox" aria-expanded="false" aria-controls="reaction-preset-list">
+                  <span class="preset-combobox-arrow" aria-hidden="true">⌄</span>
+                  <div class="preset-combobox-list hidden" id="reaction-preset-list" role="listbox"></div>
+                  <select class="hidden" id="reaction-preset-select" aria-label="Reaction preset" tabindex="-1"><option value="">Choose a reaction...</option></select>
+                </div>
                 <button type="button" class="btn-ghost" id="reaction-preset-load">Load preset</button>
               </div>
               <div class="reaction-form-grid">
@@ -654,7 +726,7 @@
           </details>
 
           <!-- PROFICIENCIES -->
-          <details class="sheet-section section-proficiencies" open>
+          <details class="sheet-section section-proficiencies" open data-sheet-tab="features">
             <summary>Languages & Proficiencies</summary>
             <div class="sheet-subgrid two-col">
               <div class="field">
@@ -669,7 +741,7 @@
           </details>
 
           <!-- EQUIPMENT -->
-          <details class="sheet-section section-equipment" open>
+          <details class="sheet-section section-equipment" open data-sheet-tab="equipment">
             <summary>Equipment & Wealth</summary>
             <div class="money-grid">
               <div class="field"><label>CP</label><input type="number" id="sf-cp" value="0" min="0"></div>
@@ -719,7 +791,7 @@
           </details>
 
           <!-- FEATURES -->
-          <details class="sheet-section section-features" open>
+          <details class="sheet-section section-features" open data-sheet-tab="features">
             <summary>Features, Traits & Feats</summary>
             <div class="sheet-subgrid two-col">
               <div class="field"><label>Species / subrace traits</label><textarea id="sf-racial-traits" rows="6" placeholder="Glide, Talons, Appraising Eye, Sharp Mind..."></textarea></div>
@@ -731,19 +803,39 @@
               <div class="field span-2">
                 <label for="feat-preset-select">Humblewood feat preset</label>
                 <div class="feat-preset-row">
-                  <select id="feat-preset-select">
-                    <option value="">Choose a Humblewood feat...</option>
-                  </select>
+                  <div class="preset-combobox" id="feat-preset-combobox">
+                    <input type="search" id="feat-preset-search" placeholder="Search feat presets..." autocomplete="off" role="combobox" aria-haspopup="listbox" aria-expanded="false" aria-controls="feat-preset-list">
+                    <span class="preset-combobox-arrow" aria-hidden="true">⌄</span>
+                    <div class="preset-combobox-list hidden" id="feat-preset-list" role="listbox"></div>
+                    <select class="hidden" id="feat-preset-select" aria-label="Humblewood feat" tabindex="-1">
+                      <option value="">Choose a Humblewood feat...</option>
+                    </select>
+                  </div>
                   <button type="button" class="btn-ghost" id="feat-preset-add">Add feat</button>
                 </div>
                 <p class="sidebar-help">Glide-only feats require a birdfolk species. Custom and standard 5e feats can still be written below.</p>
+              </div>
+              <div class="field span-2">
+                <label>Feature & racial trait charges</label>
+                <div id="feature-usage-editor" class="feature-usage-editor"></div>
+                <div class="feature-usage-add">
+                  <input id="feature-use-name" type="text" maxlength="100" placeholder="Arcane Recovery, Feline Agility...">
+                  <input id="feature-use-max" type="number" min="0" max="999" step="1" value="1" aria-label="Maximum uses">
+                  <select id="feature-use-reset" aria-label="Reset type">
+                    <option value="long-rest">Long rest</option>
+                    <option value="short-rest">Short rest</option>
+                    <option value="manual">Manual</option>
+                  </select>
+                  <button type="button" class="btn-ghost" id="feature-use-add">Add charge</button>
+                </div>
+                <p class="sidebar-help">Track limited uses for class features, racial traits, and feats. Spend or restore charges from the Fight tab.</p>
               </div>
               <div class="field span-2"><label>Feats & other special traits</label><textarea id="sf-feats" rows="7" placeholder="Choose a Humblewood preset above, or write a standard/custom feat here..."></textarea></div>
             </div>
           </details>
 
           <!-- SPELLCASTING -->
-          <details class="sheet-section section-spellcasting">
+          <details class="sheet-section section-spellcasting" data-sheet-tab="combat">
             <summary>Spellcasting</summary>
             <div class="sheet-subgrid four-col compact-grid">
               <div class="field"><label>Spellcasting class</label><input type="text" id="sf-spell-class" placeholder="Wizard / Cleric / racial magic"></div>
@@ -773,11 +865,14 @@
               </div>
               <div id="spell-add-form" class="spell-add-form hidden">
                 <div class="spell-preset-row">
-                  <label class="spell-form-field" for="spell-preset-select">Spell preset
-                    <select id="spell-preset-select">
+                  <div class="preset-combobox" id="spell-preset-combobox">
+                    <input type="search" id="spell-preset-search" placeholder="Search spell presets..." autocomplete="off" role="combobox" aria-haspopup="listbox" aria-expanded="false" aria-controls="spell-preset-list">
+                    <span class="preset-combobox-arrow" aria-hidden="true">⌄</span>
+                    <div class="preset-combobox-list hidden" id="spell-preset-list" role="listbox"></div>
+                    <select class="hidden" id="spell-preset-select" aria-label="Spell preset" tabindex="-1">
                       <option value="">Choose a Humblewood or core 5e spell...</option>
                     </select>
-                  </label>
+                  </div>
                   <button type="button" class="btn-ghost" id="spell-preset-load">Load preset</button>
                 </div>
                 <div class="spell-bulk-row">
@@ -846,7 +941,7 @@
           </details>
 
           <!-- PERSONALITY -->
-          <details class="sheet-section section-personality" open>
+          <details class="sheet-section section-personality" open data-sheet-tab="story">
             <summary>Personality</summary>
             <div class="sheet-subgrid two-col">
               <div class="field"><label>Trait</label><textarea id="sf-trait" rows="3" placeholder="A habit, quirk, or mannerism..."></textarea></div>
@@ -857,7 +952,7 @@
           </details>
 
           <!-- DETAILS / STORY -->
-          <details class="sheet-section section-story">
+          <details class="sheet-section section-story" data-sheet-tab="story">
             <summary>Appearance, Story & Notes</summary>
             <div class="sheet-subgrid four-col compact-grid">
               <div class="field"><label>Age</label><input type="text" id="sf-age"></div>
@@ -943,9 +1038,14 @@
         <div class="playlist" id="playlist"></div>
 
         <div class="add-row dm-only">
-          <select id="track-preset-select" aria-label="Choose an existing MP3 track">
-            <option value="">Choose an existing track…</option>
-          </select>
+          <div class="preset-combobox" id="track-preset-combobox">
+            <input type="search" id="track-preset-search" placeholder="Search music presets..." autocomplete="off" role="combobox" aria-haspopup="listbox" aria-expanded="false" aria-controls="track-preset-list">
+            <span class="preset-combobox-arrow" aria-hidden="true">⌄</span>
+            <div class="preset-combobox-list hidden" id="track-preset-list" role="listbox"></div>
+            <select class="hidden" id="track-preset-select" aria-label="Choose an existing MP3 track" tabindex="-1">
+              <option value="">Choose an existing track…</option>
+            </select>
+          </div>
           <input type="text" id="track-title" placeholder="Track name (optional for uploads)">
           <input type="url" id="track-url" placeholder="Audio URL (optional)">
           <input type="file" id="track-file" accept=".mp3,audio/mpeg">
@@ -1194,6 +1294,11 @@
       </div>
       <p class="combat-rage-note" id="combat-rage-note"></p>
     </section>
+
+    <section class="combat-section combat-feature-uses-section hidden" id="combat-feature-uses-section">
+      <div class="combat-section-title"><h3>Feature charges</h3></div>
+      <div class="combat-feature-uses" id="combat-feature-uses"></div>
+    </section>
     <section class="combat-section combat-movement-section">
       <div class="combat-section-title"><h3>Movement</h3></div>
       <div id="combat-movement" class="combat-movement-list"></div>
@@ -1243,6 +1348,12 @@
           <div class="combat-roll-list" id="combat-spells"></div>
         </div>
       </div>
+    </section>
+
+    <section class="combat-section combat-bonus-actions-section" id="combat-bonus-actions-section">
+      <div class="combat-section-title"><h3>Bonus Actions</h3></div>
+      <p class="combat-bonus-actions-copy" id="combat-bonus-actions-copy"></p>
+      <p class="combat-bonus-actions-help">Available only when a feature or spell allows it. You can take only one bonus action on your turn, usually at a timing of your choice.</p>
     </section>
 
     <section class="combat-section combat-reactions-section" id="combat-reactions-section">

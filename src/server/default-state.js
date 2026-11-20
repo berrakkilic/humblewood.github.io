@@ -37,6 +37,7 @@ function createDefaultState() {
       files: [],
       broadcast: null
     },
+    puzzleStates: {},
     notifications: [],
     characters: {},
     shopStock: initialShopStock(),

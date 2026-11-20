@@ -6,6 +6,8 @@ function registerLibraryHandlers(socket, room) {
     deny,
     emitLibraryBroadcast,
     emitLibraryUpdate,
+    emitPuzzleState,
+    updatePuzzleState,
     isDm,
     normalizeLibrary,
     persistState,
@@ -147,11 +149,31 @@ function registerLibraryHandlers(socket, room) {
     persistState();
     scheduleLibraryBroadcastExpiry();
     emitLibraryBroadcast();
+    emitPuzzleState(file.id);
   });
 
   socket.on('library:broadcast:clear', () => {
     if (!requireDm()) return;
     clearLibraryBroadcast();
+  });
+
+  socket.on('puzzle:request', () => {
+    if (!socket.data?.identified) return deny(socket, 'Identify this session before changing a puzzle.');
+    const fileId = state.library?.broadcast?.fileId;
+    if (fileId) emitPuzzleState(fileId, socket);
+  });
+
+  socket.on('puzzle:update', (requested = {}) => {
+    if (!socket.data?.identified) return deny(socket, 'Identify this session before changing a puzzle.');
+    const active = state.library?.broadcast;
+    if (!active?.fileId) return deny(socket, 'No shared puzzle is active.');
+    const requestedFileId = String(requested.fileId || '').trim();
+    if (requestedFileId && requestedFileId !== active.fileId) {
+      return deny(socket, 'That puzzle is not currently shared.');
+    }
+    if (!updatePuzzleState(active.fileId, requested.state)) {
+      return deny(socket, 'The puzzle state could not be synchronized.');
+    }
   });
 }
 

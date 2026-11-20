@@ -150,6 +150,18 @@ document.getElementById('topbar-logout-btn').onclick = async () => {
   }
 };
 
+function updateMainNavIndicator(viewName: string) {
+  const nav = document.querySelector('nav.tabs') as HTMLElement | null;
+  const indicator = nav?.querySelector('.main-nav-indicator') as HTMLElement | null;
+  const activeButton = nav?.querySelector(`[data-view="${viewName}"]`) as HTMLElement | null;
+  if (!nav || !indicator || !activeButton) return;
+
+  const navRect = nav.getBoundingClientRect();
+  const buttonRect = activeButton.getBoundingClientRect();
+  indicator.style.width = `${buttonRect.width}px`;
+  indicator.style.transform = `translateX(${buttonRect.left - navRect.left - 20}px)`;
+}
+
 function renderRoute(viewName, route) {
   if (viewName === 'library' && myRole !== 'dm') {
     router.navigate('map');
@@ -162,6 +174,7 @@ function renderRoute(viewName, route) {
   });
   document.querySelectorAll('.view').forEach(view => view.classList.toggle('active', view.id === 'view-' + viewName));
   document.title = `${route.title} · The Humblewood Table`;
+  window.requestAnimationFrame(() => updateMainNavIndicator(viewName));
   if (viewName === 'dice') refreshCharacterRoller();
 }
 
@@ -170,6 +183,10 @@ function switchView(viewName) {
 }
 
 router.start();
+window.addEventListener('resize', () => {
+  const active = document.querySelector('nav.tabs .tab-btn.active');
+  if (active) updateMainNavIndicator(active.getAttribute('data-view') || 'map');
+});
 
 // ---------------- Socket state sync ----------------
 socket.on('state:full', (s) => {

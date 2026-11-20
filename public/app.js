@@ -37,6 +37,7 @@
   let lastFittedMapUrl = null;
   let editingOriginalName = null;
   let editingInventory = [];
+  let editingFeatureUses = [];
   let inventoryExpandedContainers = /* @__PURE__ */ new Set();
   let inventoryDraggingId = "";
   let inventoryEditingId = "";
@@ -383,6 +384,16 @@
       showToast("Could not log out. Please check your connection and try again.");
     }
   };
+  function updateMainNavIndicator(viewName) {
+    const nav = document.querySelector("nav.tabs");
+    const indicator = nav?.querySelector(".main-nav-indicator");
+    const activeButton = nav?.querySelector(`[data-view="${viewName}"]`);
+    if (!nav || !indicator || !activeButton) return;
+    const navRect = nav.getBoundingClientRect();
+    const buttonRect = activeButton.getBoundingClientRect();
+    indicator.style.width = `${buttonRect.width}px`;
+    indicator.style.transform = `translateX(${buttonRect.left - navRect.left - 20}px)`;
+  }
   function renderRoute(viewName, route) {
     if (viewName === "library" && myRole !== "dm") {
       router.navigate("map");
@@ -395,12 +406,17 @@
     });
     document.querySelectorAll(".view").forEach((view) => view.classList.toggle("active", view.id === "view-" + viewName));
     document.title = `${route.title} \xB7 The Humblewood Table`;
+    window.requestAnimationFrame(() => updateMainNavIndicator(viewName));
     if (viewName === "dice") refreshCharacterRoller();
   }
   function switchView(viewName) {
     router.navigate(viewName);
   }
   router.start();
+  window.addEventListener("resize", () => {
+    const active = document.querySelector("nav.tabs .tab-btn.active");
+    if (active) updateMainNavIndicator(active.getAttribute("data-view") || "map");
+  });
   socket.on("state:full", (s) => {
     state = s;
     if (shopPurchaseCharacterName && !state.characters?.[shopPurchaseCharacterName]?.canManage) {
@@ -1687,6 +1703,28 @@
     doodleCornerOpen = !!open;
     doodleCornerPanel.classList.toggle("hidden", !doodleCornerOpen);
     doodleCornerToggle.setAttribute("aria-expanded", String(doodleCornerOpen));
+    if (doodleCornerOpen) resetDoodleCornerPosition();
+  }
+  function resetDoodleCornerPosition() {
+    const mapStageWrap2 = document.getElementById("map-stage-wrap");
+    if (!mapStageWrap2) return;
+    doodleCornerPanel.style.position = "fixed";
+    doodleCornerPanel.style.margin = "0";
+    const anchor = mapStageWrap2.getBoundingClientRect();
+    const panelRect = doodleCornerPanel.getBoundingClientRect();
+    const gutter = 8;
+    const maxLeft = Math.max(gutter, window.innerWidth - panelRect.width - gutter);
+    const maxTop = Math.max(gutter, window.innerHeight - panelRect.height - gutter);
+    doodleCornerPanel.style.left = `${Math.min(Math.max(anchor.left + 10, gutter), maxLeft)}px`;
+    doodleCornerPanel.style.top = `${Math.min(Math.max(anchor.top + 10, gutter), maxTop)}px`;
+  }
+  function clampDoodleCornerPosition(left, top) {
+    const panelRect = doodleCornerPanel.getBoundingClientRect();
+    const gutter = 8;
+    const maxLeft = Math.max(gutter, window.innerWidth - panelRect.width - gutter);
+    const maxTop = Math.max(gutter, window.innerHeight - panelRect.height - gutter);
+    doodleCornerPanel.style.left = `${Math.min(Math.max(left, gutter), maxLeft)}px`;
+    doodleCornerPanel.style.top = `${Math.min(Math.max(top, gutter), maxTop)}px`;
   }
   function setDoodleCornerTool(tool) {
     doodleCornerTool = tool === "eraser" ? "eraser" : "draw";
@@ -1785,8 +1823,10 @@
   };
   doodleCornerDragHandle.onpointermove = (event) => {
     if (!doodleCornerDrag) return;
-    doodleCornerPanel.style.left = `${doodleCornerDrag.left + event.clientX - doodleCornerDrag.clientX}px`;
-    doodleCornerPanel.style.top = `${doodleCornerDrag.top + event.clientY - doodleCornerDrag.clientY}px`;
+    clampDoodleCornerPosition(
+      doodleCornerDrag.left + event.clientX - doodleCornerDrag.clientX,
+      doodleCornerDrag.top + event.clientY - doodleCornerDrag.clientY
+    );
   };
   doodleCornerDragHandle.onpointerup = () => {
     doodleCornerDrag = null;
@@ -2135,6 +2175,9 @@
   function activeShopFrame() {
     return document.querySelector('#shared-handout-content iframe[data-shop-handout="true"]');
   }
+  function activePuzzleFrame() {
+    return document.querySelector('#shared-handout-content iframe[data-puzzle-handout="true"]');
+  }
   function postShopMessage(message, frame = activeShopFrame()) {
     if (frame?.contentWindow) frame.contentWindow.postMessage(message, "*");
   }
@@ -2172,10 +2215,35 @@ ${choices}`,
     if (Number.isInteger(number) && characters[number - 1]) return characters[number - 1];
     return characters.find((character) => character.name.toLowerCase() === answer.trim().toLowerCase()) || null;
   }
+  socket.on("puzzle:update", (payload) => {
+    const frame = activePuzzleFrame();
+    if (!frame?.contentWindow) return;
+    const broadcast = state?.library?.broadcast;
+    if (!broadcast || payload?.fileId !== broadcast.fileId) return;
+    frame.contentWindow.postMessage({
+      type: "humblewood:puzzle-sync",
+      fileId: payload.fileId,
+      state: payload.state || null,
+      updatedAt: payload.updatedAt || 0
+    }, "*");
+  });
   window.addEventListener("message", (event) => {
-    const frame = activeShopFrame();
+    const frame = activePuzzleFrame() || activeShopFrame();
     if (!frame || event.source !== frame.contentWindow || !event.data || typeof event.data !== "object") return;
     const request = event.data;
+    if (request.type === "humblewood:puzzle-ready") {
+      socket.emit("puzzle:request");
+      return;
+    }
+    if (request.type === "humblewood:puzzle-state") {
+      const stateValue = request.state && typeof request.state === "object" ? request.state : null;
+      if (!stateValue) return;
+      socket.emit("puzzle:update", {
+        fileId: state?.library?.broadcast?.fileId,
+        state: stateValue
+      });
+      return;
+    }
     if (request.type === "humblewood:puzzle-complete") {
       const puzzleName = String(request.name || "Puzzle").trim().slice(0, 80) || "Puzzle";
       showToast(`${puzzleName} completed.`);
@@ -2254,10 +2322,18 @@ ${choices}`,
       frame.src = broadcast.url;
       frame.title = broadcast.name;
       frame.dataset.shopHandout = "true";
+      frame.dataset.puzzleHandout = "true";
       frame.setAttribute("sandbox", "allow-scripts");
       frame.setAttribute("allow", "fullscreen");
       frame.setAttribute("allowfullscreen", "");
-      frame.addEventListener("load", () => postShopContext(frame));
+      frame.addEventListener("load", () => {
+        postShopContext(frame);
+        frame.contentWindow?.postMessage({
+          type: "humblewood:puzzle-ready",
+          fileId: broadcast.fileId
+        }, "*");
+        socket.emit("puzzle:request");
+      });
       content.appendChild(frame);
       return;
     }
@@ -2758,7 +2834,15 @@ ${choices}`,
     characters.forEach((character) => {
       const species = character.species || character.race || "";
       const charClass = character.charClass || character.className || "";
-      const skilled = Object.keys(SKILL_ABILITIES).filter((skill) => character.skills?.[skill]?.proficient || character.fields?.[`skill-${skill}-prof`]).slice(0, 5).map((skill) => `${SKILL_LABELS[skill]} ${signed(characterSkillModifier(character, skill))}`);
+      const skilled = Object.keys(SKILL_ABILITIES).filter((skill) => character.skills?.[skill]?.proficient || character.fields?.[`skill-${skill}-prof`]).slice(0, 4).map((skill) => `${SKILL_LABELS[skill]} ${signed(characterSkillModifier(character, skill))}`);
+      const hp = Number(character.hp) || 0;
+      const maxHp = Math.max(1, Number(character.maxHp) || 0);
+      const tempHp = Number(character.tempHp) || 0;
+      const hpPercent = Math.max(0, Math.min(100, Math.round(hp / maxHp * 100)));
+      const savedPassivePerception = Number(character.fields?.["passive-perception"]);
+      const passivePerception = Number.isFinite(savedPassivePerception) && character.fields?.["passive-perception"] !== "" && character.fields?.["passive-perception"] != null ? savedPassivePerception : 10 + characterSkillModifier(character, "perception");
+      const initiative = characterInitiativeModifier(character);
+      const speed = character.speed || character.fields?.speed || "";
       const card = document.createElement("article");
       card.className = "player-sidebar-card";
       card.innerHTML = `
@@ -2767,10 +2851,25 @@ ${choices}`,
         <div><strong>${escapeHtml(character.name)}</strong><div class="player-sidebar-meta">${escapeHtml([character.pronouns, species, charClass, `Level ${Number(character.level) || 1}`].filter(Boolean).join(" \xB7 "))}</div></div>
       </div>
       <div class="player-sidebar-vitals">
-        <span>HP ${Number(character.hp) || 0}/${Number(character.maxHp) || 0}</span>
-        <span>AC ${Number(character.ac) || 0}</span>
+        <div class="player-sidebar-vital player-sidebar-hp ${hpPercent <= 25 ? "low" : ""}">
+          <span>Hit points</span>
+          <strong>${hp}/${maxHp}${tempHp ? ` <small>+${tempHp} temp</small>` : ""}</strong>
+          <div class="player-sidebar-hp-track" role="progressbar" aria-label="Hit points" aria-valuemin="0" aria-valuemax="${maxHp}" aria-valuenow="${Math.max(0, hp)}">
+            <span style="width:${hpPercent}%"></span>
+          </div>
+        </div>
+        <div class="player-sidebar-vital"><span>Armor class</span><strong>${Number(character.ac) || 0}</strong></div>
+        <div class="player-sidebar-vital"><span>Initiative</span><strong>${signed(initiative)}</strong></div>
+        <div class="player-sidebar-vital"><span>Speed</span><strong>${escapeHtml(speed || "\u2014")}</strong></div>
       </div>
-      <div class="player-sidebar-skills"><strong>Best skills:</strong> ${skilled.length ? escapeHtml(skilled.join(" \xB7 ")) : "No proficiencies marked yet"}</div>
+      <details class="player-sidebar-details">
+        <summary>Quick details</summary>
+        <dl>
+          <div><dt>Prof bonus</dt><dd>${signed(proficiencyBonus(character.level))}</dd></div>
+          <div><dt>Passive Perception</dt><dd>${Number.isFinite(passivePerception) ? passivePerception : "\u2014"}</dd></div>
+        </dl>
+        ${skilled.length ? `<div class="player-sidebar-skills"><strong>Proficient skills</strong><span>${escapeHtml(skilled.join(" \xB7 "))}</span></div>` : ""}
+      </details>
       <div class="player-sidebar-actions">
         <button class="btn-ghost open-sheet" type="button">Sheet</button>
         <button class="btn-ghost open-rolls" type="button">\u{1F3B2} Roll</button>
@@ -2865,6 +2964,7 @@ ${choices}`,
     syncAutomaticClassFeatures();
   }
   function initializeCharacterRuleControls() {
+    moveSavingThrowsIntoAbilities();
     updateSpeciesOptions();
     replaceSelectOptions(document.getElementById("sf-class"), Object.keys(characterRules.CLASS_SUBCLASSES), "Choose a class...");
     updateSubraceOptions();
@@ -2890,6 +2990,30 @@ ${choices}`,
       refreshCharacterCalculations(false, true);
       renderSpellListEditor();
     });
+  }
+  function moveSavingThrowsIntoAbilities() {
+    const slot = document.getElementById("ability-saving-throws");
+    const savingThrows = document.querySelector(".save-skill-columns > div:first-child");
+    if (!slot || !savingThrows) return;
+    slot.appendChild(savingThrows);
+  }
+  function alignBasicStatsPanels() {
+    const combat = document.querySelector(".section-combat");
+    const acCalculator = document.querySelector(".ac-calculator");
+    const savingThrows = document.querySelector(".ability-saving-throws");
+    if (!combat || !acCalculator || !savingThrows) return;
+    if (window.innerWidth <= 1450) {
+      savingThrows.style.marginTop = "";
+      return;
+    }
+    if (combat.offsetParent === null || acCalculator.offsetParent === null) {
+      savingThrows.style.marginTop = "";
+      return;
+    }
+    savingThrows.style.marginTop = "";
+    const acTop = acCalculator.getBoundingClientRect().top;
+    const savingTop = savingThrows.getBoundingClientRect().top;
+    savingThrows.style.marginTop = `${Math.max(18, acTop - savingTop + 18)}px`;
   }
   function applyRecommendedArmorMethod() {
     if (acMethodManuallySelected) return refreshArmorClass();
@@ -2940,6 +3064,28 @@ ${choices}`,
     document.getElementById("sf-spell-class").value = className;
     document.getElementById("sf-spell-ability").value = ability.toUpperCase();
   }
+  function initializeFeatureUsageControls() {
+    const addButton = document.getElementById("feature-use-add");
+    if (!addButton) return;
+    addButton.addEventListener("click", () => {
+      const nameInput = document.getElementById("feature-use-name");
+      const name = String(nameInput.value || "").trim();
+      if (!name) return showToast("Give the feature charge a name first.");
+      const max = Math.max(0, Math.min(999, Math.floor(Number(document.getElementById("feature-use-max").value) || 0)));
+      if (max <= 0) return showToast("Feature charges need a maximum of at least 1.");
+      editingFeatureUses.push({
+        id: `feature-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        name,
+        max,
+        remaining: max,
+        reset: document.getElementById("feature-use-reset").value
+      });
+      nameInput.value = "";
+      document.getElementById("feature-use-max").value = "1";
+      renderFeatureUsageEditor();
+    });
+    renderFeatureUsageEditor();
+  }
   function initializeFeatPresetControls() {
     const select = document.getElementById("feat-preset-select");
     HUMBLEWOOD_FEAT_PRESETS.forEach((feat) => {
@@ -2949,6 +3095,7 @@ ${choices}`,
       option.textContent = prerequisite ? `${feat.title} \xB7 requires ${prerequisite}` : feat.title;
       select.appendChild(option);
     });
+    applyPresetSearch("feat-preset-select", "feat-preset-search");
     document.getElementById("feat-preset-add").addEventListener("click", addFeatPresetToSheet);
   }
   function addFeatPresetToSheet() {
@@ -3089,6 +3236,48 @@ ${choices}`,
     editingNpcSheetId = null;
     document.getElementById("sheet-editor").classList.add("hidden");
   };
+  function setSheetTab(tab, scrollToSheet = false) {
+    document.querySelectorAll("#sheet-form [data-sheet-tab]").forEach((section) => {
+      section.classList.toggle("sheet-tab-hidden", section.getAttribute("data-sheet-tab") !== tab);
+    });
+    document.querySelectorAll("#sheet-section-nav [data-sheet-tab]").forEach((button) => {
+      const active = button.getAttribute("data-sheet-tab") === tab;
+      button.classList.toggle("active", active);
+      if (active) button.setAttribute("aria-current", "page");
+      else button.removeAttribute("aria-current");
+    });
+    updateSheetNavIndicator(tab);
+    if (scrollToSheet) {
+      document.getElementById("sheet-section-nav").scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }
+  function updateSheetNavIndicator(tab) {
+    const nav = document.getElementById("sheet-section-nav");
+    const indicator = nav?.querySelector(".sheet-nav-indicator");
+    const activeButton = nav?.querySelector(`[data-sheet-tab="${tab}"]`);
+    if (!nav || !indicator || !activeButton) return;
+    const navRect = nav.getBoundingClientRect();
+    const buttonRect = activeButton.getBoundingClientRect();
+    indicator.style.width = `${buttonRect.width}px`;
+    indicator.style.transform = `translateX(${buttonRect.left - navRect.left - 6}px)`;
+    if (nav.scrollWidth > nav.clientWidth) {
+      const left = buttonRect.left - navRect.left;
+      if (left < 0 || left + buttonRect.width > nav.clientWidth) {
+        nav.scrollTo({
+          left: activeButton.offsetLeft - 6,
+          behavior: "smooth"
+        });
+      }
+    }
+  }
+  document.querySelectorAll("#sheet-section-nav [data-sheet-tab]").forEach((button) => {
+    button.addEventListener("click", () => setSheetTab(button.getAttribute("data-sheet-tab") || "basic", true));
+  });
+  window.addEventListener("resize", () => {
+    const active = document.querySelector("#sheet-section-nav [data-sheet-tab].active");
+    if (active) updateSheetNavIndicator(active.getAttribute("data-sheet-tab") || "basic");
+    window.requestAnimationFrame(alignBasicStatsPanels);
+  });
   function openSheetEditor(c, options = {}) {
     const isNpc = !!options.npc;
     const form = document.getElementById("sheet-form");
@@ -3116,6 +3305,7 @@ ${choices}`,
     form.dataset.npcChallenge = isNpc ? c?.sheet?.challenge || "" : "";
     document.getElementById("npc-statblock-import").value = "";
     document.getElementById("npc-sheet-preset").value = "";
+    setSheetTab("basic");
     ABILITIES.forEach((ability) => {
       document.getElementById(`sf-${ability}`).max = isNpc ? "30" : "20";
     });
@@ -3124,7 +3314,18 @@ ${choices}`,
       const key = input.id.slice(3);
       if (!Object.prototype.hasOwnProperty.call(fields, key)) return;
       if (input.type === "checkbox") input.checked = !!fields[key];
-      else input.value = fields[key] ?? "";
+      else if (input instanceof HTMLSelectElement) {
+        const savedValue = String(fields[key] ?? "");
+        if (savedValue) {
+          const optionExists = Array.from(input.options).some((option) => option.value === savedValue);
+          if (!optionExists) {
+            input.add(new Option(savedValue, savedValue));
+          }
+        }
+        input.value = savedValue;
+      } else {
+        input.value = fields[key] ?? "";
+      }
     });
     setCharacterRuleSelections(fields);
     if (!c && !fields["ac-method"]) applyRecommendedArmorMethod();
@@ -3132,6 +3333,8 @@ ${choices}`,
     inventoryExpandedContainers = new Set(editingInventory.filter((item) => item.isContainer).map((item) => item.id));
     inventoryEditingId = "";
     renderInventoryEditor();
+    editingFeatureUses = normalizeFeatureUses(isNpc ? c?.sheet?.combat?.featureUses : c?.combat?.featureUses);
+    renderFeatureUsageEditor();
     editingAttacks = normalizeAttackList(isNpc ? c?.sheet?.attacks || c?.attacks : c?.attacks);
     editingAttackId = null;
     document.getElementById("attack-add-form").classList.add("hidden");
@@ -3149,6 +3352,7 @@ ${choices}`,
     renderPortraitPreview(editingPortraitUrl);
     refreshCharacterCalculations(!c, !c && !isNpc);
     setSheetEditable(editingCanEdit, !!c);
+    window.requestAnimationFrame(alignBasicStatsPanels);
     document.getElementById("view-characters").scrollIntoView({ behavior: "smooth" });
   }
   function legacyCharacterFields(c) {
@@ -3258,6 +3462,71 @@ ${choices}`,
       if (item.containerId && !byId.has(item.containerId)) item.containerId = null;
     });
     return items;
+  }
+  function normalizeFeatureUses(features) {
+    const source = Array.isArray(features) ? features : [];
+    const seen = /* @__PURE__ */ new Set();
+    return source.slice(0, 80).map((feature, index) => {
+      if (!feature || typeof feature !== "object") return null;
+      let id = String(feature.id || `feature-${index}`).trim().slice(0, 140);
+      if (!id || seen.has(id)) id = `feature-${index}-${Math.random().toString(36).slice(2, 7)}`;
+      seen.add(id);
+      const max = Math.max(0, Math.min(999, Math.floor(Number(feature.max) || 0)));
+      const reset = ["long-rest", "short-rest", "manual"].includes(String(feature.reset || "").trim()) ? String(feature.reset).trim() : "long-rest";
+      return {
+        id,
+        name: String(feature.name || "").trim().slice(0, 100),
+        max,
+        remaining: Math.max(0, Math.min(max, Math.floor(Number(feature.remaining) || 0))),
+        reset
+      };
+    }).filter((feature) => feature && feature.name);
+  }
+  function featureResetLabel(reset) {
+    if (reset === "long-rest") return "Long rest";
+    if (reset === "short-rest") return "Short rest";
+    return "Manual";
+  }
+  function renderFeatureUsageEditor() {
+    const container = document.getElementById("feature-usage-editor");
+    if (!container) return;
+    container.innerHTML = "";
+    editingFeatureUses.forEach((feature) => {
+      const row = document.createElement("div");
+      row.className = "feature-usage-row";
+      const label = document.createElement("strong");
+      label.textContent = feature.name;
+      const count = document.createElement("span");
+      count.textContent = `${feature.remaining}/${feature.max} \xB7 ${featureResetLabel(feature.reset)}`;
+      const spend = document.createElement("button");
+      spend.type = "button";
+      spend.className = "counter-btn";
+      spend.textContent = "\u2212";
+      spend.disabled = feature.remaining <= 0;
+      spend.onclick = () => {
+        feature.remaining = Math.max(0, feature.remaining - 1);
+        renderFeatureUsageEditor();
+      };
+      const restore = document.createElement("button");
+      restore.type = "button";
+      restore.className = "counter-btn";
+      restore.textContent = "+";
+      restore.disabled = feature.remaining >= feature.max;
+      restore.onclick = () => {
+        feature.remaining = Math.min(feature.max, feature.remaining + 1);
+        renderFeatureUsageEditor();
+      };
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "btn-ghost";
+      remove.textContent = "Remove";
+      remove.onclick = () => {
+        editingFeatureUses = editingFeatureUses.filter((entry) => entry.id !== feature.id);
+        renderFeatureUsageEditor();
+      };
+      row.append(label, count, spend, restore, remove);
+      container.appendChild(row);
+    });
   }
   function inventoryChildren(itemId) {
     return editingInventory.filter((item) => item.containerId === itemId);
@@ -3749,6 +4018,7 @@ ${choices}`,
       option.textContent = `${preset.name}${preset.properties ? ` \xB7 ${preset.properties}` : ""}`;
       select.appendChild(option);
     });
+    applyPresetSearch("attack-preset-select", "attack-preset-search");
     document.getElementById("attack-add-btn").onclick = () => openAttackForm(null);
     document.getElementById("attack-form-cancel").onclick = closeAttackForm;
     document.getElementById("attack-preset-load").onclick = () => {
@@ -3843,6 +4113,7 @@ ${choices}`,
       option.textContent = preset.name;
       groups.get(preset.source).appendChild(option);
     });
+    applyPresetSearch("npc-sheet-preset", "npc-preset-search");
     document.getElementById("npc-sheet-preset-load").onclick = () => {
       const preset = creationPresets.NPC_PRESETS.find((entry) => entry.id === select.value);
       if (!preset) return showToast("Choose an NPC preset first.");
@@ -4366,6 +4637,44 @@ ${choices}`,
       suggestedTags: ["spiny shield"]
     }
   ];
+  const BONUS_ACTION_PRESET_GROUPS = [
+    "Class features",
+    "Bonus action spells",
+    "Weapons",
+    "Feats"
+  ];
+  const BONUS_ACTION_PRESETS = [
+    { id: "ba-monk-flurry", group: "Class features", name: "Flurry of Blows", requirement: "Monk", resource: "Spend 1 ki", source: "2024 core rules", effect: "Immediately make two Unarmed Strikes after taking the Attack action." },
+    { id: "ba-monk-patient", group: "Class features", name: "Patient Defense", requirement: "Monk", resource: "Spend 1 ki", source: "2024 core rules", effect: "Take the Disengage action and gain advantage on Dexterity saving throws until the start of your next turn." },
+    { id: "ba-monk-wind", group: "Class features", name: "Step of the Wind", requirement: "Monk", resource: "Spend 1 ki", source: "2024 core rules", effect: "Take the Disengage or Dash action and double your jump distance for the turn." },
+    { id: "ba-rogue-cunning", group: "Class features", name: "Cunning Action", requirement: "Rogue", resource: "One bonus action", source: "2024 core rules", effect: "Dash, Disengage, or Hide." },
+    { id: "ba-rogue-steady", group: "Class features", name: "Steady Aim", requirement: "Rogue", resource: "One bonus action", source: "2024 core rules", effect: "Give yourself advantage on your next attack roll before the end of the turn; your Speed becomes 0 until the end of the current turn." },
+    { id: "ba-barbarian-rage", group: "Class features", name: "Rage", requirement: "Barbarian", resource: "One bonus action; limited uses", source: "2024 core rules", effect: "Enter Rage. Strength checks and saves have advantage, melee Strength damage is increased, and resistance applies to bludgeoning, piercing, and slashing damage." },
+    { id: "ba-barbarian-maintain", group: "Class features", name: "Maintain Rage", requirement: "Barbarian", resource: "Bonus action when required", source: "2024 core rules", effect: "Extend Rage through an additional turn by attacking or damaging a hostile creature or by using a bonus action to maintain it." },
+    { id: "ba-bard-inspiration", group: "Class features", name: "Bardic Inspiration", requirement: "Bard", resource: "One bonus action; Bardic Inspiration dice", source: "2024 core rules", effect: "Give a visible or audible creature within 60 feet one Bardic Inspiration die." },
+    { id: "ba-druid-wild", group: "Class features", name: "Wild Shape", requirement: "Druid", resource: "One bonus action", source: "2024 core rules", effect: "Transform into a known beast form or use Wild Shape to assume an appropriate Wild Shape effect." },
+    { id: "ba-ranger-natures-veil", group: "Class features", name: "Nature's Veil", requirement: "Ranger", resource: "Bonus action; limited uses", source: "2024 core rules", effect: "Turn Invisible as a bonus action until the end of your next turn." },
+    { id: "ba-ranger-beast", group: "Class features", name: "Command Beast Companion", requirement: "Beast Master Ranger", resource: "One bonus action", source: "2024 core rules", effect: "Order or direct your beast companion to take its action or attack." },
+    { id: "ba-sorcerer-inate", group: "Class features", name: "Innate Sorcery", requirement: "Sorcerer", resource: "One bonus action; limited uses", source: "2024 core rules", effect: "Activate Innate Sorcery for 1 minute, gaining sorcerous potency against creatures and advantage on Sorcery checks." },
+    { id: "ba-sorcerer-quickened", group: "Class features", name: "Quickened Spell", requirement: "Sorcerer", resource: "Metamagic; 2 sorcery points", source: "2024 core rules", effect: "Cast a spell with a casting time of an action as a bonus action; only one leveled spell may be cast on the turn." },
+    { id: "ba-fighter-second-wind", group: "Class features", name: "Second Wind", requirement: "Fighter", resource: "One bonus action; limited uses", source: "2024 core rules", effect: "Regain Hit Points using 1d10 plus your Fighter level, or use a tactical benefit granted by a subclass." },
+    { id: "ba-paladin-sense", group: "Class features", name: "Divine Sense", requirement: "Paladin", resource: "Bonus action; limited uses", source: "2024 core rules", effect: "Sense the location of Celestials, Fiends, and Undead within 60 feet that are not behind total cover." },
+    { id: "ba-cleric-spiritual", group: "Bonus action spells", name: "Spiritual Weapon", requirement: "Cleric spell known or prepared", resource: "One bonus action; concentration", source: "2024 / 2014 core rules", effect: "Create a floating weapon and attack with it using a bonus action on subsequent turns." },
+    { id: "ba-cleric-healing", group: "Bonus action spells", name: "Bonus action healing spell", requirement: "Cleric or another prepared spellcaster", resource: "Bonus action; spell slot", source: "2024 / 2014 core rules", effect: "Cast a spell marked for a bonus action, such as Healing Word, instead of taking another bonus action." },
+    { id: "ba-druid-spell", group: "Bonus action spells", name: "Bonus action spell", requirement: "Druid", resource: "Bonus action; spell slot", source: "2024 / 2014 core rules", effect: "Cast a spell with a bonus action casting time. If you cast a leveled spell, follow the spellcasting action limitations for that turn." },
+    { id: "ba-ranger-spell", group: "Bonus action spells", name: "Bonus action damage or utility spell", requirement: "Ranger", resource: "Bonus action; spell slot", source: "2024 / 2014 core rules", effect: "Cast a bonus action spell for damage, healing, utility, or battlefield control." },
+    { id: "ba-wizard-spell", group: "Bonus action spells", name: "Bonus action spell", requirement: "Wizard", resource: "Bonus action; spell slot", source: "2024 / 2014 core rules", effect: "Cast a Wizard spell with a bonus action casting time and follow the normal limits on leveled spells cast on the turn." },
+    { id: "ba-warlock-spell", group: "Bonus action spells", name: "Bonus action spell", requirement: "Warlock", resource: "Bonus action; spell slot or pact magic", source: "2024 / 2014 core rules", effect: "Cast a Warlock spell with a bonus action casting time." },
+    { id: "ba-warlock-pact", group: "Class features", name: "Pact of the Blade", requirement: "Pact of the Blade Warlock", resource: "Bonus action to summon or shift pact weapon", source: "2014 core rules", effect: "Conjure or dismiss your pact weapon, or summon a magical weapon into it." },
+    { id: "ba-warlock-chain", group: "Class features", name: "Investment of the Chain Master", requirement: "Investment of the Chain Master invocation", resource: "Bonus action for the familiar", source: "2014 core rules", effect: "Command or enhance your familiar, including giving it a bonus action attack in appropriate forms." },
+    { id: "ba-light-weapon", group: "Weapons", name: "Two-Weapon Fighting", requirement: "Two Light weapons", resource: "One bonus action", source: "2024 / 2014 core rules", effect: "Make one extra attack with the other Light weapon after taking the Attack action. The 2014 rules do not add your ability modifier unless a feature grants it." },
+    { id: "ba-nick", group: "Weapons", name: "Nick Weapon Mastery", requirement: "Nick mastery and Light weapons", resource: "No bonus action cost", source: "2024 core rules", effect: "When you make the extra attack from Light property weapons, treat the extra attack as part of the Attack action instead of using a bonus action." },
+    { id: "ba-polearm", group: "Weapons", name: "Polearm Master Bonus Attack", requirement: "Polearm Master feat", resource: "One bonus action", source: "2014 / 2024 core rules", effect: "After taking the Attack action with the haft/hilt of a qualifying glaive, halberd, pike, quarterstaff, or spear, make a bonus action attack for 1d4 damage." },
+    { id: "ba-chef", group: "Feats", name: "Chef", requirement: "Chef feat", resource: "Bonus action; Chef cooking times", source: "2014 / 2024 core rules", effect: "Feed a creature special snacks to grant Temporary Hit Points." },
+    { id: "ba-durable", group: "Feats", name: "Durable", requirement: "Durable feat", resource: "One bonus action; Hit Dice", source: "2014 core rules", effect: "Use Hit Dice to heal yourself as a bonus action." },
+    { id: "ba-keen-observant", group: "Feats", name: "Keen Mind / Observant", requirement: "Keen Mind or Observant feat", resource: "One bonus action", source: "2014 core rules", effect: "Turn the Study or Search action into a bonus action." },
+    { id: "ba-telekinetic", group: "Feats", name: "Telekinetic", requirement: "Telekinetic feat", resource: "One bonus action", source: "2014 / 2024 core rules", effect: "Cast Mage Hand or use the feat to shove a creature away with a bonus action where the rules permit." }
+  ];
   function normalizeReaction(reaction, index = 0) {
     if (!reaction || typeof reaction !== "object") return null;
     const name = String(reaction.name || "").trim();
@@ -4422,8 +4731,97 @@ ${choices}`,
       presets.forEach((preset) => appendReactionPresetOption(group, preset));
       select.appendChild(group);
     });
+    applyPresetSearch("reaction-preset-select", "reaction-preset-search");
+  }
+  function renderBonusActionPresetOptions() {
+    const search = document.getElementById("bonus-action-preset-search");
+    const list = document.getElementById("bonus-action-preset-list");
+    const select = document.getElementById("bonus-action-preset-select");
+    const query = search.value.trim().toLowerCase();
+    const sheetText = `${String(document.getElementById("sf-class")?.value || "")} ${String(document.getElementById("sf-subclass")?.value || "")} ${String(document.getElementById("sf-feats")?.value || "")}`.toLowerCase();
+    list.innerHTML = "";
+    const orderedGroups = ["Suggested for this sheet", ...BONUS_ACTION_PRESET_GROUPS];
+    let matches = 0;
+    orderedGroups.forEach((groupName) => {
+      const presets = groupName === "Suggested for this sheet" ? BONUS_ACTION_PRESETS.filter((preset) => sheetText.includes(preset.requirement.toLowerCase().split(" ")[0])) : BONUS_ACTION_PRESETS.filter((preset) => preset.group === groupName);
+      const filtered = presets.filter((preset) => {
+        const text = `${preset.name} ${preset.requirement} ${preset.resource} ${preset.effect} ${preset.source} ${preset.group}`.toLowerCase();
+        return !query || text.includes(query);
+      });
+      if (!filtered.length) return;
+      matches += filtered.length;
+      const heading = document.createElement("div");
+      heading.className = "bonus-action-preset-group";
+      heading.textContent = groupName;
+      list.appendChild(heading);
+      filtered.forEach((preset) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "bonus-action-preset-option";
+        button.setAttribute("role", "option");
+        button.dataset.presetId = preset.id;
+        const detail = [preset.requirement, preset.resource].filter(Boolean).join(" \xB7 ");
+        button.innerHTML = `<strong>${escapeHtml(preset.name)}</strong>${detail ? `<small>${escapeHtml(detail)}</small>` : ""}`;
+        button.onmousedown = (event) => event.preventDefault();
+        button.onclick = () => {
+          select.value = preset.id;
+          search.value = preset.name;
+          list.classList.add("hidden");
+          search.setAttribute("aria-expanded", "false");
+        };
+        list.appendChild(button);
+      });
+    });
+    if (!matches) {
+      list.innerHTML = '<div class="bonus-action-preset-group">No matching presets</div>';
+    }
+  }
+  function initializeBonusActionPresetControls() {
+    const search = document.getElementById("bonus-action-preset-search");
+    const combobox = document.getElementById("bonus-action-combobox");
+    const list = document.getElementById("bonus-action-preset-list");
+    renderBonusActionPresetOptions();
+    const openList = () => {
+      renderBonusActionPresetOptions();
+      list.classList.remove("hidden");
+      search.setAttribute("aria-expanded", "true");
+    };
+    search.onfocus = openList;
+    search.onclick = openList;
+    search.oninput = openList;
+    combobox.onkeydown = (event) => {
+      if (event.key === "Escape") {
+        list.classList.add("hidden");
+        search.setAttribute("aria-expanded", "false");
+      }
+    };
+    document.addEventListener("mousedown", (event) => {
+      if (!combobox.contains(event.target)) {
+        list.classList.add("hidden");
+        search.setAttribute("aria-expanded", "false");
+      }
+    });
+    document.getElementById("bonus-action-preset-add").onclick = () => {
+      const select = document.getElementById("bonus-action-preset-select");
+      const preset = BONUS_ACTION_PRESETS.find((entry) => entry.id === select.value);
+      if (!preset) return showToast("Choose a bonus action preset first.");
+      const textarea = document.getElementById("sf-bonus-actions");
+      const line = `${preset.name}${preset.resource ? ` \u2014 ${preset.resource}` : ""}: ${preset.effect}`;
+      const current = textarea.value.trim();
+      if (current.split(/\n+/).some((entry) => entry.toLowerCase().startsWith(`${preset.name.toLowerCase()} \u2014`))) {
+        return showToast(`${preset.name} is already on the sheet.`);
+      }
+      textarea.value = current ? `${current}
+${line}` : line;
+      select.value = "";
+      search.value = "";
+      renderBonusActionPresetOptions();
+      list.classList.add("hidden");
+      search.setAttribute("aria-expanded", "false");
+    };
   }
   function initializeReactionPresetControls() {
+    applyPresetSearch("reaction-preset-select", "reaction-preset-search");
     document.getElementById("reaction-add-btn").onclick = () => openReactionForm(null);
     document.getElementById("reaction-form-cancel").onclick = closeReactionForm;
     document.getElementById("reaction-preset-load").onclick = () => {
@@ -4831,6 +5229,7 @@ ${choices}`,
     });
     spellPresetSelect.appendChild(group);
   });
+  applyPresetSearch("spell-preset-select", "spell-preset-search");
   function selectedSpellPreset() {
     const [source, ...nameParts] = spellPresetSelect.value.split("::");
     const name = nameParts.join("::");
@@ -4987,6 +5386,15 @@ ${choices}`,
       },
       inventory: editingInventory.map((item) => ({ ...item })),
       notes: fields.notes || "",
+      combat: isNpc ? void 0 : {
+        featureUses: editingFeatureUses.map((feature) => ({ ...feature })),
+        spellSlots: Object.fromEntries(Array.from({ length: 9 }, (_, index) => {
+          const level = index + 1;
+          const total = Math.max(0, Number(fields[`spell-slots-${level}`]) || 0);
+          const used = Math.max(0, Math.min(total, Number(fields[`spell-used-${level}`]) || 0));
+          return [level, { total, used }];
+        }))
+      },
       fields
     };
     if (isNpc) {
@@ -5016,6 +5424,7 @@ ${choices}`,
         notes: fields["attacks-notes"] || fields.notes || "",
         combat: {
           ...existing?.combat || {},
+          featureUses: editingFeatureUses.map((feature) => ({ ...feature })),
           spellSlots
         },
         sheet: {
@@ -5459,6 +5868,7 @@ ${choices}`,
       };
       storedList.appendChild(row);
     });
+    applyPresetSearch("track-preset-select", "track-preset-search");
   }
   async function loadMusicTracks() {
     try {
@@ -6072,6 +6482,7 @@ ${choices}`,
     document.getElementById("combat-ac").textContent = Number(entity.ac) || 0;
     document.getElementById("combat-life-status").textContent = combat.dead ? "Dead" : combat.stable ? "Stable" : entity.hp <= 0 ? "Down" : "Ready";
     renderCombatRage(entity, isNpc);
+    renderCombatFeatureUses(entity, isNpc);
     renderCombatMovement(entity, isNpc);
     const notes = document.getElementById("combat-notes");
     notes.classList.toggle("hidden", !isNpc || !entity.notes);
@@ -6082,6 +6493,7 @@ ${choices}`,
     const preparesSpells = !isNpc && characterPreparationDetails(entity) !== null;
     document.getElementById("combat-long-rest-btn").textContent = isNpc ? "Restore NPC" : preparesSpells ? "Long rest & prepare spells" : "Complete long rest";
     renderCombatRolls(entity, isNpc);
+    renderCombatBonusActions(entity, isNpc);
     renderCombatReactions(entity, isNpc);
     const concentration = document.getElementById("combat-concentration");
     concentration.checked = !!combat.concentration;
@@ -6193,6 +6605,40 @@ ${choices}`,
     toggle.disabled = !active && (remaining <= 0 || characterWearsHeavyArmor(character));
     note.textContent = characterWearsHeavyArmor(character) ? "Rage benefits are unavailable while wearing heavy armor." : active ? `Strength checks and saves have advantage, melee Strength attacks deal +${barbarianRageDamageBonus(character.level)} damage, and bludgeoning, piercing, and slashing damage is resisted.` : "Rage lasts until you end it manually or it ends under the normal rules.";
     toggle.onclick = () => combatAction("rage:toggle", { active: !active });
+  }
+  function renderCombatFeatureUses(character, isNpc = false) {
+    const section = document.getElementById("combat-feature-uses-section");
+    const container = document.getElementById("combat-feature-uses");
+    if (!section || !container) return;
+    const features = isNpc ? character.combat?.featureUses || [] : character.combat?.featureUses || [];
+    section.classList.toggle("hidden", !features.length);
+    container.innerHTML = "";
+    features.forEach((feature) => {
+      const row = document.createElement("div");
+      row.className = "combat-feature-use";
+      const name = document.createElement("strong");
+      name.textContent = feature.name;
+      const reset = document.createElement("span");
+      reset.textContent = feature.reset === "short-rest" ? "Short rest" : feature.reset === "manual" ? "Manual" : "Long rest";
+      const controls = document.createElement("div");
+      const spend = document.createElement("button");
+      spend.type = "button";
+      spend.className = "counter-btn";
+      spend.textContent = "\u2212";
+      spend.disabled = feature.remaining <= 0;
+      spend.onclick = () => combatAction("featureUse", { featureId: feature.id, delta: -1 });
+      const count = document.createElement("strong");
+      count.textContent = `${feature.remaining}/${feature.max}`;
+      const restore = document.createElement("button");
+      restore.type = "button";
+      restore.className = "counter-btn";
+      restore.textContent = "+";
+      restore.disabled = feature.remaining >= feature.max;
+      restore.onclick = () => combatAction("featureUse", { featureId: feature.id, delta: 1 });
+      controls.append(spend, count, restore);
+      row.append(name, reset, controls);
+      container.appendChild(row);
+    });
   }
   function renderCombatRolls(character, isNpc = false) {
     const mode = () => document.getElementById("combat-roll-mode").value;
@@ -6341,6 +6787,13 @@ ${choices}`,
   }
   function formatDiceExpression(count, sides, modifier) {
     return `${count}d${sides}${modifier ? modifier > 0 ? `+${modifier}` : modifier : ""}`;
+  }
+  function renderCombatBonusActions(character, isNpc = false) {
+    const copy = document.getElementById("combat-bonus-actions-copy");
+    if (!copy) return;
+    const bonusActions = isNpc ? character.sheet?.fields?.["bonus-actions"] || "" : character.fields?.["bonus-actions"] || "";
+    copy.textContent = String(bonusActions || "").trim() || "No bonus actions are configured on this sheet.";
+    copy.classList.toggle("empty", !String(bonusActions || "").trim());
   }
   function renderCombatReactions(character, isNpc = false) {
     const section = document.getElementById("combat-reactions-section");
@@ -6773,6 +7226,48 @@ ${choices}`,
     const number = Number(value) || 0;
     return number >= 0 ? `+${number}` : String(number);
   }
+  function initializeSmoothDetails(duration = 360) {
+    document.querySelectorAll("details").forEach((detailsElement) => {
+      const details = detailsElement;
+      const summary = details.querySelector(":scope > summary");
+      if (!summary || details.dataset.smoothDetailsInitialized === "true") return;
+      details.dataset.smoothDetailsInitialized = "true";
+      details.style.overflow = "hidden";
+      summary.addEventListener("click", (event) => {
+        event.preventDefault();
+        if (details.dataset.smoothAnimating === "true") return;
+        const summaryHeight = summary.getBoundingClientRect().height + parseFloat(getComputedStyle(details).paddingTop || "0") + parseFloat(getComputedStyle(details).paddingBottom || "0");
+        if (details.open) {
+          details.dataset.smoothAnimating = "true";
+          details.style.height = `${details.getBoundingClientRect().height}px`;
+          details.style.transition = `height ${duration}ms cubic-bezier(.22, 1, .36, 1)`;
+          requestAnimationFrame(() => {
+            details.style.height = `${summaryHeight}px`;
+          });
+          window.setTimeout(() => {
+            details.open = false;
+            details.style.height = "";
+            details.style.transition = "";
+            details.dataset.smoothAnimating = "false";
+          }, duration);
+        } else {
+          details.open = true;
+          details.dataset.smoothAnimating = "true";
+          const targetHeight = details.getBoundingClientRect().height;
+          details.style.height = `${summaryHeight}px`;
+          details.style.transition = `height ${duration}ms cubic-bezier(.22, 1, .36, 1)`;
+          requestAnimationFrame(() => {
+            details.style.height = `${targetHeight}px`;
+          });
+          window.setTimeout(() => {
+            details.style.height = "";
+            details.style.transition = "";
+            details.dataset.smoothAnimating = "false";
+          }, duration);
+        }
+      });
+    });
+  }
   function escapeHtml(value) {
     return String(value ?? "").replace(/[&<>"']/g, (character) => ({
       "&": "&amp;",
@@ -6784,6 +7279,86 @@ ${choices}`,
   }
   function escapeAttr(value) {
     return escapeHtml(value);
+  }
+  function applyPresetSearch(selectId, searchId) {
+    const select = document.getElementById(selectId);
+    const search = document.getElementById(searchId);
+    if (!select || !search) return;
+    select.classList.add("hidden");
+    select.setAttribute("tabindex", "-1");
+    const combobox = search.closest(".preset-combobox");
+    if (!combobox) return;
+    if (combobox.dataset.presetSearchInitialized === "true") return;
+    combobox.dataset.presetSearchInitialized = "true";
+    let list = combobox.querySelector(".preset-combobox-list");
+    if (!list) {
+      list = document.createElement("div");
+      list.className = "preset-combobox-list hidden";
+      list.setAttribute("role", "listbox");
+      combobox.appendChild(list);
+    }
+    const openList = () => {
+      renderList();
+      list.classList.remove("hidden");
+      search.setAttribute("aria-expanded", "true");
+    };
+    const closeList = () => {
+      list.classList.add("hidden");
+      search.setAttribute("aria-expanded", "false");
+    };
+    const renderList = () => {
+      const query = search.value.trim().toLowerCase();
+      list.innerHTML = "";
+      let matches = 0;
+      Array.from(select.querySelectorAll(":scope > optgroup")).forEach((group) => {
+        const filtered = Array.from(group.querySelectorAll(":scope > option")).filter((option) => {
+          const text = `${option.textContent || ""} ${group.getAttribute("label") || ""}`.toLowerCase();
+          return !query || text.includes(query);
+        });
+        if (!filtered.length) return;
+        matches += filtered.length;
+        const heading = document.createElement("div");
+        heading.className = "preset-combobox-group";
+        heading.textContent = group.getAttribute("label") || "";
+        list.appendChild(heading);
+        filtered.forEach((option) => appendOption(option));
+      });
+      Array.from(select.options).filter(
+        (option) => !option.parentElement?.matches("optgroup") && !!option.value && (!query || `${option.textContent || ""}`.toLowerCase().includes(query))
+      ).forEach((option) => appendOption(option));
+      if (!matches && !list.children.length) {
+        list.innerHTML = '<div class="preset-combobox-group">No matching presets</div>';
+      }
+    };
+    const appendOption = (option) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "preset-combobox-option";
+      button.setAttribute("role", "option");
+      button.textContent = option.textContent || "";
+      button.onmousedown = (event) => event.preventDefault();
+      button.onclick = () => {
+        select.value = option.value;
+        search.value = option.textContent || "";
+        select.dispatchEvent(new Event("change", { bubbles: true }));
+        closeList();
+      };
+      list.appendChild(button);
+    };
+    search.onfocus = openList;
+    search.onclick = openList;
+    search.oninput = openList;
+    combobox.onkeydown = (event) => {
+      if (event.key === "Escape") closeList();
+    };
+    document.addEventListener("mousedown", (event) => {
+      if (!combobox.contains(event.target)) closeList();
+    });
+    const observer = new MutationObserver(() => {
+      if (!list.classList.contains("hidden")) renderList();
+    });
+    observer.observe(select, { childList: true, subtree: true });
+    renderList();
   }
   function showToast(message) {
     const toast = document.getElementById("toast");
@@ -6817,10 +7392,13 @@ ${choices}`,
     return data;
   }
   initializeCharacterRuleControls();
+  initializeFeatureUsageControls();
   initializeFeatPresetControls();
   initializeAttackPresetControls();
   initializeReactionPresetControls();
+  initializeBonusActionPresetControls();
   initializeNpcPresetControls();
+  initializeSmoothDetails();
   socket.connect();
 })();
 //# sourceMappingURL=app.js.map

@@ -87,6 +87,7 @@ function renderCombatManager() {
   document.getElementById('combat-ac').textContent = Number(entity.ac) || 0;
   document.getElementById('combat-life-status').textContent = combat.dead ? 'Dead' : combat.stable ? 'Stable' : entity.hp <= 0 ? 'Down' : 'Ready';
   renderCombatRage(entity, isNpc);
+  renderCombatFeatureUses(entity, isNpc);
   renderCombatMovement(entity, isNpc);
   const notes = document.getElementById('combat-notes');
   notes.classList.toggle('hidden', !isNpc || !entity.notes);
@@ -99,6 +100,7 @@ function renderCombatManager() {
     ? 'Restore NPC'
     : (preparesSpells ? 'Long rest & prepare spells' : 'Complete long rest');
   renderCombatRolls(entity, isNpc);
+  renderCombatBonusActions(entity, isNpc);
   renderCombatReactions(entity, isNpc);
   const concentration = document.getElementById('combat-concentration');
   concentration.checked = !!combat.concentration;
@@ -228,6 +230,43 @@ function renderCombatRage(character, isNpc = false) {
       ? `Strength checks and saves have advantage, melee Strength attacks deal +${barbarianRageDamageBonus(character.level)} damage, and bludgeoning, piercing, and slashing damage is resisted.`
       : 'Rage lasts until you end it manually or it ends under the normal rules.';
   toggle.onclick = () => combatAction('rage:toggle', { active: !active });
+}
+
+function renderCombatFeatureUses(character, isNpc = false) {
+  const section = document.getElementById('combat-feature-uses-section');
+  const container = document.getElementById('combat-feature-uses');
+  if (!section || !container) return;
+  const features = isNpc
+    ? (character.combat?.featureUses || [])
+    : (character.combat?.featureUses || []);
+  section.classList.toggle('hidden', !features.length);
+  container.innerHTML = '';
+  features.forEach(feature => {
+    const row = document.createElement('div');
+    row.className = 'combat-feature-use';
+    const name = document.createElement('strong');
+    name.textContent = feature.name;
+    const reset = document.createElement('span');
+    reset.textContent = feature.reset === 'short-rest' ? 'Short rest' : feature.reset === 'manual' ? 'Manual' : 'Long rest';
+    const controls = document.createElement('div');
+    const spend = document.createElement('button');
+    spend.type = 'button';
+    spend.className = 'counter-btn';
+    spend.textContent = '−';
+    spend.disabled = feature.remaining <= 0;
+    spend.onclick = () => combatAction('featureUse', { featureId: feature.id, delta: -1 });
+    const count = document.createElement('strong');
+    count.textContent = `${feature.remaining}/${feature.max}`;
+    const restore = document.createElement('button');
+    restore.type = 'button';
+    restore.className = 'counter-btn';
+    restore.textContent = '+';
+    restore.disabled = feature.remaining >= feature.max;
+    restore.onclick = () => combatAction('featureUse', { featureId: feature.id, delta: 1 });
+    controls.append(spend, count, restore);
+    row.append(name, reset, controls);
+    container.appendChild(row);
+  });
 }
 
 function renderCombatRolls(character, isNpc = false) {
@@ -385,6 +424,16 @@ function isRageMeleeStrengthAttack(attack) {
 
 function formatDiceExpression(count, sides, modifier) {
   return `${count}d${sides}${modifier ? (modifier > 0 ? `+${modifier}` : modifier) : ''}`;
+}
+
+function renderCombatBonusActions(character, isNpc = false) {
+  const copy = document.getElementById('combat-bonus-actions-copy');
+  if (!copy) return;
+  const bonusActions = isNpc
+    ? (character.sheet?.fields?.['bonus-actions'] || '')
+    : (character.fields?.['bonus-actions'] || '');
+  copy.textContent = String(bonusActions || '').trim() || 'No bonus actions are configured on this sheet.';
+  copy.classList.toggle('empty', !String(bonusActions || '').trim());
 }
 
 function renderCombatReactions(character, isNpc = false) {
