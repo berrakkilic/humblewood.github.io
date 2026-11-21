@@ -88,18 +88,20 @@ function registerRollHandlers(socket, room) {
       return;
     }
     state.rollLog.unshift(entry);
-    state.rollLog = state.rollLog.slice(0, 50);
+    state.rollLog = state.rollLog.slice(0, 15);
     if (payload.initiativeName && sides === 20 && (isDm(socket) || payload.initiativeName === character?.name)) {
       const initiativeToken = rollToken || state.tokens.find(item => (
         npc ? item.npcId === npc.id : item.characterName === payload.initiativeName
       ));
-      upsertInitiativeEntry({
+      const initiativeEntry = upsertInitiativeEntry({
         name: payload.initiativeName,
         value: total,
         tokenId: initiativeToken?.id || null
       });
-      markSceneDirty();
-      io.emit('initiative:update', state.initiative);
+      if (initiativeEntry) {
+        markSceneDirty();
+        io.emit('initiative:update', state.initiative);
+      }
     }
     if (payload.concentrationFor && character?.name === payload.concentrationFor && entry.targetDc && !entry.success) {
       normalizeCharacter(character);

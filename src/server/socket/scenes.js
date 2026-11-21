@@ -2,7 +2,7 @@ function registerSceneHandlers(socket, room) {
   const {
     broadcastState, cleanDoodlePath, cleanFogShape, cloneJson, defaultState, deny,
     doodleAuthorKey, emitNpcRoster, emitSavedScenes, emitSceneUpdate, isDm, pointToSegmentDistance,
-    markSceneDirty, normalizeToken, persistState, publicDoodlePath, setSceneDirty,
+    markSceneDirty, normalizeToken, persistState, publicDoodlePath, setSceneDirty, STATE_LIMITS,
     snapCoordinateToCell, syncCharacterTokens, syncNpcRosterFromTokens
   } = room;
   const { io, state } = room;
@@ -104,6 +104,9 @@ function registerSceneHandlers(socket, room) {
     const existingName = Object.keys(state.savedScenes)
       .find(savedName => savedName.toLowerCase() === requestedName.toLowerCase());
     const safeName = existingName || requestedName;
+    if (!existingName && Object.keys(state.savedScenes).length >= STATE_LIMITS.savedScenes) {
+      return deny(socket, 'The saved scene limit has been reached. Delete an old scene first.');
+    }
     state.savedScenes[safeName] = {
       name: safeName,
       savedAt: Date.now(),

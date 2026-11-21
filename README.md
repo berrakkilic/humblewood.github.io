@@ -16,6 +16,9 @@ npm start
 
 Then open `http://localhost:3000` in your browser. 
 
+Operational checks are available at `/healthz` (process health) and `/readyz`
+(database and room readiness).
+
 ## Frontend development
 
 The editable browser code lives in `frontend/app/`, split by feature. TypeScript
@@ -35,9 +38,32 @@ the TypeScript sources and generated JavaScript, and runs the existing tests.
 See [`frontend/README.md`](frontend/README.md) for the feature map and the rules
 for adding or splitting frontend code.
 
+See [`docs/UI_UX_BEST_PRACTICES.md`](docs/UI_UX_BEST_PRACTICES.md) for the
+repository UI/UX checklist based on [Laws of UX](https://lawsofux.com/).
+
+See [`docs/FRONTEND_PERFORMANCE_BEST_PRACTICES.md`](docs/FRONTEND_PERFORMANCE_BEST_PRACTICES.md)
+for the repository frontend performance checklist based on
+[roadmap.sh](https://roadmap.sh/frontend-performance-best-practices).
+
+See [`docs/FRONTEND_CODING_BEST_PRACTICES.md`](docs/FRONTEND_CODING_BEST_PRACTICES.md)
+for maintainable CSS, responsive layout, JavaScript, state, and event-handling
+rules adapted from [front-end-best-practices](https://github.com/ChampiMagic/front-end-best-practices).
+
+Backend work should follow:
+
+- [`docs/BACKEND_PERFORMANCE_BEST_PRACTICES.md`](docs/BACKEND_PERFORMANCE_BEST_PRACTICES.md)
+- [`docs/BACKEND_CODING_BEST_PRACTICES.md`](docs/BACKEND_CODING_BEST_PRACTICES.md)
+
 ## Deploying with Docker
 - **`Dockerfile`** — builds the app into a container.
 - **`docker-compose.yml`** — runs it with two persistent volumes: one for the database, one for uploaded map/token images.
+
+Set a unique `DM_PIN` before starting a production deployment. The server refuses
+the development default when `NODE_ENV=production`:
+
+```bash
+DM_PIN='use-a-long-unique-pin' NODE_ENV=production docker compose up -d --build
+```
 
 The app uses SQLite in a file and the `docker-compose.yml` mounts a volume (`humblewood-data`) so that the file persists across restarts and redeploys automatically. Redeploys are currently set to every 30 mins or so.
 

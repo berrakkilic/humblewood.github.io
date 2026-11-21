@@ -4,12 +4,15 @@ function registerTokenHandlers(socket, room) {
     emitNpcRoster, emitSavedScenes, emitToken, isDm, markSceneDirty, normalizeCharacter,
     normalizeNpc, normalizeToken, npcFromToken, persistState, publicToken,
     removeInitiativeForTokenIds, resetLongRestItemUsage, snapCoordinateToCell,
-    syncNpcFromToken, uniqueTokenLabel
+    syncNpcFromToken, uniqueTokenLabel, STATE_LIMITS
   } = room;
   const { io, state } = room;
 
   socket.on('token:add', (requested = {}) => {
     if (!socket.data.identified) return deny(socket, 'Join the table before adding a token.');
+    if (state.tokens.length >= STATE_LIMITS.tokens) {
+      return deny(socket, 'The map token limit has been reached. Remove an old token first.');
+    }
     let token;
     if (!isDm(socket)) {
       const character = state.characters[String(requested.characterName || '')];
@@ -137,6 +140,9 @@ function registerTokenHandlers(socket, room) {
     const source = state.tokens.find(token => token.id === String(id || ''));
     if (!source) return deny(socket, 'That token is no longer on the map.');
     const duplicate = cloneJson(source);
+    if (state.tokens.length >= STATE_LIMITS.tokens) {
+      return deny(socket, 'The map token limit has been reached. Remove an old token first.');
+    }
     duplicate.id = `t${Date.now()}${Math.random().toString(36).slice(2, 7)}`;
     duplicate.x = Math.max(-5000, Math.min(50000, Number(source.x) + state.scene.gridSize));
     duplicate.y = Number(source.y);
@@ -165,6 +171,9 @@ function registerTokenHandlers(socket, room) {
 
   socket.on('npc:create', (requested = {}) => {
     if (!isDm(socket)) return deny(socket, 'Only the Dungeon Master can create NPCs.');
+    if (Object.keys(state.npcs).length >= STATE_LIMITS.npcs) {
+      return deny(socket, 'The NPC limit has been reached. Delete an old NPC first.');
+    }
     const npc = normalizeNpc({
       ...requested,
       id: `npc_${Date.now()}${Math.random().toString(36).slice(2, 7)}`
@@ -177,6 +186,9 @@ function registerTokenHandlers(socket, room) {
 
   socket.on('npc:place', ({ id } = {}) => {
     if (!isDm(socket)) return deny(socket, 'Only the Dungeon Master can place NPCs.');
+    if (state.tokens.length >= STATE_LIMITS.tokens) {
+      return deny(socket, 'The map token limit has been reached. Remove an old token first.');
+    }
     const npc = state.npcs[String(id || '')];
     if (!npc) return deny(socket, 'That NPC no longer exists.');
     const existing = state.tokens.find(token => token.npcId === npc.id);

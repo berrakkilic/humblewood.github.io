@@ -27,7 +27,8 @@ let shuttingDown = false;
 async function shutdown() {
   if (shuttingDown) return;
   shuttingDown = true;
-  await room.flush();
+  io.close();
+  await room.close();
   server.close(() => process.exit(0));
   setTimeout(() => process.exit(0), 3000).unref();
 }

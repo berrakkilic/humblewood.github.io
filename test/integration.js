@@ -97,6 +97,12 @@ async function identify(io, payload) {
 
 async function run() {
   await serverReady();
+  const healthResponse = await fetch(`http://127.0.0.1:${port}/healthz`);
+  assert.equal(healthResponse.status, 200);
+  assert.deepEqual(await healthResponse.json(), { ok: true, status: 'healthy' });
+  const readinessResponse = await fetch(`http://127.0.0.1:${port}/readyz`);
+  assert.equal(readinessResponse.status, 200);
+  assert.deepEqual(await readinessResponse.json(), { ok: true, status: 'ready' });
 
   for (const route of ['/map', '/characters', '/almanac', '/jukebox', '/library', '/dice']) {
     const response = await fetch(`http://127.0.0.1:${port}${route}`);
@@ -209,16 +215,30 @@ async function run() {
   assert.equal(musicResponse.status, 200);
   const musicCatalog = await musicResponse.json();
   assert.deepEqual(musicCatalog.tracks, []);
+  const unauthenticatedUpload = new FormData();
+  unauthenticatedUpload.append('file', new Blob(['fake mp3 bytes'], { type: 'audio/mpeg' }), 'unauthorized.mp3');
+  const unauthenticatedUploadResponse = await fetch(`http://127.0.0.1:${port}/api/upload/audio`, {
+    method: 'POST', body: unauthenticatedUpload
+  });
+  assert.equal(unauthenticatedUploadResponse.status, 403);
+  const dmHttpLoginResponse = await fetch(`http://127.0.0.1:${port}/api/auth/session`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ role: 'dm', name: 'Guide', dmPin: 'test-pin' })
+  });
+  assert.equal(dmHttpLoginResponse.status, 200);
+  const dmCookie = (dmHttpLoginResponse.headers.get('set-cookie') || '').split(';')[0];
+  assert.match(dmCookie, /^humblewood_session=/);
   const badUpload = new FormData();
   badUpload.append('file', new Blob(['not an mp3'], { type: 'text/plain' }), 'notes.txt');
   const badUploadResponse = await fetch(`http://127.0.0.1:${port}/api/upload/audio`, {
-    method: 'POST', body: badUpload
+    method: 'POST', headers: { Cookie: dmCookie }, body: badUpload
   });
   assert.equal(badUploadResponse.status, 400);
   const audioUpload = new FormData();
   audioUpload.append('file', new Blob(['fake mp3 bytes'], { type: 'audio/mpeg' }), 'uploaded-forest.mp3');
   const audioUploadResponse = await fetch(`http://127.0.0.1:${port}/api/upload/audio`, {
-    method: 'POST', body: audioUpload
+    method: 'POST', headers: { Cookie: dmCookie }, body: audioUpload
   });
   assert.equal(audioUploadResponse.status, 200);
   const uploadedAudio = await audioUploadResponse.json();
@@ -230,13 +250,13 @@ async function run() {
   const unsupportedLibraryUpload = new FormData();
   unsupportedLibraryUpload.append('file', new Blob(['binary'], { type: 'application/octet-stream' }), 'archive.zip');
   const unsupportedLibraryResponse = await fetch(`http://127.0.0.1:${port}/api/upload/library`, {
-    method: 'POST', body: unsupportedLibraryUpload
+    method: 'POST', headers: { Cookie: dmCookie }, body: unsupportedLibraryUpload
   });
   assert.equal(unsupportedLibraryResponse.status, 400);
   const libraryUpload = new FormData();
   libraryUpload.append('file', new Blob(['A secret clue'], { type: 'text/plain' }), 'secret-clue.txt');
   const libraryUploadResponse = await fetch(`http://127.0.0.1:${port}/api/upload/library`, {
-    method: 'POST', body: libraryUpload
+    method: 'POST', headers: { Cookie: dmCookie }, body: libraryUpload
   });
   assert.equal(libraryUploadResponse.status, 200);
   const uploadedLibrary = await libraryUploadResponse.json();
@@ -314,6 +334,10 @@ async function run() {
   const io = require('../node_modules/socket.io/client-dist/socket.io.js');
 
   const dm = await identify(io, { role: 'dm', name: 'Guide', dmPin: 'test-pin' });
+  const invalidPlaylistDenied = once(dm.socket, 'action:denied', result => /invalid|duplicate/i.test(result.message));
+  dm.socket.emit('jukebox:setPlaylist', [{ id: 'external', title: 'External', url: 'https://example.com/track.mp3' }]);
+  await invalidPlaylistDenied;
+  assert.deepEqual(dm.state.jukebox.playlist, []);
   assert.equal(dm.state.scene.fogEnabled, true);
   assert.equal(dm.state.scene.snapToGrid, true);
   assert.deepEqual(dm.state.shopStock, {

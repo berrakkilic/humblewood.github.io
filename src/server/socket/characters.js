@@ -73,7 +73,7 @@ function registerCharacterHandlers(socket, room) {
     CONDITIONS, deny, emitCharacterUpdate, emitToken, isDm, normalizeCharacter,
     ownsCharacter, persistState, removeInitiativeForTokenIds, syncCharacterTokens,
     syncCombatFields, resetLongRestItemUsage, resetLongRestFeatureUses, barbarianCharacter,
-    characterWearsHeavyArmor
+    characterWearsHeavyArmor, STATE_LIMITS
   } = room;
   const { io, state } = room;
 
@@ -84,6 +84,9 @@ function registerCharacterHandlers(socket, room) {
     const originalName = String(requested._originalName || name).trim().slice(0, 100);
     const original = state.characters[originalName];
     const destination = state.characters[name];
+    if (!original && !destination && Object.keys(state.characters).length >= STATE_LIMITS.characters) {
+      return deny(socket, 'The character limit has been reached. Delete an old character first.');
+    }
     if (!isDm(socket) && (
       (original && !ownsCharacter(socket, original)) ||
       (destination && destination !== original && !ownsCharacter(socket, destination))

@@ -13,6 +13,17 @@ const CONDITIONS = new Set([
   'Invisible', 'Paralyzed', 'Petrified', 'Poisoned', 'Prone', 'Restrained',
   'Stunned', 'Unconscious'
 ]);
+const STATE_LIMITS = Object.freeze({
+  savedScenes: 50,
+  characters: 200,
+  tokens: 500,
+  npcs: 500,
+  libraryFolders: 200,
+  libraryFiles: 500,
+  puzzleStates: 100,
+  playlist: 100,
+  initiativeEntries: 500
+});
 
 function createRoom({ dataDir, dmPin, io, uploadDir }) {
   const defaultState = createDefaultState();
@@ -20,13 +31,49 @@ function createRoom({ dataDir, dmPin, io, uploadDir }) {
   let saveTimer = null;
   let pendingSave = false;
   let libraryBroadcastTimer = null;
+  const persistenceStats = {
+    writes: 0,
+    lastWriteAt: 0,
+    lastDurationMs: 0,
+    lastSerializedBytes: 0
+  };
 
   fs.mkdirSync(dataDir, { recursive: true });
   const db = createClient({ url: `file:${path.join(dataDir, 'local.db')}` });
   const libraryUploadDir = uploadDir ? path.resolve(uploadDir) : null;
 
+  function cleanLocalUploadUrl(value) {
+    const url = String(value || '').trim().slice(0, 1000);
+    if (!url || !url.startsWith('/uploads/') || !libraryUploadDir) return url || null;
+    let filename;
+    try {
+      filename = decodeURIComponent(url.slice('/uploads/'.length));
+    } catch {
+      return null;
+    }
+    if (!filename || path.basename(filename) !== filename) return null;
+    return fs.existsSync(path.join(libraryUploadDir, filename)) ? url : null;
+  }
+
   function cloneJson(value) {
     return JSON.parse(JSON.stringify(value));
+  }
+
+  function normalizePuzzleStates(value) {
+    const entries = Object.entries(value && typeof value === 'object' && !Array.isArray(value) ? value : {})
+      .filter(([id]) => !id.endsWith(':updatedAt'))
+      .sort(([left], [right]) => (
+        (Number(value[`${right}:updatedAt`]) || 0) - (Number(value[`${left}:updatedAt`]) || 0)
+      ))
+      .slice(0, STATE_LIMITS.puzzleStates);
+    const normalized = {};
+    entries.forEach(([id, puzzle]) => {
+      const cleaned = cleanPuzzleState(puzzle);
+      if (!cleaned) return;
+      normalized[id] = cleaned;
+      normalized[`${id}:updatedAt`] = Number(value[`${id}:updatedAt`]) || 0;
+    });
+    return normalized;
   }
 
   function cleanPronouns(value) {
@@ -149,7 +196,7 @@ function createRoom({ dataDir, dmPin, io, uploadDir }) {
     if (!file || typeof file !== 'object') return null;
     const id = String(file.id || fallbackId || '').trim().slice(0, 140);
     const name = String(file.name || '').trim().replace(/\s+/g, ' ').slice(0, 160);
-    const url = String(file.url || '').trim().slice(0, 1000);
+    const url = cleanLocalUploadUrl(file.url);
     if (!id || !name || !/^\/(?:uploads|handouts)\/[A-Za-z0-9._~%()+-]+$/.test(url)) return null;
     const cleaned = {
       id,
@@ -167,7 +214,7 @@ function createRoom({ dataDir, dmPin, io, uploadDir }) {
   function normalizeLibrary(library) {
     const folders = [];
     const folderIds = new Set();
-    (Array.isArray(library?.folders) ? library.folders : []).forEach((folder, index) => {
+    (Array.isArray(library?.folders) ? library.folders : []).slice(-STATE_LIMITS.libraryFolders).forEach((folder, index) => {
       const cleaned = cleanLibraryFolder(folder, `folder_${index}`);
       if (!cleaned || folderIds.has(cleaned.id)) return;
       folderIds.add(cleaned.id);
@@ -179,7 +226,7 @@ function createRoom({ dataDir, dmPin, io, uploadDir }) {
 
     const files = [];
     const fileIds = new Set();
-    (Array.isArray(library?.files) ? library.files : []).forEach((file, index) => {
+    (Array.isArray(library?.files) ? library.files : []).slice(-STATE_LIMITS.libraryFiles).forEach((file, index) => {
       const cleaned = cleanLibraryFile(file, `file_${index}`);
       if (!cleaned || fileIds.has(cleaned.id)) return;
       if (!cleaned.folderId || !folderIds.has(cleaned.folderId)) cleaned.folderId = null;
@@ -199,6 +246,36 @@ function createRoom({ dataDir, dmPin, io, uploadDir }) {
       : null;
     state.library = { folders, files, broadcast };
     return state.library;
+  }
+
+  function normalizeJukebox(jukebox) {
+    const seenUrls = new Set();
+    const playlist = (Array.isArray(jukebox?.playlist) ? jukebox.playlist : [])
+      .slice(-STATE_LIMITS.playlist)
+      .map((track, index) => {
+        if (!track || typeof track !== 'object') return null;
+        const url = String(track.url || '').trim().slice(0, 1000);
+        if (!/^\/(?:music|uploads)\/[A-Za-z0-9._~%()+-]+$/.test(url) || seenUrls.has(url)) return null;
+        seenUrls.add(url);
+        return {
+          id: String(track.id || `track-${index}`).slice(0, 140),
+          title: String(track.title || 'Untitled track').trim().slice(0, 160) || 'Untitled track',
+          url,
+          source: String(track.source || 'Server').slice(0, 40)
+        };
+      })
+      .filter(Boolean);
+    const currentIndex = Number.isInteger(Number(jukebox?.currentIndex))
+      ? Number(jukebox.currentIndex)
+      : -1;
+    state.jukebox = {
+      playlist,
+      currentIndex: playlist.length ? Math.max(-1, Math.min(playlist.length - 1, currentIndex)) : -1,
+      isPlaying: !!jukebox?.isPlaying && playlist.length > 0,
+      startedAt: Math.max(0, Number(jukebox?.startedAt) || 0),
+      seek: Math.max(0, Number(jukebox?.seek) || 0)
+    };
+    return state.jukebox;
   }
 
   function cleanNotification(notification, fallbackId) {
@@ -319,7 +396,7 @@ function createRoom({ dataDir, dmPin, io, uploadDir }) {
     return {
       name: String(sheet.name || fields.name || '').trim().slice(0, 100),
       pronouns: cleanPronouns(sheet.pronouns ?? fields.pronouns),
-      portraitUrl: String(sheet.portraitUrl || '').slice(0, 1000) || null,
+      portraitUrl: cleanLocalUploadUrl(sheet.portraitUrl),
       challenge: String(sheet.challenge || '').trim().slice(0, 20),
       species: String(sheet.species || '').slice(0, 100),
       race: String(sheet.race || '').slice(0, 100),
@@ -358,7 +435,7 @@ function createRoom({ dataDir, dmPin, io, uploadDir }) {
     npc.id = String(npc.id || (`npc_${Date.now()}${Math.random().toString(36).slice(2, 7)}`)).slice(0, 120);
     npc.name = String(npc.name || npc.label || 'Unnamed NPC').trim().slice(0, 100) || 'Unnamed NPC';
     npc.pronouns = cleanPronouns(npc.pronouns ?? npc.sheet?.pronouns ?? npc.sheet?.fields?.pronouns);
-    npc.imageUrl = String(npc.imageUrl || '').slice(0, 1000) || null;
+    npc.imageUrl = cleanLocalUploadUrl(npc.imageUrl);
     npc.maxHp = Math.max(1, Math.min(9999, Number(npc.maxHp ?? npc.hp) || 10));
     npc.hp = Math.max(0, Math.min(npc.maxHp, Number(npc.hp) || 0));
     npc.tempHp = Math.max(0, Math.min(9999, Number(npc.tempHp) || 0));
@@ -434,7 +511,7 @@ function createRoom({ dataDir, dmPin, io, uploadDir }) {
     token.kind = ['pc', 'npc', 'item'].includes(token.kind) ? token.kind : 'npc';
     token.label = String(token.label || 'Token').trim().slice(0, 100) || 'Token';
     token.pronouns = token.kind === 'item' ? '' : cleanPronouns(token.pronouns);
-    token.imageUrl = String(token.imageUrl || '').slice(0, 1000) || null;
+    token.imageUrl = cleanLocalUploadUrl(token.imageUrl);
     token.size = Math.max(18, Math.min(180, Number(token.size) || 44));
     token.sizeScale = Math.max(0.35, Math.min(3, Number(token.sizeScale) || 1));
     if (token.coordinateMode !== 'center') {
@@ -516,6 +593,7 @@ function createRoom({ dataDir, dmPin, io, uploadDir }) {
 
   function normalizeCharacter(character) {
     if (!character.fields || typeof character.fields !== 'object') character.fields = {};
+    character.portraitUrl = cleanLocalUploadUrl(character.portraitUrl);
     character.inventory = cleanInventory(character.inventory);
     character.reactions = cleanReactions(character.reactions);
     character.pronouns = cleanPronouns(character.pronouns ?? character.fields.pronouns);
@@ -599,22 +677,29 @@ function createRoom({ dataDir, dmPin, io, uploadDir }) {
 
   function normalizeSavedScenes() {
     const normalized = {};
-    Object.entries(state.savedScenes || {}).forEach(([fallbackName, saved]) => {
+    Object.entries(state.savedScenes || {})
+      .sort(([, left], [, right]) => (Number(right?.savedAt) || 0) - (Number(left?.savedAt) || 0))
+      .slice(0, STATE_LIMITS.savedScenes)
+      .forEach(([fallbackName, saved]) => {
       if (!saved || typeof saved !== 'object') return;
       const name = String(saved.name || fallbackName).trim().slice(0, 80);
       if (!name) return;
       const scene = { ...defaultState.scene, ...(saved.scene || {}) };
+      scene.mapUrl = cleanLocalUploadUrl(scene.mapUrl);
       if (!Array.isArray(scene.doodlePaths)) scene.doodlePaths = [];
       if (!Array.isArray(scene.doodleCornerPaths)) scene.doodleCornerPaths = [];
       if (!Array.isArray(scene.fogShapes)) scene.fogShapes = [];
-      const tokens = Array.isArray(saved.tokens) ? saved.tokens : [];
+      const tokens = Array.isArray(saved.tokens) ? saved.tokens.slice(-STATE_LIMITS.tokens) : [];
       tokens.forEach(normalizeToken);
       const initiative = { ...defaultState.initiative, ...(saved.initiative || {}) };
-      if (!Array.isArray(initiative.entries)) initiative.entries = [];
+      initiative.entries = Array.isArray(initiative.entries)
+        ? initiative.entries.slice(-STATE_LIMITS.initiativeEntries)
+        : [];
       normalized[name] = { name, savedAt: Number(saved.savedAt) || Date.now(), scene, tokens, initiative };
       syncNpcRosterFromTokens(tokens);
-    });
+      });
     state.savedScenes = normalized;
+    if (state.activeSceneName && !state.savedScenes[state.activeSceneName]) state.activeSceneName = null;
   }
 
   async function loadStateFromDb() {
@@ -630,19 +715,22 @@ function createRoom({ dataDir, dmPin, io, uploadDir }) {
         library: saved.library && typeof saved.library === 'object' ? saved.library : defaultState.library,
         puzzleStates: saved.puzzleStates && typeof saved.puzzleStates === 'object' ? saved.puzzleStates : {},
         notifications: Array.isArray(saved.notifications) ? saved.notifications : defaultState.notifications,
-        characters: saved.characters || {},
+        characters: saved.characters && typeof saved.characters === 'object'
+          ? Object.fromEntries(Object.entries(saved.characters).slice(-STATE_LIMITS.characters))
+          : {},
         shopStock: normalizeShopStock(saved.shopStock),
         npcs: saved.npcs && typeof saved.npcs === 'object' ? saved.npcs : {},
         savedScenes: saved.savedScenes && typeof saved.savedScenes === 'object' ? saved.savedScenes : {},
         activeSceneName: saved.activeSceneName || null,
-        rollLog: Array.isArray(saved.rollLog) ? saved.rollLog : [],
-        tokens: Array.isArray(saved.tokens) ? saved.tokens : [],
+        rollLog: Array.isArray(saved.rollLog) ? saved.rollLog.slice(0, 15) : [],
+        tokens: Array.isArray(saved.tokens) ? saved.tokens.slice(-STATE_LIMITS.tokens) : [],
         initiative: { ...defaultState.initiative, ...(saved.initiative || {}) }
       };
       // A deployment restarts the server. Restore these requested map defaults
       // even when an older persisted state had the toggles switched off.
       state.scene.fogEnabled = true;
       state.scene.snapToGrid = true;
+      state.scene.mapUrl = cleanLocalUploadUrl(state.scene.mapUrl);
       if (!/^#[0-9a-f]{6}$/i.test(String(state.scene.gridColor || ''))) {
         state.scene.gridColor = defaultState.scene.gridColor;
       }
@@ -650,13 +738,13 @@ function createRoom({ dataDir, dmPin, io, uploadDir }) {
       if (!Array.isArray(state.scene.doodleCornerPaths)) state.scene.doodleCornerPaths = [];
       if (!Array.isArray(state.scene.fogShapes)) state.scene.fogShapes = [];
       if (!Array.isArray(state.initiative.entries)) state.initiative.entries = [];
-      if (!state.puzzleStates || typeof state.puzzleStates !== 'object' || Array.isArray(state.puzzleStates)) {
-        state.puzzleStates = {};
-      }
+      state.puzzleStates = normalizePuzzleStates(state.puzzleStates);
       normalizeLibrary(state.library);
+      normalizeJukebox(state.jukebox);
       normalizeNotifications(state.notifications);
       state.shopStock = normalizeShopStock(state.shopStock);
       Object.values(state.characters).forEach(normalizeCharacter);
+      state.npcs = Object.fromEntries(Object.entries(state.npcs).slice(-STATE_LIMITS.npcs));
       Object.values(state.npcs).forEach(normalizeNpc);
       state.tokens.forEach(token => {
         normalizeToken(token);
@@ -699,10 +787,16 @@ function createRoom({ dataDir, dmPin, io, uploadDir }) {
   ]).then(loadStateFromDb);
 
   async function writeState() {
+    const startedAt = Date.now();
+    const serialized = JSON.stringify(state);
     await db.execute({
       sql: 'INSERT INTO state (id, data) VALUES (1, ?) ON CONFLICT(id) DO UPDATE SET data = excluded.data',
-      args: [JSON.stringify(state)]
+      args: [serialized]
     });
+    persistenceStats.writes += 1;
+    persistenceStats.lastWriteAt = Date.now();
+    persistenceStats.lastDurationMs = persistenceStats.lastWriteAt - startedAt;
+    persistenceStats.lastSerializedBytes = Buffer.byteLength(serialized, 'utf8');
   }
 
   function persistState() {
@@ -728,6 +822,23 @@ function createRoom({ dataDir, dmPin, io, uploadDir }) {
     } catch (error) {
       console.error('Failed to flush state on shutdown:', error.message);
     }
+  }
+
+  async function close() {
+    clearTimeout(libraryBroadcastTimer);
+    libraryBroadcastTimer = null;
+    await flush();
+    if (typeof db.close === 'function') {
+      const result = db.close();
+      if (result && typeof result.then === 'function') await result;
+    }
+  }
+
+  function persistenceStatus() {
+    return {
+      pending: pendingSave,
+      ...persistenceStats
+    };
   }
 
   function normalizeUsername(value) {
@@ -1021,6 +1132,10 @@ function createRoom({ dataDir, dmPin, io, uploadDir }) {
     const cleaned = cleanPuzzleState(value);
     if (!id || !cleaned) return false;
     if (!state.puzzleStates || typeof state.puzzleStates !== 'object') state.puzzleStates = {};
+    const storedIds = Object.keys(state.puzzleStates)
+      .filter(key => !key.endsWith(':updatedAt'));
+    if (!Object.prototype.hasOwnProperty.call(state.puzzleStates, id)
+      && storedIds.length >= STATE_LIMITS.puzzleStates) return false;
     state.puzzleStates[id] = cleaned;
     state.puzzleStates[`${id}:updatedAt`] = Date.now();
     persistState();
@@ -1332,6 +1447,7 @@ function createRoom({ dataDir, dmPin, io, uploadDir }) {
       entry.value = Number(value) || 0;
       if (tokenId) entry.tokenId = tokenId;
     } else {
+      if (state.initiative.entries.length >= STATE_LIMITS.initiativeEntries) return null;
       entry = {
         id: `i${Date.now()}${Math.random().toString(36).slice(2, 6)}`,
         name: safeName,
@@ -1353,7 +1469,9 @@ function createRoom({ dataDir, dmPin, io, uploadDir }) {
     dmPin,
     defaultState,
     CONDITIONS,
+    STATE_LIMITS,
     ready,
+    close,
     flush,
     get state() { return state; },
     applyNpcToToken,
@@ -1386,6 +1504,7 @@ function createRoom({ dataDir, dmPin, io, uploadDir }) {
     isDm,
     makePasswordRecord,
     markSceneDirty,
+    normalizeJukebox,
     normalizeLibrary,
     normalizeNotifications,
     normalizeCharacter,
@@ -1400,6 +1519,7 @@ function createRoom({ dataDir, dmPin, io, uploadDir }) {
     ownsCharacter,
     persistState,
     pointerColor,
+    persistenceStatus,
     publicDoodlePath,
     publicNotifications,
     publicStateFor,

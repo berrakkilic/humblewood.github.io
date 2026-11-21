@@ -7,7 +7,8 @@ function registerInitiativeHandlers(socket, room) {
 
   socket.on('initiative:add', ({ name, value, tokenId }) => {
     if (!isDm(socket)) return deny(socket, 'Only the Dungeon Master can add initiative manually.');
-    upsertInitiativeEntry({ name, value, tokenId });
+    const entry = upsertInitiativeEntry({ name, value, tokenId });
+    if (!entry) return deny(socket, 'The initiative entry limit has been reached.');
     markSceneDirty();
     persistState();
     io.emit('initiative:update', state.initiative);

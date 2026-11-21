@@ -13,7 +13,8 @@ function registerLibraryHandlers(socket, room) {
     persistState,
     removeLibraryFileAsset,
     scheduleLibraryBroadcastExpiry,
-    state
+    state,
+    STATE_LIMITS
   } = room;
 
   function requireDm() {
@@ -33,6 +34,9 @@ function registerLibraryHandlers(socket, room) {
     }
     if (state.library.folders.some(folder => folder.parentId === parentId && folder.name.toLowerCase() === name.toLowerCase())) {
       return deny(socket, 'A folder with that name already exists here.');
+    }
+    if (state.library.folders.length >= STATE_LIMITS.libraryFolders) {
+      return deny(socket, 'The library folder limit has been reached.');
     }
     const folder = cleanLibraryFolder({
       id: `folder_${Date.now()}${Math.random().toString(36).slice(2, 7)}`,
@@ -92,6 +96,9 @@ function registerLibraryHandlers(socket, room) {
       createdAt: Date.now()
     });
     if (!file) return deny(socket, 'That upload is not a supported library file.');
+    if (state.library.files.length >= STATE_LIMITS.libraryFiles) {
+      return deny(socket, 'The library file limit has been reached.');
+    }
     state.library.files.push(file);
     persistState();
     emitLibraryUpdate();

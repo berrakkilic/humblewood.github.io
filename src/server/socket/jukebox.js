@@ -1,9 +1,14 @@
 function registerJukeboxHandlers(socket, room) {
-  const { deny, io, isDm, persistState, state } = room;
+  const { deny, io, isDm, normalizeJukebox, persistState, state } = room;
 
   socket.on('jukebox:setPlaylist', playlist => {
     if (!isDm(socket)) return deny(socket, 'Only the Dungeon Master can edit the playlist.');
-    state.jukebox.playlist = Array.isArray(playlist) ? playlist.slice(0, 100) : [];
+    if (!Array.isArray(playlist)) return deny(socket, 'The playlist must be a list of tracks.');
+    const normalized = normalizeJukebox({ ...state.jukebox, playlist });
+    if (normalized.playlist.length !== playlist.length) {
+      return deny(socket, 'The playlist contains an invalid or duplicate track.');
+    }
+    state.jukebox = normalized;
     persistState();
     io.emit('jukebox:update', state.jukebox);
   });

@@ -77,7 +77,14 @@ function createHttpApp(config, getRoom = () => null) {
       callback(null, `${Date.now()}-${safeName}`);
     }
   });
-  const upload = multer({ storage, limits: { fileSize: 25 * 1024 * 1024 } });
+  const upload = multer({
+    storage,
+    limits: { fileSize: 25 * 1024 * 1024 },
+    fileFilter: (req, file, callback) => {
+      const extension = path.extname(file.originalname).toLowerCase();
+      callback(null, file.mimetype.startsWith('image/') && ['.png', '.jpg', '.jpeg', '.gif', '.webp'].includes(extension));
+    }
+  });
   const audioStorage = multer.diskStorage({
     destination: (req, file, callback) => callback(null, config.musicDir),
     // A stable filename keeps old /music/name.mp3 playlist entries working
@@ -89,14 +96,20 @@ function createHttpApp(config, getRoom = () => null) {
     limits: { fileSize: 100 * 1024 * 1024 },
     fileFilter: (req, file, callback) => {
       const extension = path.extname(file.originalname).toLowerCase();
-      callback(null, extension === '.mp3');
+      callback(null, extension === '.mp3' && ['audio/mpeg', 'audio/mp3', 'application/octet-stream'].includes(file.mimetype));
     }
   });
   const libraryUpload = multer({
     storage,
     limits: { fileSize: 100 * 1024 * 1024 },
     fileFilter: (req, file, callback) => {
-      callback(null, LIBRARY_EXTENSIONS.has(path.extname(file.originalname).toLowerCase()));
+      const extension = path.extname(file.originalname).toLowerCase();
+      const isText = file.mimetype.startsWith('text/') || [
+        'application/json', 'application/javascript', 'application/xml',
+        'application/pdf', 'application/yaml', 'application/x-yaml'
+      ].includes(file.mimetype);
+      const isImage = file.mimetype.startsWith('image/');
+      callback(null, LIBRARY_EXTENSIONS.has(extension) && (isText || isImage));
     }
   });
   const app = express();
@@ -110,8 +123,32 @@ function createHttpApp(config, getRoom = () => null) {
     return identity?.role === 'dm' ? { room, identity } : null;
   }
 
+  async function requireDm(req, res, next) {
+    try {
+      if (await dmIdentity(req)) return next();
+      return res.status(403).json({ error: 'Only the Dungeon Master can upload files.' });
+    } catch (error) {
+      console.error('HTTP upload authorization failed:', error.message);
+      return res.status(503).json({ error: 'The upload could not be authorized right now.' });
+    }
+  }
+
   app.set('trust proxy', config.proxyTrust);
   app.use(express.json());
+  app.get('/healthz', (req, res) => {
+    res.json({ ok: true, status: 'healthy' });
+  });
+  app.get('/readyz', async (req, res) => {
+    const room = getRoom();
+    if (!room) return res.status(503).json({ ok: false, status: 'starting' });
+    try {
+      await room.ready;
+      return res.json({ ok: true, status: 'ready' });
+    } catch (error) {
+      console.error('Readiness check failed:', error.message);
+      return res.status(503).json({ ok: false, status: 'unavailable' });
+    }
+  });
   app.use(express.static(config.publicDir));
   app.use('/uploads', express.static(config.uploadDir));
   app.use('/music', express.static(config.musicDir));
@@ -205,12 +242,12 @@ function createHttpApp(config, getRoom = () => null) {
     });
   });
 
-  app.post('/api/upload', upload.single('file'), (req, res) => {
+  app.post('/api/upload', requireDm, upload.single('file'), (req, res) => {
     if (!req.file) return res.status(400).json({ error: 'No file' });
     res.json({ url: `/uploads/${req.file.filename}`, name: req.file.originalname });
   });
 
-  app.post('/api/upload/audio', (req, res) => {
+  app.post('/api/upload/audio', requireDm, (req, res) => {
     audioUpload.single('file')(req, res, error => {
       if (error) {
         const status = error.code === 'LIMIT_FILE_SIZE' ? 413 : 400;
@@ -224,7 +261,7 @@ function createHttpApp(config, getRoom = () => null) {
     });
   });
 
-  app.post('/api/upload/library', (req, res) => {
+  app.post('/api/upload/library', requireDm, (req, res) => {
     libraryUpload.single('file')(req, res, error => {
       if (error) {
         const status = error.code === 'LIMIT_FILE_SIZE' ? 413 : 400;

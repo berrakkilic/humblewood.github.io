@@ -11,7 +11,7 @@
     "watch:frontend": "node scripts/watch-frontend.js",
     "dev:server": "node --watch server.js",
     "check": "npm run build:frontend && node scripts/check-syntax.js && node test/frontend-structure.js",
-    "test": "npm run check && node test/router.js && node test/map-geometry.js && node test/combat-state.js && node test/character-rules.js && node test/creation-presets.js && node test/almanac.js && node test/shop-purchase.js && node test/integration.js"
+    "test": "npm run check && node test/router.js && node test/map-geometry.js && node test/combat-state.js && node test/character-rules.js && node test/creation-presets.js && node test/almanac.js && node test/shop-purchase.js && node test/room-state.js && node test/integration.js"
   },
   "keywords": [],
   "author": "",
