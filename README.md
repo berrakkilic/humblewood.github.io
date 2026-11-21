@@ -53,6 +53,10 @@ Backend work should follow:
 
 - [`docs/BACKEND_PERFORMANCE_BEST_PRACTICES.md`](docs/BACKEND_PERFORMANCE_BEST_PRACTICES.md)
 - [`docs/BACKEND_CODING_BEST_PRACTICES.md`](docs/BACKEND_CODING_BEST_PRACTICES.md)
+- [`docs/NODEJS_BEST_PRACTICES.md`](docs/NODEJS_BEST_PRACTICES.md)
+
+Repository organization and pull requests should follow
+[`docs/REPOSITORY_STRUCTURE_BEST_PRACTICES.md`](docs/REPOSITORY_STRUCTURE_BEST_PRACTICES.md).
 
 ## Deploying with Docker
 - **`Dockerfile`** — builds the app into a container.
