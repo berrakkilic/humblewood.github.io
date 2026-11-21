@@ -1007,7 +1007,26 @@ async function run() {
   const afterMossLeft = await mossLeftRosterPromise;
   assert(!afterMossLeft.some(user => user.name === 'Moss'));
 
-  console.log('Integration checks passed: frontend routes, saved auth sessions, token hide/show, permissions, drawings, fog, duplication, badges, initiative, pointers, and scene persistence.');
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    const throttledClient = io(`http://127.0.0.1:${port}`, { transports: ['websocket'], forceNew: true });
+    clients.push(throttledClient);
+    await once(throttledClient, 'connect');
+    const resultPromise = once(throttledClient, 'identify:result');
+    throttledClient.emit('identify', { role: 'dm', name: 'Guide', dmPin: 'wrong-pin' });
+    const result = await resultPromise;
+    assert.equal(result.ok, false);
+    throttledClient.close();
+  }
+  const blockedClient = io(`http://127.0.0.1:${port}`, { transports: ['websocket'], forceNew: true });
+  clients.push(blockedClient);
+  await once(blockedClient, 'connect');
+  const blockedResultPromise = once(blockedClient, 'identify:result');
+  blockedClient.emit('identify', { role: 'dm', name: 'Guide', dmPin: 'wrong-pin' });
+  const blockedResult = await blockedResultPromise;
+  assert.match(blockedResult.message, /too many sign-in attempts/i);
+  blockedClient.close();
+
+  console.log('Integration checks passed: frontend routes, saved auth sessions, token hide/show, permissions, drawings, fog, duplication, badges, initiative, pointers, scene persistence, and auth throttling.');
 }
 
 run().catch(error => {

@@ -17,7 +17,37 @@ function registerAuthHandlers(socket, room) {
     normalizeUsername, publicStateFor, revokeAuthSessionsForUsername, validPassword
   } = room;
 
+  const authAttemptsByAddress = room.authAttemptsByAddress || new Map();
+  room.authAttemptsByAddress = authAttemptsByAddress;
   socket.data.authAttempts = 0;
+  const authWindowMs = 10 * 60 * 1000;
+  const authAttemptLimit = 12;
+
+  function authAddress() {
+    return String(socket.handshake?.address || socket.request?.socket?.remoteAddress || 'unknown');
+  }
+
+  function tooManyAddressAttempts() {
+    const cutoff = Date.now() - authWindowMs;
+    for (const [address, attempts] of authAttemptsByAddress) {
+      const recent = attempts.filter(time => time > cutoff);
+      if (recent.length) authAttemptsByAddress.set(address, recent);
+      else authAttemptsByAddress.delete(address);
+    }
+    return (authAttemptsByAddress.get(authAddress()) || []).length >= authAttemptLimit;
+  }
+
+  function recordAddressFailure() {
+    const address = authAddress();
+    authAttemptsByAddress.set(address, [
+      ...(authAttemptsByAddress.get(address) || []),
+      Date.now()
+    ].slice(-authAttemptLimit));
+  }
+
+  function clearAddressFailures() {
+    authAttemptsByAddress.delete(authAddress());
+  }
 
   const rejectIdentity = message => {
     socket.data.authAttempts += 1;
@@ -46,9 +76,16 @@ function registerAuthHandlers(socket, room) {
   // Kept for older clients and automated tests. The browser UI uses the HTTP
   // session endpoint so the credential never has to be stored in JavaScript.
   socket.on('identify', async (payload = {}) => {
+    if (tooManyAddressAttempts()) {
+      return rejectIdentity('Too many sign-in attempts. Please wait a few minutes.');
+    }
     try {
       const result = await authenticateIdentity(payload);
-      if (!result.ok) return rejectIdentity(result.message);
+      if (!result.ok) {
+        recordAddressFailure();
+        return rejectIdentity(result.message);
+      }
+      clearAddressFailures();
       completeIdentity(result, false);
     } catch (error) {
       console.error('Account sign-in failed:', error.message);
