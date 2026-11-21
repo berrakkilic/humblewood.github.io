@@ -23,7 +23,7 @@ function sheetSpeciesOptions() {
 
 function updateSpeciesOptions(selected = '') {
   replaceSelectOptions(
-    document.getElementById('sf-species'),
+    getElementById('sf-species'),
     sheetSpeciesOptions(),
     'Choose a species...',
     selected
@@ -33,10 +33,10 @@ function updateSpeciesOptions(selected = '') {
 function updateSubraceOptions(selected = '') {
   const includeNpcOnly = !!editingNpcSheetId;
   const species = characterRules.canonicalSpecies(
-    document.getElementById('sf-species').value,
+    getElementById('sf-species').value,
     { includeNpcOnly }
   );
-  const select = document.getElementById('sf-subrace');
+  const select = getElementById('sf-subrace');
   const options = characterRules.subracesFor(species, { includeNpcOnly });
   const placeholder = !species ? 'Choose a species first...' : options.length ? 'Choose a subrace...' : 'This species has no subrace';
   replaceSelectOptions(select, options, placeholder, selected);
@@ -44,7 +44,7 @@ function updateSubraceOptions(selected = '') {
 }
 
 function syncAutomaticSpeciesTraits(force = false) {
-  const field = document.getElementById('sf-racial-traits');
+  const field = getElementById('sf-racial-traits');
   if (!field) return;
   const current = field.value || '';
   const hasAutomaticBlock = current.includes(characterRules.AUTO_SPECIES_TRAITS_START);
@@ -53,14 +53,14 @@ function syncAutomaticSpeciesTraits(force = false) {
   // block alongside their notes instead of replacing anything.
   if (!force && current.trim() && !hasAutomaticBlock) return;
   const automatic = characterRules.automaticSpeciesTraitText(
-    document.getElementById('sf-species').value,
-    document.getElementById('sf-subrace').value
+    getElementById('sf-species').value,
+    getElementById('sf-subrace').value
   );
   field.value = characterRules.mergeAutomaticSpeciesTraits(current, automatic);
 }
 
 function syncAutomaticClassFeatures(force = false) {
-  const field = document.getElementById('sf-features');
+  const field = getElementById('sf-features');
   if (!field) return;
   const current = field.value || '';
   const hasAutomaticBlock = current.includes(characterRules.AUTO_CLASS_FEATURES_START);
@@ -69,16 +69,16 @@ function syncAutomaticClassFeatures(force = false) {
   // its own block so future updates never replace hand-written choices.
   if (!force && current.trim() && !hasAutomaticBlock) return;
   const automatic = characterRules.automaticClassFeatureText(
-    document.getElementById('sf-class').value,
-    document.getElementById('sf-subclass').value,
-    document.getElementById('sf-level').value
+    getElementById('sf-class').value,
+    getElementById('sf-subclass').value,
+    getElementById('sf-level').value
   );
   field.value = characterRules.mergeAutomaticClassFeatures(current, automatic);
 }
 
 function updateSubclassOptions(selected = '') {
-  const className = characterRules.canonicalClass(document.getElementById('sf-class').value);
-  const select = document.getElementById('sf-subclass');
+  const className = characterRules.canonicalClass(getElementById('sf-class').value);
+  const select = getElementById('sf-subclass');
   const options = characterRules.subclassesFor(className);
   replaceSelectOptions(select, options, className ? 'Choose a subclass...' : 'Choose a class first...', selected);
   select.disabled = !className || !options.length || !editingCanEdit;
@@ -88,7 +88,7 @@ function setCharacterRuleSelections(fields: any = {}) {
   updateSpeciesOptions(fields.species);
   updateSubraceOptions(fields.subrace);
   syncAutomaticSpeciesTraits();
-  document.getElementById('sf-class').value = characterRules.canonicalClass(fields.class) || '';
+  getElementById('sf-class').value = characterRules.canonicalClass(fields.class) || '';
   updateSubclassOptions(fields.subclass);
   syncAutomaticClassFeatures();
 }
@@ -96,24 +96,24 @@ function setCharacterRuleSelections(fields: any = {}) {
 function initializeCharacterRuleControls() {
   moveSavingThrowsIntoAbilities();
   updateSpeciesOptions();
-  replaceSelectOptions(document.getElementById('sf-class'), Object.keys(characterRules.CLASS_SUBCLASSES), 'Choose a class...');
+  replaceSelectOptions(getElementById('sf-class'), Object.keys(characterRules.CLASS_SUBCLASSES), 'Choose a class...');
   updateSubraceOptions();
   updateSubclassOptions();
-  document.getElementById('sf-species').addEventListener('change', () => {
+  getElementById('sf-species').addEventListener('change', () => {
     updateSubraceOptions();
     syncAutomaticSpeciesTraits(true);
     applyRecommendedArmorMethod();
   });
-  document.getElementById('sf-subrace').addEventListener('change', () => {
+  getElementById('sf-subrace').addEventListener('change', () => {
     syncAutomaticSpeciesTraits(true);
   });
-  document.getElementById('sf-class').addEventListener('change', () => {
+  getElementById('sf-class').addEventListener('change', () => {
     updateSubclassOptions();
     syncAutomaticClassFeatures(true);
     applyClassDefaults();
     renderSpellListEditor();
   });
-  document.getElementById('sf-subclass').addEventListener('change', () => {
+  getElementById('sf-subclass').addEventListener('change', () => {
     syncAutomaticClassFeatures(true);
     applySpellcastingDefaults();
     updateSpellSlotsForLevel();
@@ -123,7 +123,7 @@ function initializeCharacterRuleControls() {
 }
 
 function moveSavingThrowsIntoAbilities() {
-  const slot = document.getElementById('ability-saving-throws');
+  const slot = getElementById('ability-saving-throws');
   const savingThrows = document.querySelector('.save-skill-columns > div:first-child');
   if (!slot || !savingThrows) return;
   slot.appendChild(savingThrows);
@@ -154,30 +154,30 @@ function alignBasicStatsPanels() {
 function applyRecommendedArmorMethod() {
   if (acMethodManuallySelected) return refreshArmorClass();
   const method = characterRules.defaultArmorMethod(
-    document.getElementById('sf-species').value,
-    document.getElementById('sf-class').value
+    getElementById('sf-species').value,
+    getElementById('sf-class').value
   );
-  document.getElementById('sf-ac-method').value = method;
+  getElementById('sf-ac-method').value = method;
   refreshArmorClass();
 }
 
 function applyClassDefaults() {
-  const className = characterRules.canonicalClass(document.getElementById('sf-class').value);
+  const className = characterRules.canonicalClass(getElementById('sf-class').value);
   if (!className) return;
-  const level = Math.max(1, Math.min(20, Number(document.getElementById('sf-level').value) || 1));
+  const level = Math.max(1, Math.min(20, Number(getElementById('sf-level').value) || 1));
   const hitDie = characterRules.hitDieFor(className);
-  document.getElementById('sf-hitdice').value = `${level}d${hitDie}`;
-  document.getElementById('sf-hitdice-left').value = level;
+  getElementById('sf-hitdice').value = `${level}d${hitDie}`;
+  getElementById('sf-hitdice-left').value = String(level);
 
   const savingThrows = new Set(characterRules.classSavingThrows(className));
   ABILITIES.forEach(ability => {
-    document.getElementById(`sf-save-${ability}-prof`).checked = savingThrows.has(ability);
+    getElementById(`sf-save-${ability}-prof`).checked = savingThrows.has(ability);
   });
 
   if (!editingOriginalName && level === 1) {
-    const maximum = Math.max(1, hitDie + characterRules.abilityModifier(document.getElementById('sf-con').value));
-    document.getElementById('sf-maxhp').value = maximum;
-    document.getElementById('sf-hp').value = maximum;
+    const maximum = Math.max(1, hitDie + characterRules.abilityModifier(getElementById('sf-con').value));
+    getElementById('sf-maxhp').value = String(maximum);
+    getElementById('sf-hp').value = String(maximum);
   }
   applySpellcastingDefaults();
   updateSpellSlotsForLevel();
@@ -186,51 +186,51 @@ function applyClassDefaults() {
 }
 
 function refreshNewCharacterHitPoints() {
-  if (editingOriginalName || editingBaseLevel !== 1 || Number(document.getElementById('sf-level').value) !== 1) return;
-  const className = characterRules.canonicalClass(document.getElementById('sf-class').value);
+  if (editingOriginalName || editingBaseLevel !== 1 || Number(getElementById('sf-level').value) !== 1) return;
+  const className = characterRules.canonicalClass(getElementById('sf-class').value);
   if (!className) return;
   const maximum = Math.max(
     1,
-    characterRules.hitDieFor(className) + characterRules.abilityModifier(document.getElementById('sf-con').value)
+    characterRules.hitDieFor(className) + characterRules.abilityModifier(getElementById('sf-con').value)
   );
-  document.getElementById('sf-maxhp').value = maximum;
-  document.getElementById('sf-hp').value = maximum;
+  getElementById('sf-maxhp').value = String(maximum);
+  getElementById('sf-hp').value = String(maximum);
 }
 
 function applySpellcastingDefaults() {
-  const className = characterRules.canonicalClass(document.getElementById('sf-class').value);
-  const subclass = document.getElementById('sf-subclass').value;
+  const className = characterRules.canonicalClass(getElementById('sf-class').value);
+  const subclass = getElementById('sf-subclass').value;
   const ability = characterRules.spellcastingAbilityFor(className, subclass);
   if (!ability) return;
-  document.getElementById('sf-spell-class').value = className;
-  document.getElementById('sf-spell-ability').value = ability.toUpperCase();
+  getElementById('sf-spell-class').value = className;
+  getElementById('sf-spell-ability').value = ability.toUpperCase();
 }
 
 function initializeFeatureUsageControls() {
-  const addButton = document.getElementById('feature-use-add');
+  const addButton = getElementById('feature-use-add');
   if (!addButton) return;
   addButton.addEventListener('click', () => {
-    const nameInput = document.getElementById('feature-use-name');
+    const nameInput = getElementById('feature-use-name');
     const name = String(nameInput.value || '').trim();
     if (!name) return showToast('Give the feature charge a name first.');
-    const max = Math.max(0, Math.min(999, Math.floor(Number(document.getElementById('feature-use-max').value) || 0)));
+    const max = Math.max(0, Math.min(999, Math.floor(Number(getElementById('feature-use-max').value) || 0)));
     if (max <= 0) return showToast('Feature charges need a maximum of at least 1.');
     editingFeatureUses.push({
       id: `feature-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       name,
       max,
       remaining: max,
-      reset: document.getElementById('feature-use-reset').value
+      reset: getElementById('feature-use-reset').value
     });
     nameInput.value = '';
-    document.getElementById('feature-use-max').value = '1';
+    getElementById('feature-use-max').value = '1';
     renderFeatureUsageEditor();
   });
   renderFeatureUsageEditor();
 }
 
 function initializeFeatPresetControls() {
-  const select = document.getElementById('feat-preset-select');
+  const select = getElementById('feat-preset-select');
   HUMBLEWOOD_FEAT_PRESETS.forEach(feat => {
     const option = document.createElement('option');
     option.value = feat.title;
@@ -239,20 +239,20 @@ function initializeFeatPresetControls() {
     select.appendChild(option);
   });
   applyPresetSearch('feat-preset-select', 'feat-preset-search');
-  document.getElementById('feat-preset-add').addEventListener('click', addFeatPresetToSheet);
+  getElementById('feat-preset-add').addEventListener('click', addFeatPresetToSheet);
 }
 
 function addFeatPresetToSheet() {
-  const select = document.getElementById('feat-preset-select');
+  const select = getElementById('feat-preset-select');
   const feat = HUMBLEWOOD_FEAT_PRESETS.find(entry => entry.title === select.value);
   if (!feat) return showToast('Choose a Humblewood feat first.');
   const prerequisite = feat.facts?.find(([label]) => label === 'Prerequisite')?.[1] || '';
-  const species = characterRules.canonicalSpecies(document.getElementById('sf-species').value);
+  const species = characterRules.canonicalSpecies(getElementById('sf-species').value);
   if (/glide trait/i.test(prerequisite) && !/\(birdfolk\)$/i.test(species)) {
     return showToast(`${feat.title} requires the Glide trait. Choose a birdfolk species first.`);
   }
 
-  const textarea = document.getElementById('sf-feats');
+  const textarea = getElementById('sf-feats');
   if (new RegExp(`(^|\\n)${feat.title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(\\n|$)`, 'i').test(textarea.value.trim())) {
     return showToast(`${feat.title} is already on this character.`);
   }
@@ -271,7 +271,7 @@ function addFeatPresetToSheet() {
 }
 
 function renderCharacters() {
-  const grid = document.getElementById('char-grid');
+  const grid = getElementById('char-grid');
   grid.innerHTML = '';
   renderNpcFilterControls();
   const characters = Object.values(state.characters || {}).sort((a, b) => a.name.localeCompare(b.name));
@@ -327,7 +327,7 @@ function renderCharacters() {
     grid.appendChild(card);
   });
 
-  const npcGrid = document.getElementById('npc-sheet-grid');
+  const npcGrid = getElementById('npc-sheet-grid');
   if (!npcGrid) return;
   npcGrid.innerHTML = '';
   const allNpcs = Object.values(state.npcs || {});
@@ -378,12 +378,12 @@ function renderCharacters() {
   });
 }
 
-document.getElementById('new-sheet-btn').onclick = () => openSheetEditor(null, { npc: false });
-document.getElementById('new-npc-sheet-btn').onclick = () => openSheetEditor(null, { npc: true });
-document.getElementById('close-sheet-btn').onclick = () => {
+getElementById('new-sheet-btn').onclick = () => openSheetEditor(null, { npc: false });
+getElementById('new-npc-sheet-btn').onclick = () => openSheetEditor(null, { npc: true });
+getElementById('close-sheet-btn').onclick = () => {
   closeLevelUpDialog(false);
   editingNpcSheetId = null;
-  document.getElementById('sheet-editor').classList.add('hidden');
+  getElementById('sheet-editor').classList.add('hidden');
 };
 
 function setSheetTab(tab: string, scrollToSheet = false) {
@@ -398,12 +398,12 @@ function setSheetTab(tab: string, scrollToSheet = false) {
   });
   updateSheetNavIndicator(tab);
   if (scrollToSheet) {
-    document.getElementById('sheet-section-nav').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    getElementById('sheet-section-nav').scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 }
 
 function updateSheetNavIndicator(tab: string) {
-  const nav = document.getElementById('sheet-section-nav') as HTMLElement | null;
+  const nav = getElementById('sheet-section-nav') as HTMLElement | null;
   const indicator = nav?.querySelector('.sheet-nav-indicator') as HTMLElement | null;
   const activeButton = nav?.querySelector(`[data-sheet-tab="${tab}"]`) as HTMLElement | null;
   if (!nav || !indicator || !activeButton) return;
@@ -436,11 +436,11 @@ window.addEventListener('resize', () => {
 
 function openSheetEditor(c, options: any = {}) {
   const isNpc = !!options.npc;
-  const form = document.getElementById('sheet-form');
+  const form = getElementById('sheet-form');
   form.reset();
   closeLevelUpDialog(false);
-  document.getElementById('sheet-editor').classList.remove('hidden');
-  document.getElementById('sheet-editor-title').textContent = c
+  getElementById('sheet-editor').classList.remove('hidden');
+  getElementById('sheet-editor-title').textContent = c
     ? `Edit ${c.name}${isNpc ? ' · NPC' : ''}`
     : (isNpc ? 'New NPC stat block' : 'New character');
   editingNpcSheetId = isNpc ? (c?.id || '__new__') : null;
@@ -459,19 +459,19 @@ function openSheetEditor(c, options: any = {}) {
   editingBaseLevel = Math.max(1, Math.min(20, Number(fields.level ?? c?.level) || 1));
   acMethodManuallySelected = !!c || !!fields['ac-method'];
   initiativeManuallyEdited = !!c && fields.initiative !== '' && fields.initiative !== undefined;
-  document.getElementById('npc-sheet-tools').classList.toggle('hidden', !isNpc);
-  document.getElementById('level-up-btn').classList.toggle('hidden', isNpc);
-  document.getElementById('save-sheet-btn').textContent = isNpc ? 'Save NPC' : 'Save character';
+  getElementById('npc-sheet-tools').classList.toggle('hidden', !isNpc);
+  getElementById('level-up-btn').classList.toggle('hidden', isNpc);
+  getElementById('save-sheet-btn').textContent = isNpc ? 'Save NPC' : 'Save character';
   form.dataset.npcChallenge = isNpc ? (c?.sheet?.challenge || '') : '';
-  document.getElementById('npc-statblock-import').value = '';
-  document.getElementById('npc-sheet-preset').value = '';
+  getElementById('npc-statblock-import').value = '';
+  getElementById('npc-sheet-preset').value = '';
   setSheetTab('basic');
-  ABILITIES.forEach(ability => { document.getElementById(`sf-${ability}`).max = isNpc ? '30' : '20'; });
-  form.querySelectorAll('[id^="sf-"]').forEach(input => {
-    if (input.type === 'file') return;
+  ABILITIES.forEach(ability => { getElementById(`sf-${ability}`).max = isNpc ? '30' : '20'; });
+  form.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>('[id^="sf-"]').forEach(input => {
+    if (input instanceof HTMLInputElement && input.type === 'file') return;
     const key = input.id.slice(3);
     if (!Object.prototype.hasOwnProperty.call(fields, key)) return;
-    if (input.type === 'checkbox') input.checked = !!fields[key];
+    if (input instanceof HTMLInputElement && input.type === 'checkbox') input.checked = !!fields[key];
     else if (input instanceof HTMLSelectElement) {
       const savedValue = String(fields[key] ?? '');
       if (savedValue) {
@@ -495,24 +495,24 @@ function openSheetEditor(c, options: any = {}) {
   renderFeatureUsageEditor();
   editingAttacks = normalizeAttackList(isNpc ? (c?.sheet?.attacks || c?.attacks) : c?.attacks);
   editingAttackId = null;
-  document.getElementById('attack-add-form').classList.add('hidden');
+  getElementById('attack-add-form').classList.add('hidden');
   renderAttackEditor();
   editingReactions = normalizeReactionList(isNpc ? (c?.sheet?.reactions || c?.reactions) : c?.reactions);
   editingReactionId = null;
-  document.getElementById('reaction-add-form').classList.add('hidden');
+  getElementById('reaction-add-form').classList.add('hidden');
   renderReactionEditor();
   editingSpells = normalizeSpellList(fields['spell-list'] || (isNpc ? c?.spells : null));
   if (isNpc && !editingSpells.length) editingSpells = normalizeSpellList(c?.spells);
   if (!editingSpells.length) editingSpells = migrateLegacySpellText(fields);
   editingSpellId = null;
-  document.getElementById('spell-add-form').classList.add('hidden');
+  getElementById('spell-add-form').classList.add('hidden');
   renderSpellListEditor();
   renderPortraitPreview(editingPortraitUrl);
   refreshCharacterCalculations(!c, !c && !isNpc);
   setSheetEditable(editingCanEdit, !!c);
   window.requestAnimationFrame(alignBasicStatsPanels);
   window.requestAnimationFrame(() => {
-    document.getElementById('sheet-editor').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    getElementById('sheet-editor').scrollIntoView({ behavior: 'smooth', block: 'start' });
   });
 }
 
@@ -543,13 +543,13 @@ function canEditCharacter(c) {
 }
 
 function setSheetEditable(canEdit, hasCharacter) {
-  document.querySelectorAll('#sheet-form input, #sheet-form select, #sheet-form textarea, #sheet-form button').forEach(control => {
+  document.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement | HTMLButtonElement>('#sheet-form input, #sheet-form select, #sheet-form textarea, #sheet-form button').forEach(control => {
     control.disabled = !canEdit;
   });
-  document.getElementById('save-sheet-btn').classList.toggle('hidden', !canEdit);
-  document.getElementById('delete-sheet-btn').classList.toggle('hidden', !canEdit || !hasCharacter);
-  const ownerNote = document.getElementById('sheet-owner-note');
+  getElementById('save-sheet-btn').classList.toggle('hidden', !canEdit);
+  getElementById('delete-sheet-btn').classList.toggle('hidden', !canEdit || !hasCharacter);
+  const ownerNote = getElementById('sheet-owner-note');
   ownerNote.textContent = canEdit ? '' : 'Only this character’s owner or the Dungeon Master can edit it.';
-  updateSubraceOptions(document.getElementById('sf-subrace').value);
-  updateSubclassOptions(document.getElementById('sf-subclass').value);
+  updateSubraceOptions(getElementById('sf-subrace').value);
+  updateSubclassOptions(getElementById('sf-subclass').value);
 }

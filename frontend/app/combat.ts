@@ -5,7 +5,7 @@ function openCombatManager(name) {
   const character = state?.characters?.[name];
   if (!character?.canManage) return showToast('You can only manage combat for your own character.');
   activeCombatTarget = { type: 'character', id: name };
-  const overlay = document.getElementById('combat-overlay');
+  const overlay = getElementById('combat-overlay');
   overlay.classList.remove('hidden');
   overlay.setAttribute('aria-hidden', 'false');
   renderCombatManager();
@@ -15,7 +15,7 @@ function openNpcCombatManager(id) {
   const token = state?.tokens?.find(entry => entry.id === id && entry.kind === 'npc');
   if (myRole !== 'dm' || !token) return showToast('Only the DM can manage NPC combat.');
   activeCombatTarget = { type: 'npc', id };
-  const overlay = document.getElementById('combat-overlay');
+  const overlay = getElementById('combat-overlay');
   overlay.classList.remove('hidden');
   overlay.setAttribute('aria-hidden', 'false');
   renderCombatManager();
@@ -23,7 +23,7 @@ function openNpcCombatManager(id) {
 
 function closeCombatManager() {
   activeCombatTarget = null;
-  const overlay = document.getElementById('combat-overlay');
+  const overlay = getElementById('combat-overlay');
   overlay.classList.add('hidden');
   overlay.setAttribute('aria-hidden', 'true');
 }
@@ -77,40 +77,40 @@ function renderCombatManager() {
   const combat = entity.combat || {
     conditions: [], concentration: false, exhaustion: 0, deathSaves: {}, spellSlots: {}, reactionAvailable: true
   };
-  document.getElementById('combat-kicker').textContent = isNpc ? 'NPC combat controls' : 'Character combat controls';
-  document.getElementById('combat-title').textContent = name;
-  const portrait = document.getElementById('combat-portrait');
+  getElementById('combat-kicker').textContent = isNpc ? 'NPC combat controls' : 'Character combat controls';
+  getElementById('combat-title').textContent = name;
+  const portrait = getElementById('combat-portrait');
   const portraitUrl = isNpc ? entity.imageUrl : entity.portraitUrl;
   const safePortraitUrl = safeImageUrl(portraitUrl);
   portrait.innerHTML = safePortraitUrl ? `<img src="${escapeAttr(safePortraitUrl)}" alt="">` : (isNpc ? '🦊' : '🍃');
-  document.getElementById('combat-hp').textContent = `${Number(entity.hp) || 0} / ${Number(entity.maxHp) || 0}`;
-  document.getElementById('combat-temp-hp').textContent = Number(entity.tempHp) || 0;
-  document.getElementById('combat-ac').textContent = Number(entity.ac) || 0;
-  document.getElementById('combat-life-status').textContent = combat.dead ? 'Dead' : combat.stable ? 'Stable' : entity.hp <= 0 ? 'Down' : 'Ready';
+  getElementById('combat-hp').textContent = `${Number(entity.hp) || 0} / ${Number(entity.maxHp) || 0}`;
+  getElementById('combat-temp-hp').textContent = String(Number(entity.tempHp) || 0);
+  getElementById('combat-ac').textContent = String(Number(entity.ac) || 0);
+  getElementById('combat-life-status').textContent = combat.dead ? 'Dead' : combat.stable ? 'Stable' : entity.hp <= 0 ? 'Down' : 'Ready';
   renderCombatRage(entity, isNpc);
   renderCombatFeatureUses(entity, isNpc);
   renderCombatMovement(entity, isNpc);
-  const notes = document.getElementById('combat-notes');
+  const notes = getElementById('combat-notes');
   notes.classList.toggle('hidden', !isNpc || !entity.notes);
   notes.textContent = isNpc ? (entity.notes || '') : '';
-  document.getElementById('combat-death-section').classList.toggle('hidden', isNpc);
+  getElementById('combat-death-section').classList.toggle('hidden', isNpc);
   const hasSpellSlots = Object.values(combat.spellSlots || {}).some(slot => Number(slot.total) > 0);
-  document.getElementById('combat-spell-slots-section').classList.toggle('hidden', isNpc && !hasSpellSlots);
+  getElementById('combat-spell-slots-section').classList.toggle('hidden', isNpc && !hasSpellSlots);
   const preparesSpells = !isNpc && characterPreparationDetails(entity) !== null;
-  document.getElementById('combat-long-rest-btn').textContent = isNpc
+  getElementById('combat-long-rest-btn').textContent = isNpc
     ? 'Restore NPC'
     : (preparesSpells ? 'Long rest & prepare spells' : 'Complete long rest');
   renderCombatRolls(entity, isNpc);
   renderCombatBonusActions(entity, isNpc);
   renderCombatReactions(entity, isNpc);
-  const concentration = document.getElementById('combat-concentration');
+  const concentration = getElementById('combat-concentration');
   concentration.checked = !!combat.concentration;
   concentration.disabled = !isNpc && !!combat.rage?.active;
-  document.getElementById('combat-exhaustion').textContent = Number(combat.exhaustion) || 0;
-  document.getElementById('combat-death-successes').textContent = `${Number(combat.deathSaves?.successes) || 0} / 3`;
-  document.getElementById('combat-death-failures').textContent = `${Number(combat.deathSaves?.failures) || 0} / 3`;
+  getElementById('combat-exhaustion').textContent = String(Number(combat.exhaustion) || 0);
+  getElementById('combat-death-successes').textContent = `${Number(combat.deathSaves?.successes) || 0} / 3`;
+  getElementById('combat-death-failures').textContent = `${Number(combat.deathSaves?.failures) || 0} / 3`;
 
-  const conditions = document.getElementById('combat-conditions');
+  const conditions = getElementById('combat-conditions');
   conditions.innerHTML = '';
   CONDITIONS.forEach(condition => {
     const button = document.createElement('button');
@@ -121,7 +121,7 @@ function renderCombatManager() {
     conditions.appendChild(button);
   });
 
-  const slots = document.getElementById('combat-spell-slots');
+  const slots = getElementById('combat-spell-slots');
   slots.innerHTML = '';
   Object.entries(combat.spellSlots || {}).filter(([, slot]) => Number(slot.total) > 0).forEach(([level, slot]) => {
     const row = document.createElement('div');
@@ -142,13 +142,13 @@ function renderCombatManager() {
   if (!slots.children.length) slots.innerHTML = '<p class="empty-roll-options">No spell slots are configured on this sheet.</p>';
 
   const check = isNpc ? null : pendingConcentrationChecks.get(entity.name);
-  const checkButton = document.getElementById('combat-concentration-roll');
+  const checkButton = getElementById('combat-concentration-roll');
   checkButton.classList.toggle('hidden', !check);
   if (check) checkButton.textContent = `Roll Constitution save · DC ${check.dc}`;
 }
 
 function renderCombatMovement(entity, isNpc = false) {
-  const container = document.getElementById('combat-movement');
+  const container = getElementById('combat-movement');
   if (!container) return;
   const fields = isNpc ? (entity.sheet?.fields || {}) : (entity.fields || {});
   const speed = entity.speed || fields.speed || entity.sheet?.speed || '';
@@ -206,7 +206,7 @@ function characterWearsHeavyArmor(character) {
 }
 
 function renderCombatRage(character, isNpc = false) {
-  const section = document.getElementById('combat-rage-section');
+  const section = getElementById('combat-rage-section');
   if (!section) return;
   const available = !isNpc && barbarianClass(character);
   section.classList.toggle('hidden', !available);
@@ -216,10 +216,10 @@ function renderCombatRage(character, isNpc = false) {
   const maxUses = barbarianRageMaxUses(character.level || character.fields?.level);
   const used = Math.min(maxUses, Math.max(0, Number(rage.used) || 0));
   const remaining = maxUses - used;
-  const stateLabel = document.getElementById('combat-rage-state');
-  const usesLabel = document.getElementById('combat-rage-uses');
-  const toggle = document.getElementById('combat-rage-toggle');
-  const note = document.getElementById('combat-rage-note');
+  const stateLabel = getElementById('combat-rage-state');
+  const usesLabel = getElementById('combat-rage-uses');
+  const toggle = getElementById('combat-rage-toggle');
+  const note = getElementById('combat-rage-note');
   stateLabel.textContent = active ? 'Active' : 'Inactive';
   stateLabel.classList.toggle('active', active);
   usesLabel.textContent = `${remaining} / ${maxUses} uses remaining`;
@@ -234,8 +234,8 @@ function renderCombatRage(character, isNpc = false) {
 }
 
 function renderCombatFeatureUses(character, isNpc = false) {
-  const section = document.getElementById('combat-feature-uses-section');
-  const container = document.getElementById('combat-feature-uses');
+  const section = getElementById('combat-feature-uses-section');
+  const container = getElementById('combat-feature-uses');
   if (!section || !container) return;
   const features = isNpc
     ? (character.combat?.featureUses || [])
@@ -271,15 +271,15 @@ function renderCombatFeatureUses(character, isNpc = false) {
 }
 
 function renderCombatRolls(character, isNpc = false) {
-  const mode = () => document.getElementById('combat-roll-mode').value;
-  const initiativeButton = document.getElementById('combat-initiative-roll');
+  const mode = () => getElementById('combat-roll-mode').value;
+  const initiativeButton = getElementById('combat-initiative-roll');
   const initiativeModifier = isNpc ? (Number(character.initiativeModifier) || 0) : characterInitiativeModifier(character);
   initiativeButton.textContent = `Initiative ${signed(initiativeModifier)}`;
   initiativeButton.onclick = () => isNpc ? rollNpcInitiative(character, mode()) : rollCharacterInitiative(character, mode());
 
   const spellAttackValue = character.spellcasting?.attackBonus ?? character.fields?.['spell-attack'];
   const hasSpellAttack = spellAttackValue !== '' && spellAttackValue !== undefined && spellAttackValue !== null;
-  const spellAttackButton = document.getElementById('combat-spell-attack-roll');
+  const spellAttackButton = getElementById('combat-spell-attack-roll');
   const rageActive = !isNpc && barbarianClass(character) && character.combat?.rage?.active && !characterWearsHeavyArmor(character);
   spellAttackButton.classList.toggle('hidden', !hasSpellAttack || rageActive);
   if (hasSpellAttack) {
@@ -292,13 +292,13 @@ function renderCombatRolls(character, isNpc = false) {
   }
 
   const spellDcValue = character.spellcasting?.saveDc ?? character.fields?.['spell-dc'];
-  const spellDc = document.getElementById('combat-spell-dc');
+  const spellDc = getElementById('combat-spell-dc');
   const hasSpellDc = spellDcValue !== '' && spellDcValue !== undefined && spellDcValue !== null;
   spellDc.classList.toggle('hidden', !hasSpellDc || rageActive);
   if (hasSpellDc) spellDc.textContent = `Spell save DC ${Number(spellDcValue) || 0}`;
 
-  const strengthCheck = document.getElementById('combat-strength-check');
-  const strengthSave = document.getElementById('combat-strength-save');
+  const strengthCheck = getElementById('combat-strength-check');
+  const strengthSave = getElementById('combat-strength-save');
   const showRageRolls = rageActive;
   strengthCheck.classList.toggle('hidden', !showRageRolls);
   strengthSave.classList.toggle('hidden', !showRageRolls);
@@ -310,7 +310,7 @@ function renderCombatRolls(character, isNpc = false) {
     strengthSave.onclick = () => rollCharacterD20(character, 'Strength save', characterSaveModifier(character, 'str'), { mode: 'advantage' });
   }
 
-  const attacks = document.getElementById('combat-attacks');
+  const attacks = getElementById('combat-attacks');
   attacks.innerHTML = '';
   const rageBonus = rageActive ? barbarianRageDamageBonus(character.level) : 0;
   const rageAttackMode = mode() === 'disadvantage' ? 'normal' : rageActive ? 'advantage' : mode();
@@ -347,7 +347,7 @@ function renderCombatRolls(character, isNpc = false) {
   });
   if (!attacks.children.length) attacks.innerHTML = '<p class="empty-roll-options">No attacks are configured.</p>';
 
-  const spells = document.getElementById('combat-spells');
+  const spells = getElementById('combat-spells');
   spells.innerHTML = '';
   if (rageActive) {
     spells.innerHTML = '<p class="empty-roll-options">Spells cannot be cast while raging.</p>';
@@ -428,7 +428,7 @@ function formatDiceExpression(count, sides, modifier) {
 }
 
 function renderCombatBonusActions(character, isNpc = false) {
-  const copy = document.getElementById('combat-bonus-actions-copy');
+  const copy = getElementById('combat-bonus-actions-copy');
   if (!copy) return;
   const bonusActions = isNpc
     ? (character.sheet?.fields?.['bonus-actions'] || '')
@@ -438,10 +438,10 @@ function renderCombatBonusActions(character, isNpc = false) {
 }
 
 function renderCombatReactions(character, isNpc = false) {
-  const section = document.getElementById('combat-reactions-section');
-  const container = document.getElementById('combat-reactions');
-  const stateLabel = document.getElementById('combat-reaction-state');
-  const refreshButton = document.getElementById('combat-reaction-refresh-btn');
+  const section = getElementById('combat-reactions-section');
+  const container = getElementById('combat-reactions');
+  const stateLabel = getElementById('combat-reaction-state');
+  const refreshButton = getElementById('combat-reaction-refresh-btn');
   if (!section || !container || !stateLabel || !refreshButton) return;
 
   const reactions = normalizeReactionList(
@@ -576,7 +576,7 @@ function characterSpellEntries(character) {
 
 function closeSpellPreparation() {
   pendingSpellPreparation = null;
-  const overlay = document.getElementById('spell-preparation-overlay');
+  const overlay = getElementById('spell-preparation-overlay');
   overlay.classList.add('hidden');
   overlay.setAttribute('aria-hidden', 'true');
 }
@@ -585,16 +585,16 @@ function updateSpellPreparationCount() {
   if (!pendingSpellPreparation) return;
   const { selected, target, alwaysPrepared } = pendingSpellPreparation;
   const valid = selected.size === target;
-  const count = document.getElementById('spell-preparation-count');
+  const count = getElementById('spell-preparation-count');
   count.textContent = `${selected.size} / ${target} selected${alwaysPrepared.length ? ` · ${alwaysPrepared.length} always prepared` : ''}`;
   count.classList.toggle('invalid', !valid);
-  document.getElementById('spell-preparation-complete-btn').disabled = !valid;
+  getElementById('spell-preparation-complete-btn').disabled = !valid;
 }
 
 function renderSpellPreparationList() {
   if (!pendingSpellPreparation) return;
-  const container = document.getElementById('spell-preparation-list');
-  const query = document.getElementById('spell-preparation-search').value.trim().toLowerCase();
+  const container = getElementById('spell-preparation-list');
+  const query = getElementById('spell-preparation-search').value.trim().toLowerCase();
   const visible = pendingSpellPreparation.available.filter(spell => (
     !query || [spell.name, spell.school, spell.source].some(value => String(value || '').toLowerCase().includes(query))
   ));
@@ -662,37 +662,39 @@ function openSpellPreparation(character, preparation = characterPreparationDetai
     preparation.selectable.forEach(spell => selected.add(spell.id));
   }
   pendingSpellPreparation = { characterName: character.name, ...preparation, selected };
-  document.getElementById('spell-preparation-title').textContent = `Prepare ${character.name}’s spells`;
-  document.getElementById('spell-preparation-intro').textContent = `${preparation.className} level ${character.level || character.fields?.level || 1} can prepare ${preparation.limit} spell${preparation.limit === 1 ? '' : 's'} of level ${preparation.maximumSpellLevel} or lower. Choose ${preparation.target} from the spells currently on the sheet.`;
-  document.getElementById('spell-preparation-note').textContent = preparation.alwaysPrepared.length
+  getElementById('spell-preparation-title').textContent = `Prepare ${character.name}’s spells`;
+  getElementById('spell-preparation-intro').textContent = `${preparation.className} level ${character.level || character.fields?.level || 1} can prepare ${preparation.limit} spell${preparation.limit === 1 ? '' : 's'} of level ${preparation.maximumSpellLevel} or lower. Choose ${preparation.target} from the spells currently on the sheet.`;
+  getElementById('spell-preparation-note').textContent = preparation.alwaysPrepared.length
     ? 'Cantrips and always-prepared spells remain available without using this limit.'
     : 'Cantrips are always available and do not need to be prepared.';
-  document.getElementById('spell-preparation-search').value = '';
-  const overlay = document.getElementById('spell-preparation-overlay');
+  getElementById('spell-preparation-search').value = '';
+  const overlay = getElementById('spell-preparation-overlay');
   overlay.classList.remove('hidden');
   overlay.setAttribute('aria-hidden', 'false');
   renderSpellPreparationList();
-  document.getElementById('spell-preparation-search').focus();
+  getElementById('spell-preparation-search').focus();
   return true;
 }
 
-document.getElementById('combat-close-btn').onclick = closeCombatManager;
-document.getElementById('combat-overlay').addEventListener('mousedown', event => {
-  if (event.target.id === 'combat-overlay') closeCombatManager();
+getElementById('combat-close-btn').onclick = closeCombatManager;
+getElementById('combat-overlay').addEventListener('mousedown', event => {
+  if (event.target instanceof Element && event.target.id === 'combat-overlay') closeCombatManager();
 });
 document.addEventListener('keydown', event => {
   if (event.key !== 'Escape') return;
   if (pendingSpellPreparation) closeSpellPreparation();
   else if (activeCombatTarget) closeCombatManager();
 });
-document.getElementById('combat-damage-btn').onclick = () => combatAction('damage', {
-  amount: Number(document.getElementById('combat-amount').value) || 0,
-  damageType: document.getElementById('combat-damage-type').value
+getElementById('combat-damage-btn').onclick = () => combatAction('damage', {
+  amount: Number(getElementById('combat-amount').value) || 0,
+  damageType: getElementById('combat-damage-type').value
 });
-document.getElementById('combat-heal-btn').onclick = () => combatAction('heal', { amount: Number(document.getElementById('combat-amount').value) || 0 });
-document.getElementById('combat-temp-btn').onclick = () => combatAction('tempHp', { amount: Number(document.getElementById('combat-amount').value) || 0 });
-document.getElementById('combat-concentration').onchange = event => combatAction('concentration:set', { value: event.target.checked });
-document.querySelectorAll('[data-combat-action]').forEach(button => {
+getElementById('combat-heal-btn').onclick = () => combatAction('heal', { amount: Number(getElementById('combat-amount').value) || 0 });
+getElementById('combat-temp-btn').onclick = () => combatAction('tempHp', { amount: Number(getElementById('combat-amount').value) || 0 });
+getElementById('combat-concentration').onchange = event => {
+  if (event.target instanceof HTMLInputElement) combatAction('concentration:set', { value: event.target.checked });
+};
+document.querySelectorAll<HTMLButtonElement>('[data-combat-action]').forEach(button => {
   button.onclick = () => {
     const actions = {
       'exhaustion-down': ['exhaustion', { delta: -1 }],
@@ -706,9 +708,9 @@ document.querySelectorAll('[data-combat-action]').forEach(button => {
     combatAction(action, extra);
   };
 });
-document.getElementById('combat-restore-slots-btn').onclick = () => combatAction('restoreAllSlots');
-document.getElementById('combat-reaction-refresh-btn').onclick = () => combatAction('reaction:refresh');
-document.getElementById('combat-long-rest-btn').onclick = () => {
+getElementById('combat-restore-slots-btn').onclick = () => combatAction('restoreAllSlots');
+getElementById('combat-reaction-refresh-btn').onclick = () => combatAction('reaction:refresh');
+getElementById('combat-long-rest-btn').onclick = () => {
   const target = activeCombatEntity();
   if (!target) return;
   const name = target.type === 'npc' ? target.entity.label : target.entity.name;
@@ -723,19 +725,19 @@ document.getElementById('combat-long-rest-btn').onclick = () => {
   }
   if (confirm(`Give ${name} a long rest? This restores HP and all spell slots.`)) combatAction('longRest');
 };
-document.getElementById('spell-preparation-close-btn').onclick = closeSpellPreparation;
-document.getElementById('spell-preparation-overlay').addEventListener('mousedown', event => {
-  if (event.target.id === 'spell-preparation-overlay') closeSpellPreparation();
+getElementById('spell-preparation-close-btn').onclick = closeSpellPreparation;
+getElementById('spell-preparation-overlay').addEventListener('mousedown', event => {
+  if (event.target instanceof Element && event.target.id === 'spell-preparation-overlay') closeSpellPreparation();
 });
-document.getElementById('spell-preparation-search').addEventListener('input', renderSpellPreparationList);
-document.getElementById('spell-preparation-complete-btn').onclick = () => {
+getElementById('spell-preparation-search').addEventListener('input', renderSpellPreparationList);
+getElementById('spell-preparation-complete-btn').onclick = () => {
   if (!pendingSpellPreparation || pendingSpellPreparation.selected.size !== pendingSpellPreparation.target) return;
   const characterName = pendingSpellPreparation.characterName;
   const preparedSpellIds = [...pendingSpellPreparation.selected];
   closeSpellPreparation();
   socket.emit('character:combat:update', { name: characterName, action: 'longRest', preparedSpellIds });
 };
-document.getElementById('combat-concentration-roll').onclick = () => {
+getElementById('combat-concentration-roll').onclick = () => {
   if (activeCombatTarget?.type !== 'character') return;
   const character = state?.characters?.[activeCombatTarget.id];
   const check = pendingConcentrationChecks.get(activeCombatTarget.id);

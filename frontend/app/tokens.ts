@@ -161,7 +161,7 @@ getRequiredButton('toggle-dm-sidebar-btn').onclick = () => {
 };
 
 // ---- Sidebar accordion state (remembered per-browser) ----
-document.querySelectorAll('.sidebar-accordion').forEach(details => {
+document.querySelectorAll<HTMLDetailsElement>('.sidebar-accordion').forEach(details => {
   const key = `humblewood:accordion:${details.id}`;
   const saved = localStorage.getItem(key);
   if (saved !== null) details.open = saved === '1';

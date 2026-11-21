@@ -370,7 +370,7 @@ function normalizeReactionList(raw) {
 
 function reactionPresetSearchText() {
   const ids = ['sf-class', 'sf-subclass', 'sf-species', 'sf-subrace', 'sf-features', 'sf-feats', 'sf-racial-traits'];
-  const sheetText = ids.map(id => String(document.getElementById(id)?.value || '')).join(' ');
+  const sheetText = ids.map(id => String(getElementByIdAs<HTMLInputElement>(id)?.value || '')).join(' ');
   const spellText = editingSpells.map(spell => spell.name).join(' ');
   return `${sheetText} ${spellText}`.toLowerCase();
 }
@@ -383,7 +383,7 @@ function appendReactionPresetOption(parent, preset) {
 }
 
 function renderReactionPresetOptions() {
-  const select = document.getElementById('reaction-preset-select');
+  const select = getElementById('reaction-preset-select');
   select.innerHTML = '<option value="">Choose a reaction...</option>';
   const searchText = reactionPresetSearchText();
   const suggested = REACTION_PRESETS.filter(preset => (
@@ -407,11 +407,11 @@ function renderReactionPresetOptions() {
 }
 
 function renderBonusActionPresetOptions() {
-  const search = document.getElementById('bonus-action-preset-search') as HTMLInputElement;
-  const list = document.getElementById('bonus-action-preset-list');
-  const select = document.getElementById('bonus-action-preset-select') as HTMLSelectElement;
+  const search = getElementById('bonus-action-preset-search') as HTMLInputElement;
+  const list = getElementById('bonus-action-preset-list');
+  const select = getElementById('bonus-action-preset-select') as HTMLSelectElement;
   const query = search.value.trim().toLowerCase();
-  const sheetText = `${String(document.getElementById('sf-class')?.value || '')} ${String(document.getElementById('sf-subclass')?.value || '')} ${String(document.getElementById('sf-feats')?.value || '')}`.toLowerCase();
+  const sheetText = `${String(getElementById('sf-class')?.value || '')} ${String(getElementById('sf-subclass')?.value || '')} ${String(getElementById('sf-feats')?.value || '')}`.toLowerCase();
   list.innerHTML = '';
 
   const orderedGroups = ['Suggested for this sheet', ...BONUS_ACTION_PRESET_GROUPS];
@@ -454,9 +454,9 @@ function renderBonusActionPresetOptions() {
 }
 
 function initializeBonusActionPresetControls() {
-  const search = document.getElementById('bonus-action-preset-search') as HTMLInputElement;
-  const combobox = document.getElementById('bonus-action-combobox');
-  const list = document.getElementById('bonus-action-preset-list');
+  const search = getElementById('bonus-action-preset-search') as HTMLInputElement;
+  const combobox = getElementById('bonus-action-combobox');
+  const list = getElementById('bonus-action-preset-list');
   renderBonusActionPresetOptions();
   const openList = () => {
     renderBonusActionPresetOptions();
@@ -478,11 +478,11 @@ function initializeBonusActionPresetControls() {
       search.setAttribute('aria-expanded', 'false');
     }
   });
-  document.getElementById('bonus-action-preset-add').onclick = () => {
-    const select = document.getElementById('bonus-action-preset-select') as HTMLSelectElement;
+  getElementById('bonus-action-preset-add').onclick = () => {
+    const select = getElementById('bonus-action-preset-select') as HTMLSelectElement;
     const preset = BONUS_ACTION_PRESETS.find(entry => entry.id === select.value);
     if (!preset) return showToast('Choose a bonus action preset first.');
-    const textarea = document.getElementById('sf-bonus-actions') as HTMLTextAreaElement;
+    const textarea = getElementById('sf-bonus-actions') as HTMLTextAreaElement;
     const line = `${preset.name}${preset.resource ? ` — ${preset.resource}` : ''}: ${preset.effect}`;
     const current = textarea.value.trim();
     if (current.split(/\n+/).some(entry => entry.toLowerCase().startsWith(`${preset.name.toLowerCase()} —`))) {
@@ -499,24 +499,24 @@ function initializeBonusActionPresetControls() {
 
 function initializeReactionPresetControls() {
   applyPresetSearch('reaction-preset-select', 'reaction-preset-search');
-  document.getElementById('reaction-add-btn').onclick = () => openReactionForm(null);
-  document.getElementById('reaction-form-cancel').onclick = closeReactionForm;
-  document.getElementById('reaction-preset-load').onclick = () => {
-    const preset = REACTION_PRESETS.find(entry => entry.id === document.getElementById('reaction-preset-select').value);
+  getElementById('reaction-add-btn').onclick = () => openReactionForm(null);
+  getElementById('reaction-form-cancel').onclick = closeReactionForm;
+  getElementById('reaction-preset-load').onclick = () => {
+    const preset = REACTION_PRESETS.find(entry => entry.id === getElementById('reaction-preset-select').value);
     if (!preset) return showToast('Choose a reaction preset first.');
     populateReactionForm(preset);
   };
-  document.getElementById('reaction-form-save').onclick = () => {
-    const name = document.getElementById('reaction-form-name').value.trim();
+  getElementById('reaction-form-save').onclick = () => {
+    const name = getElementById('reaction-form-name').value.trim();
     if (!name) return showToast('Give the reaction a name first.');
     const value = normalizeReaction({
       id: editingReactionId || `reaction-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       name,
-      trigger: document.getElementById('reaction-form-trigger').value,
-      effect: document.getElementById('reaction-form-effect').value,
-      resource: document.getElementById('reaction-form-resource').value,
-      requirement: document.getElementById('reaction-form-requirement').value,
-      source: document.getElementById('reaction-form-source').value
+      trigger: getElementById('reaction-form-trigger').value,
+      effect: getElementById('reaction-form-effect').value,
+      resource: getElementById('reaction-form-resource').value,
+      requirement: getElementById('reaction-form-requirement').value,
+      source: getElementById('reaction-form-source').value
     });
     if (editingReactionId) {
       const index = editingReactions.findIndex(entry => entry.id === editingReactionId);
@@ -530,30 +530,30 @@ function initializeReactionPresetControls() {
 }
 
 function populateReactionForm(value: any = {}) {
-  document.getElementById('reaction-form-name').value = value.name || '';
-  document.getElementById('reaction-form-trigger').value = value.trigger || '';
-  document.getElementById('reaction-form-effect').value = value.effect || '';
-  document.getElementById('reaction-form-resource').value = value.resource || '';
-  document.getElementById('reaction-form-requirement').value = value.requirement || '';
-  document.getElementById('reaction-form-source').value = value.source || '';
+  getElementById('reaction-form-name').value = value.name || '';
+  getElementById('reaction-form-trigger').value = value.trigger || '';
+  getElementById('reaction-form-effect').value = value.effect || '';
+  getElementById('reaction-form-resource').value = value.resource || '';
+  getElementById('reaction-form-requirement').value = value.requirement || '';
+  getElementById('reaction-form-source').value = value.source || '';
 }
 
 function openReactionForm(value) {
   editingReactionId = value?.id || null;
   renderReactionPresetOptions();
-  document.getElementById('reaction-preset-select').value = '';
-  document.getElementById('reaction-add-form').classList.remove('hidden');
+  getElementById('reaction-preset-select').value = '';
+  getElementById('reaction-add-form').classList.remove('hidden');
   populateReactionForm(value || {});
-  document.getElementById('reaction-form-name').focus();
+  getElementById('reaction-form-name').focus();
 }
 
 function closeReactionForm() {
   editingReactionId = null;
-  document.getElementById('reaction-add-form').classList.add('hidden');
+  getElementById('reaction-add-form').classList.add('hidden');
 }
 
 function renderReactionEditor() {
-  const list = document.getElementById('reaction-list');
+  const list = getElementById('reaction-list');
   list.innerHTML = '';
   if (!editingReactions.length) {
     list.innerHTML = '<p class="sidebar-help">No reactions configured yet. Add one or start from a preset.</p>';
@@ -575,8 +575,8 @@ function renderReactionEditor() {
       ${value.trigger ? `<p><b>Trigger</b>${escapeHtml(value.trigger)}</p>` : ''}
       ${value.effect ? `<p><b>Response</b>${escapeHtml(value.effect)}</p>` : ''}
     `;
-    const edit = card.querySelector('.edit');
-    const remove = card.querySelector('.del');
+    const edit = card.querySelector<HTMLButtonElement>('.edit');
+    const remove = card.querySelector<HTMLButtonElement>('.del');
     edit.disabled = !editingCanEdit;
     remove.disabled = !editingCanEdit;
     edit.onclick = () => openReactionForm(value);

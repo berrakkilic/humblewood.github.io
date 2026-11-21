@@ -1,15 +1,15 @@
 /** Persistent music catalog and synchronized jukebox controls. */
 
 // ================= JUKEBOX =================
-const audioEl = document.getElementById('audio-el');
-const trackPresetSelect = document.getElementById('track-preset-select');
-const trackTitleInput = document.getElementById('track-title');
-const trackUrlInput = document.getElementById('track-url');
-const trackFileInput = document.getElementById('track-file');
-const addTrackButton = document.getElementById('add-track-btn');
-const jukeboxVolumeInput = document.getElementById('jukebox-volume');
-const jukeboxVolumeValue = document.getElementById('jukebox-volume-value');
-const jukeboxVolumeIcon = document.getElementById('jukebox-volume-icon');
+const audioEl = getElementById('audio-el');
+const trackPresetSelect = getElementById('track-preset-select');
+const trackTitleInput = getElementById('track-title');
+const trackUrlInput = getElementById('track-url');
+const trackFileInput = getElementById('track-file');
+const addTrackButton = getElementById('add-track-btn');
+const jukeboxVolumeInput = getElementById('jukebox-volume');
+const jukeboxVolumeValue = getElementById('jukebox-volume-value');
+const jukeboxVolumeIcon = getElementById('jukebox-volume-icon');
 const JUKEBOX_VOLUME_STORAGE_KEY = 'humblewood:jukebox-volume';
 let availableMusicTracks = [];
 
@@ -49,7 +49,7 @@ window.addEventListener('storage', event => {
 
 function renderMusicTrackOptions() {
   trackPresetSelect.innerHTML = '<option value="">Choose an existing track…</option>';
-  const storedList = document.getElementById('stored-track-list');
+  const storedList = getElementById('stored-track-list');
   storedList.innerHTML = '';
   if (!availableMusicTracks.length) {
     storedList.textContent = 'No server tracks stored.';
@@ -63,7 +63,7 @@ function renderMusicTrackOptions() {
     const row = document.createElement('div');
     row.className = 'stored-track-row';
     row.innerHTML = `<span>${escapeHtml(track.title)}</span><button class="btn-danger-soft" type="button">Delete</button>`;
-    row.querySelector('button').onclick = async () => {
+    row.querySelector<HTMLButtonElement>('button').onclick = async () => {
       if (!confirm(`Delete ${track.title} from the server?`)) return;
       const parts = track.url.split('/');
       const source = parts[1];
@@ -153,7 +153,7 @@ addTrackButton.onclick = async () => {
 
 loadMusicTracks();
 
-document.getElementById('jb-playpause').onclick = () => {
+getElementById('jb-playpause').onclick = () => {
   if (state.jukebox.isPlaying) {
     socket.emit('jukebox:pause');
   } else if (state.jukebox.currentIndex === -1 && state.jukebox.playlist.length) {
@@ -162,25 +162,25 @@ document.getElementById('jb-playpause').onclick = () => {
     socket.emit('jukebox:resume');
   }
 };
-document.getElementById('jb-next').onclick = () => {
+getElementById('jb-next').onclick = () => {
   const next = (state.jukebox.currentIndex + 1) % Math.max(1, state.jukebox.playlist.length);
   socket.emit('jukebox:play', { index: next });
 };
-document.getElementById('jb-prev').onclick = () => {
+getElementById('jb-prev').onclick = () => {
   const prev = (state.jukebox.currentIndex - 1 + state.jukebox.playlist.length) % Math.max(1, state.jukebox.playlist.length);
   socket.emit('jukebox:play', { index: prev });
 };
 
 function renderJukebox() {
   const j = state.jukebox;
-  const list = document.getElementById('playlist');
+  const list = getElementById('playlist');
   list.innerHTML = '';
   j.playlist.forEach((track, i) => {
     const row = document.createElement('div');
     row.className = 'playlist-item' + (i === j.currentIndex ? ' playing' : '');
     row.innerHTML = `<span>${i === j.currentIndex ? '🎶 ' : ''}${escapeHtml(track.title)}</span><span class="del dm-only">×</span>`;
-    row.querySelector('span').onclick = () => socket.emit('jukebox:play', { index: i });
-    row.querySelector('.del').onclick = (e) => {
+    row.querySelector<HTMLElement>('span').onclick = () => socket.emit('jukebox:play', { index: i });
+    row.querySelector<HTMLButtonElement>('.del').onclick = (e) => {
       e.stopPropagation();
       const playlist = j.playlist.filter((_, idx) => idx !== i);
       socket.emit('jukebox:setPlaylist', playlist);
@@ -189,10 +189,10 @@ function renderJukebox() {
   });
 
   const current = j.playlist[j.currentIndex];
-  document.getElementById('now-playing').textContent = current ? current.title : 'Nothing playing';
-  document.getElementById('now-playing-sub').textContent = current ? 'from the Humblewood jukebox' : 'add a track below to begin';
-  document.getElementById('jukebox-art').classList.toggle('spinning', j.isPlaying);
-  const playPauseButton = document.getElementById('jb-playpause');
+  getElementById('now-playing').textContent = current ? current.title : 'Nothing playing';
+  getElementById('now-playing-sub').textContent = current ? 'from the Humblewood jukebox' : 'add a track below to begin';
+  getElementById('jukebox-art').classList.toggle('spinning', j.isPlaying);
+  const playPauseButton = getElementById('jb-playpause');
   playPauseButton.setAttribute('aria-label', j.isPlaying ? 'Pause' : 'Play');
   playPauseButton.innerHTML = j.isPlaying
     ? '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="4" width="4" height="16" rx="1"></rect><rect x="14" y="4" width="4" height="16" rx="1"></rect></svg>'
@@ -221,7 +221,7 @@ function renderJukebox() {
 
 audioEl.onended = () => {
   if (state.jukebox.playlist.length > 1) {
-    document.getElementById('jb-next').click();
+    getElementById('jb-next').click();
   } else {
     socket.emit('jukebox:pause');
   }

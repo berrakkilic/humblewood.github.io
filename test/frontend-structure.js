@@ -41,6 +41,10 @@ assert.match(sharedSource, /function getOptionalElement<T extends Element>/, 'Op
 assert.match(sharedSource, /function getRequiredInput\(id: string\): HTMLInputElement/, 'Frontend inputs should use a typed DOM helper.');
 assert.match(sharedSource, /function getRequiredSelect\(id: string\): HTMLSelectElement/, 'Frontend selects should use a typed DOM helper.');
 assert.match(sharedSource, /function getRequiredButton\(id: string\): HTMLButtonElement/, 'Frontend buttons should use a typed DOM helper.');
+assert.match(sharedSource, /function getElementById<K extends string>/, 'Frontend ID lookups should use the typed element map.');
+assert.match(sharedSource, /function getElementByIdAs<T extends Element>/, 'Dynamic ID lookups should declare their element type.');
+assert.doesNotMatch(frontendTypesSource, /getElementById\(elementId: string\): any/, 'Global DOM declarations must not weaken ID lookups to any.');
+assert.doesNotMatch(frontendTypesSource, /querySelector(?:All)?<[^>]*>?\([^)]*\): any/, 'Global DOM declarations must not weaken selectors to any.');
 assert.match(fs.readFileSync(path.join(projectRoot, 'frontend', 'app', 'dice.ts'), 'utf8'), /getRequiredInput\('dice-count'\)/, 'Dice controls should use typed DOM helpers.');
 assert.match(fs.readFileSync(path.join(projectRoot, 'frontend', 'app', 'initiative.ts'), 'utf8'), /getRequiredButton\('init-add-btn'\)/, 'Initiative controls should use typed DOM helpers.');
 assert.match(fs.readFileSync(path.join(projectRoot, 'frontend', 'app', 'initiative.ts'), 'utf8'), /getRequiredInput\('init-name'\)/, 'Initiative inputs should use typed DOM helpers.');

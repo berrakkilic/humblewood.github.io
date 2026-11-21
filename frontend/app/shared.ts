@@ -64,6 +64,14 @@ function escapeAttr(value) {
   return escapeHtml(value);
 }
 
+function getElementById<K extends string>(id: K): FrontendElementForId<K> | null {
+  return document.getElementById(id) as FrontendElementForId<K> | null;
+}
+
+function getElementByIdAs<T extends Element>(id: string): T | null {
+  return document.getElementById(id) as unknown as T | null;
+}
+
 function getRequiredElement<T extends Element>(selector: string, root: ParentNode = document): T {
   const element = root.querySelector<T>(selector);
   if (!element) throw new Error(`Required element not found: ${selector}`);
@@ -99,8 +107,8 @@ function safeImageUrl(value) {
 }
 
 function applyPresetSearch(selectId: string, searchId: string) {
-  const select = document.getElementById(selectId) as HTMLSelectElement;
-  const search = document.getElementById(searchId) as HTMLInputElement;
+  const select = getElementById(selectId) as HTMLSelectElement;
+  const search = getElementById(searchId) as HTMLInputElement;
   if (!select || !search) return;
 
   select.classList.add('hidden');
@@ -186,7 +194,7 @@ function applyPresetSearch(selectId: string, searchId: string) {
 }
 
 function showToast(message) {
-  const toast = document.getElementById('toast');
+  const toast = getElementById('toast');
   toast.textContent = message;
   toast.classList.add('visible');
   clearTimeout(toastTimer);

@@ -624,7 +624,7 @@
     resetNpcEditor();
     if (editingNpcSheetId === id || editingNpcSheetId === "__new__" && state.npcs?.[id]) {
       editingNpcSheetId = null;
-      document.getElementById("sheet-editor").classList.add("hidden");
+      getElementById("sheet-editor").classList.add("hidden");
     }
     showToast(`Saved ${name}.`);
   });
@@ -632,7 +632,7 @@
     if (editingNpcId === id) resetNpcEditor();
     if (editingNpcSheetId === id) {
       editingNpcSheetId = null;
-      document.getElementById("sheet-editor").classList.add("hidden");
+      getElementById("sheet-editor").classList.add("hidden");
     }
     showToast(`Deleted ${name}.`);
   });
@@ -1056,7 +1056,7 @@
     selectedTool = tool;
     if ((previousTool === "doodle" || previousTool === "eraser") && tool !== previousTool) cancelDoodle();
     ["move", "pan", "grid-move", "ruler", "ping", "doodle", "eraser", "fog-reveal", "fog-hide"].forEach((name) => {
-      document.getElementById(`tool-${name}`)?.classList.toggle("active", tool === name);
+      getElementById(`tool-${name}`)?.classList.toggle("active", tool === name);
     });
     const stage = getRequiredElement("#map-stage");
     stage.classList.toggle("doodling", tool === "doodle" || tool === "eraser");
@@ -1601,7 +1601,7 @@
   let currentPath = null;
   let lastErasePoint = null;
   let doodleTouchId = null;
-  const doodleCanvas = document.getElementById("doodle-canvas");
+  const doodleCanvas = getElementById("doodle-canvas");
   const doodleCtx = doodleCanvas.getContext("2d");
   doodleCanvas.onmousedown = (event) => {
     if (event.button !== 0) return;
@@ -1655,7 +1655,7 @@
     isDrawing = true;
     currentPath = {
       id: "d" + Date.now(),
-      color: document.getElementById("doodle-color").value,
+      color: getElementById("doodle-color").value,
       width: 3,
       points: [point]
     };
@@ -1719,7 +1719,7 @@
     clearDoodleCanvas();
     state.scene.doodlePaths.forEach((path) => drawDoodlePath(path));
   }
-  const doodleCornerCanvas = document.getElementById("doodle-corner-canvas");
+  const doodleCornerCanvas = getElementById("doodle-corner-canvas");
   const doodleCornerContext = doodleCornerCanvas.getContext("2d");
   let doodleCornerDrawing = false;
   let doodleCornerPath = null;
@@ -1728,11 +1728,11 @@
   let doodleCornerOpen = false;
   let doodleCornerTool = "draw";
   let doodleCornerDrag = null;
-  const doodleCornerPanel = document.getElementById("doodle-corner");
-  const doodleCornerToggle = document.getElementById("doodle-corner-toggle");
-  const doodleCornerDragHandle = document.getElementById("doodle-corner-drag-handle");
-  const doodleCornerDrawButton = document.getElementById("doodle-corner-draw-btn");
-  const doodleCornerEraserButton = document.getElementById("doodle-corner-eraser-btn");
+  const doodleCornerPanel = getElementById("doodle-corner");
+  const doodleCornerToggle = getElementById("doodle-corner-toggle");
+  const doodleCornerDragHandle = getElementById("doodle-corner-drag-handle");
+  const doodleCornerDrawButton = getElementById("doodle-corner-draw-btn");
+  const doodleCornerEraserButton = getElementById("doodle-corner-eraser-btn");
   function setDoodleCornerOpen(open) {
     doodleCornerOpen = !!open;
     doodleCornerPanel.classList.toggle("hidden", !doodleCornerOpen);
@@ -1740,7 +1740,7 @@
     if (doodleCornerOpen) resetDoodleCornerPosition();
   }
   function resetDoodleCornerPosition() {
-    const mapStageWrap2 = document.getElementById("map-stage-wrap");
+    const mapStageWrap2 = getElementById("map-stage-wrap");
     if (!mapStageWrap2) return;
     doodleCornerPanel.style.position = "fixed";
     doodleCornerPanel.style.margin = "0";
@@ -1810,7 +1810,7 @@
     doodleCornerDrawing = true;
     doodleCornerCanvas.setPointerCapture(event.pointerId);
     doodleCornerPath = {
-      color: document.getElementById("doodle-corner-color").value,
+      color: getElementById("doodle-corner-color").value,
       width: 3,
       points: [doodleCornerPoint(event)]
     };
@@ -1849,8 +1849,8 @@
   doodleCornerDrawButton.onclick = () => setDoodleCornerTool("draw");
   doodleCornerEraserButton.onclick = () => setDoodleCornerTool("eraser");
   doodleCornerToggle.onclick = () => setDoodleCornerOpen(!doodleCornerOpen);
-  document.getElementById("doodle-corner-undo-btn").onclick = () => socket.emit("scene:doodleCorner:undo");
-  document.getElementById("doodle-corner-clear-btn").onclick = () => socket.emit("scene:doodleCorner:clear");
+  getElementById("doodle-corner-undo-btn").onclick = () => socket.emit("scene:doodleCorner:undo");
+  getElementById("doodle-corner-clear-btn").onclick = () => socket.emit("scene:doodleCorner:clear");
   doodleCornerDragHandle.onpointerdown = (event) => {
     if (event.target.closest("button, input")) return;
     const rect = doodleCornerPanel.getBoundingClientRect();
@@ -2951,7 +2951,7 @@ ${choices}`,
   }
   function updateSpeciesOptions(selected = "") {
     replaceSelectOptions(
-      document.getElementById("sf-species"),
+      getElementById("sf-species"),
       sheetSpeciesOptions(),
       "Choose a species...",
       selected
@@ -2960,43 +2960,43 @@ ${choices}`,
   function updateSubraceOptions(selected = "") {
     const includeNpcOnly = !!editingNpcSheetId;
     const species = characterRules.canonicalSpecies(
-      document.getElementById("sf-species").value,
+      getElementById("sf-species").value,
       { includeNpcOnly }
     );
-    const select = document.getElementById("sf-subrace");
+    const select = getElementById("sf-subrace");
     const options = characterRules.subracesFor(species, { includeNpcOnly });
     const placeholder = !species ? "Choose a species first..." : options.length ? "Choose a subrace..." : "This species has no subrace";
     replaceSelectOptions(select, options, placeholder, selected);
     select.disabled = !species || !options.length || !editingCanEdit;
   }
   function syncAutomaticSpeciesTraits(force = false) {
-    const field = document.getElementById("sf-racial-traits");
+    const field = getElementById("sf-racial-traits");
     if (!field) return;
     const current = field.value || "";
     const hasAutomaticBlock = current.includes(characterRules.AUTO_SPECIES_TRAITS_START);
     if (!force && current.trim() && !hasAutomaticBlock) return;
     const automatic = characterRules.automaticSpeciesTraitText(
-      document.getElementById("sf-species").value,
-      document.getElementById("sf-subrace").value
+      getElementById("sf-species").value,
+      getElementById("sf-subrace").value
     );
     field.value = characterRules.mergeAutomaticSpeciesTraits(current, automatic);
   }
   function syncAutomaticClassFeatures(force = false) {
-    const field = document.getElementById("sf-features");
+    const field = getElementById("sf-features");
     if (!field) return;
     const current = field.value || "";
     const hasAutomaticBlock = current.includes(characterRules.AUTO_CLASS_FEATURES_START);
     if (!force && current.trim() && !hasAutomaticBlock) return;
     const automatic = characterRules.automaticClassFeatureText(
-      document.getElementById("sf-class").value,
-      document.getElementById("sf-subclass").value,
-      document.getElementById("sf-level").value
+      getElementById("sf-class").value,
+      getElementById("sf-subclass").value,
+      getElementById("sf-level").value
     );
     field.value = characterRules.mergeAutomaticClassFeatures(current, automatic);
   }
   function updateSubclassOptions(selected = "") {
-    const className = characterRules.canonicalClass(document.getElementById("sf-class").value);
-    const select = document.getElementById("sf-subclass");
+    const className = characterRules.canonicalClass(getElementById("sf-class").value);
+    const select = getElementById("sf-subclass");
     const options = characterRules.subclassesFor(className);
     replaceSelectOptions(select, options, className ? "Choose a subclass..." : "Choose a class first...", selected);
     select.disabled = !className || !options.length || !editingCanEdit;
@@ -3005,31 +3005,31 @@ ${choices}`,
     updateSpeciesOptions(fields.species);
     updateSubraceOptions(fields.subrace);
     syncAutomaticSpeciesTraits();
-    document.getElementById("sf-class").value = characterRules.canonicalClass(fields.class) || "";
+    getElementById("sf-class").value = characterRules.canonicalClass(fields.class) || "";
     updateSubclassOptions(fields.subclass);
     syncAutomaticClassFeatures();
   }
   function initializeCharacterRuleControls() {
     moveSavingThrowsIntoAbilities();
     updateSpeciesOptions();
-    replaceSelectOptions(document.getElementById("sf-class"), Object.keys(characterRules.CLASS_SUBCLASSES), "Choose a class...");
+    replaceSelectOptions(getElementById("sf-class"), Object.keys(characterRules.CLASS_SUBCLASSES), "Choose a class...");
     updateSubraceOptions();
     updateSubclassOptions();
-    document.getElementById("sf-species").addEventListener("change", () => {
+    getElementById("sf-species").addEventListener("change", () => {
       updateSubraceOptions();
       syncAutomaticSpeciesTraits(true);
       applyRecommendedArmorMethod();
     });
-    document.getElementById("sf-subrace").addEventListener("change", () => {
+    getElementById("sf-subrace").addEventListener("change", () => {
       syncAutomaticSpeciesTraits(true);
     });
-    document.getElementById("sf-class").addEventListener("change", () => {
+    getElementById("sf-class").addEventListener("change", () => {
       updateSubclassOptions();
       syncAutomaticClassFeatures(true);
       applyClassDefaults();
       renderSpellListEditor();
     });
-    document.getElementById("sf-subclass").addEventListener("change", () => {
+    getElementById("sf-subclass").addEventListener("change", () => {
       syncAutomaticClassFeatures(true);
       applySpellcastingDefaults();
       updateSpellSlotsForLevel();
@@ -3038,7 +3038,7 @@ ${choices}`,
     });
   }
   function moveSavingThrowsIntoAbilities() {
-    const slot = document.getElementById("ability-saving-throws");
+    const slot = getElementById("ability-saving-throws");
     const savingThrows = document.querySelector(".save-skill-columns > div:first-child");
     if (!slot || !savingThrows) return;
     slot.appendChild(savingThrows);
@@ -3064,27 +3064,27 @@ ${choices}`,
   function applyRecommendedArmorMethod() {
     if (acMethodManuallySelected) return refreshArmorClass();
     const method = characterRules.defaultArmorMethod(
-      document.getElementById("sf-species").value,
-      document.getElementById("sf-class").value
+      getElementById("sf-species").value,
+      getElementById("sf-class").value
     );
-    document.getElementById("sf-ac-method").value = method;
+    getElementById("sf-ac-method").value = method;
     refreshArmorClass();
   }
   function applyClassDefaults() {
-    const className = characterRules.canonicalClass(document.getElementById("sf-class").value);
+    const className = characterRules.canonicalClass(getElementById("sf-class").value);
     if (!className) return;
-    const level = Math.max(1, Math.min(20, Number(document.getElementById("sf-level").value) || 1));
+    const level = Math.max(1, Math.min(20, Number(getElementById("sf-level").value) || 1));
     const hitDie = characterRules.hitDieFor(className);
-    document.getElementById("sf-hitdice").value = `${level}d${hitDie}`;
-    document.getElementById("sf-hitdice-left").value = level;
+    getElementById("sf-hitdice").value = `${level}d${hitDie}`;
+    getElementById("sf-hitdice-left").value = String(level);
     const savingThrows = new Set(characterRules.classSavingThrows(className));
     ABILITIES.forEach((ability) => {
-      document.getElementById(`sf-save-${ability}-prof`).checked = savingThrows.has(ability);
+      getElementById(`sf-save-${ability}-prof`).checked = savingThrows.has(ability);
     });
     if (!editingOriginalName && level === 1) {
-      const maximum = Math.max(1, hitDie + characterRules.abilityModifier(document.getElementById("sf-con").value));
-      document.getElementById("sf-maxhp").value = maximum;
-      document.getElementById("sf-hp").value = maximum;
+      const maximum = Math.max(1, hitDie + characterRules.abilityModifier(getElementById("sf-con").value));
+      getElementById("sf-maxhp").value = String(maximum);
+      getElementById("sf-hp").value = String(maximum);
     }
     applySpellcastingDefaults();
     updateSpellSlotsForLevel();
@@ -3092,48 +3092,48 @@ ${choices}`,
     refreshCharacterCalculations(true, true);
   }
   function refreshNewCharacterHitPoints() {
-    if (editingOriginalName || editingBaseLevel !== 1 || Number(document.getElementById("sf-level").value) !== 1) return;
-    const className = characterRules.canonicalClass(document.getElementById("sf-class").value);
+    if (editingOriginalName || editingBaseLevel !== 1 || Number(getElementById("sf-level").value) !== 1) return;
+    const className = characterRules.canonicalClass(getElementById("sf-class").value);
     if (!className) return;
     const maximum = Math.max(
       1,
-      characterRules.hitDieFor(className) + characterRules.abilityModifier(document.getElementById("sf-con").value)
+      characterRules.hitDieFor(className) + characterRules.abilityModifier(getElementById("sf-con").value)
     );
-    document.getElementById("sf-maxhp").value = maximum;
-    document.getElementById("sf-hp").value = maximum;
+    getElementById("sf-maxhp").value = String(maximum);
+    getElementById("sf-hp").value = String(maximum);
   }
   function applySpellcastingDefaults() {
-    const className = characterRules.canonicalClass(document.getElementById("sf-class").value);
-    const subclass = document.getElementById("sf-subclass").value;
+    const className = characterRules.canonicalClass(getElementById("sf-class").value);
+    const subclass = getElementById("sf-subclass").value;
     const ability = characterRules.spellcastingAbilityFor(className, subclass);
     if (!ability) return;
-    document.getElementById("sf-spell-class").value = className;
-    document.getElementById("sf-spell-ability").value = ability.toUpperCase();
+    getElementById("sf-spell-class").value = className;
+    getElementById("sf-spell-ability").value = ability.toUpperCase();
   }
   function initializeFeatureUsageControls() {
-    const addButton = document.getElementById("feature-use-add");
+    const addButton = getElementById("feature-use-add");
     if (!addButton) return;
     addButton.addEventListener("click", () => {
-      const nameInput2 = document.getElementById("feature-use-name");
+      const nameInput2 = getElementById("feature-use-name");
       const name = String(nameInput2.value || "").trim();
       if (!name) return showToast("Give the feature charge a name first.");
-      const max = Math.max(0, Math.min(999, Math.floor(Number(document.getElementById("feature-use-max").value) || 0)));
+      const max = Math.max(0, Math.min(999, Math.floor(Number(getElementById("feature-use-max").value) || 0)));
       if (max <= 0) return showToast("Feature charges need a maximum of at least 1.");
       editingFeatureUses.push({
         id: `feature-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
         name,
         max,
         remaining: max,
-        reset: document.getElementById("feature-use-reset").value
+        reset: getElementById("feature-use-reset").value
       });
       nameInput2.value = "";
-      document.getElementById("feature-use-max").value = "1";
+      getElementById("feature-use-max").value = "1";
       renderFeatureUsageEditor();
     });
     renderFeatureUsageEditor();
   }
   function initializeFeatPresetControls() {
-    const select = document.getElementById("feat-preset-select");
+    const select = getElementById("feat-preset-select");
     HUMBLEWOOD_FEAT_PRESETS.forEach((feat) => {
       const option = document.createElement("option");
       option.value = feat.title;
@@ -3142,18 +3142,18 @@ ${choices}`,
       select.appendChild(option);
     });
     applyPresetSearch("feat-preset-select", "feat-preset-search");
-    document.getElementById("feat-preset-add").addEventListener("click", addFeatPresetToSheet);
+    getElementById("feat-preset-add").addEventListener("click", addFeatPresetToSheet);
   }
   function addFeatPresetToSheet() {
-    const select = document.getElementById("feat-preset-select");
+    const select = getElementById("feat-preset-select");
     const feat = HUMBLEWOOD_FEAT_PRESETS.find((entry) => entry.title === select.value);
     if (!feat) return showToast("Choose a Humblewood feat first.");
     const prerequisite = feat.facts?.find(([label]) => label === "Prerequisite")?.[1] || "";
-    const species = characterRules.canonicalSpecies(document.getElementById("sf-species").value);
+    const species = characterRules.canonicalSpecies(getElementById("sf-species").value);
     if (/glide trait/i.test(prerequisite) && !/\(birdfolk\)$/i.test(species)) {
       return showToast(`${feat.title} requires the Glide trait. Choose a birdfolk species first.`);
     }
-    const textarea = document.getElementById("sf-feats");
+    const textarea = getElementById("sf-feats");
     if (new RegExp(`(^|\\n)${feat.title.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(\\n|$)`, "i").test(textarea.value.trim())) {
       return showToast(`${feat.title} is already on this character.`);
     }
@@ -3170,7 +3170,7 @@ ${choices}`,
     showToast(`${feat.title} added.`);
   }
   function renderCharacters() {
-    const grid = document.getElementById("char-grid");
+    const grid = getElementById("char-grid");
     grid.innerHTML = "";
     renderNpcFilterControls();
     const characters = Object.values(state.characters || {}).sort((a, b) => a.name.localeCompare(b.name));
@@ -3225,7 +3225,7 @@ ${choices}`,
       });
       grid.appendChild(card);
     });
-    const npcGrid = document.getElementById("npc-sheet-grid");
+    const npcGrid = getElementById("npc-sheet-grid");
     if (!npcGrid) return;
     npcGrid.innerHTML = "";
     const allNpcs = Object.values(state.npcs || {});
@@ -3275,12 +3275,12 @@ ${choices}`,
       npcGrid.appendChild(card);
     });
   }
-  document.getElementById("new-sheet-btn").onclick = () => openSheetEditor(null, { npc: false });
-  document.getElementById("new-npc-sheet-btn").onclick = () => openSheetEditor(null, { npc: true });
-  document.getElementById("close-sheet-btn").onclick = () => {
+  getElementById("new-sheet-btn").onclick = () => openSheetEditor(null, { npc: false });
+  getElementById("new-npc-sheet-btn").onclick = () => openSheetEditor(null, { npc: true });
+  getElementById("close-sheet-btn").onclick = () => {
     closeLevelUpDialog(false);
     editingNpcSheetId = null;
-    document.getElementById("sheet-editor").classList.add("hidden");
+    getElementById("sheet-editor").classList.add("hidden");
   };
   function setSheetTab(tab, scrollToSheet = false) {
     document.querySelectorAll("#sheet-form [data-sheet-tab]").forEach((section) => {
@@ -3294,11 +3294,11 @@ ${choices}`,
     });
     updateSheetNavIndicator(tab);
     if (scrollToSheet) {
-      document.getElementById("sheet-section-nav").scrollIntoView({ behavior: "smooth", block: "start" });
+      getElementById("sheet-section-nav").scrollIntoView({ behavior: "smooth", block: "start" });
     }
   }
   function updateSheetNavIndicator(tab) {
-    const nav = document.getElementById("sheet-section-nav");
+    const nav = getElementById("sheet-section-nav");
     const indicator = nav?.querySelector(".sheet-nav-indicator");
     const activeButton = nav?.querySelector(`[data-sheet-tab="${tab}"]`);
     if (!nav || !indicator || !activeButton) return;
@@ -3326,11 +3326,11 @@ ${choices}`,
   });
   function openSheetEditor(c, options = {}) {
     const isNpc = !!options.npc;
-    const form = document.getElementById("sheet-form");
+    const form = getElementById("sheet-form");
     form.reset();
     closeLevelUpDialog(false);
-    document.getElementById("sheet-editor").classList.remove("hidden");
-    document.getElementById("sheet-editor-title").textContent = c ? `Edit ${c.name}${isNpc ? " \xB7 NPC" : ""}` : isNpc ? "New NPC stat block" : "New character";
+    getElementById("sheet-editor").classList.remove("hidden");
+    getElementById("sheet-editor-title").textContent = c ? `Edit ${c.name}${isNpc ? " \xB7 NPC" : ""}` : isNpc ? "New NPC stat block" : "New character";
     editingNpcSheetId = isNpc ? c?.id || "__new__" : null;
     editingOriginalName = !isNpc && c ? c.name : null;
     editingCanEdit = isNpc ? myRole === "dm" : canEditCharacter(c);
@@ -3345,21 +3345,21 @@ ${choices}`,
     editingBaseLevel = Math.max(1, Math.min(20, Number(fields.level ?? c?.level) || 1));
     acMethodManuallySelected = !!c || !!fields["ac-method"];
     initiativeManuallyEdited = !!c && fields.initiative !== "" && fields.initiative !== void 0;
-    document.getElementById("npc-sheet-tools").classList.toggle("hidden", !isNpc);
-    document.getElementById("level-up-btn").classList.toggle("hidden", isNpc);
-    document.getElementById("save-sheet-btn").textContent = isNpc ? "Save NPC" : "Save character";
+    getElementById("npc-sheet-tools").classList.toggle("hidden", !isNpc);
+    getElementById("level-up-btn").classList.toggle("hidden", isNpc);
+    getElementById("save-sheet-btn").textContent = isNpc ? "Save NPC" : "Save character";
     form.dataset.npcChallenge = isNpc ? c?.sheet?.challenge || "" : "";
-    document.getElementById("npc-statblock-import").value = "";
-    document.getElementById("npc-sheet-preset").value = "";
+    getElementById("npc-statblock-import").value = "";
+    getElementById("npc-sheet-preset").value = "";
     setSheetTab("basic");
     ABILITIES.forEach((ability) => {
-      document.getElementById(`sf-${ability}`).max = isNpc ? "30" : "20";
+      getElementById(`sf-${ability}`).max = isNpc ? "30" : "20";
     });
     form.querySelectorAll('[id^="sf-"]').forEach((input) => {
-      if (input.type === "file") return;
+      if (input instanceof HTMLInputElement && input.type === "file") return;
       const key = input.id.slice(3);
       if (!Object.prototype.hasOwnProperty.call(fields, key)) return;
-      if (input.type === "checkbox") input.checked = !!fields[key];
+      if (input instanceof HTMLInputElement && input.type === "checkbox") input.checked = !!fields[key];
       else if (input instanceof HTMLSelectElement) {
         const savedValue = String(fields[key] ?? "");
         if (savedValue) {
@@ -3383,24 +3383,24 @@ ${choices}`,
     renderFeatureUsageEditor();
     editingAttacks = normalizeAttackList(isNpc ? c?.sheet?.attacks || c?.attacks : c?.attacks);
     editingAttackId = null;
-    document.getElementById("attack-add-form").classList.add("hidden");
+    getElementById("attack-add-form").classList.add("hidden");
     renderAttackEditor();
     editingReactions = normalizeReactionList(isNpc ? c?.sheet?.reactions || c?.reactions : c?.reactions);
     editingReactionId = null;
-    document.getElementById("reaction-add-form").classList.add("hidden");
+    getElementById("reaction-add-form").classList.add("hidden");
     renderReactionEditor();
     editingSpells = normalizeSpellList(fields["spell-list"] || (isNpc ? c?.spells : null));
     if (isNpc && !editingSpells.length) editingSpells = normalizeSpellList(c?.spells);
     if (!editingSpells.length) editingSpells = migrateLegacySpellText(fields);
     editingSpellId = null;
-    document.getElementById("spell-add-form").classList.add("hidden");
+    getElementById("spell-add-form").classList.add("hidden");
     renderSpellListEditor();
     renderPortraitPreview(editingPortraitUrl);
     refreshCharacterCalculations(!c, !c && !isNpc);
     setSheetEditable(editingCanEdit, !!c);
     window.requestAnimationFrame(alignBasicStatsPanels);
     window.requestAnimationFrame(() => {
-      document.getElementById("sheet-editor").scrollIntoView({ behavior: "smooth", block: "start" });
+      getElementById("sheet-editor").scrollIntoView({ behavior: "smooth", block: "start" });
     });
   }
   function legacyCharacterFields(c) {
@@ -3451,12 +3451,12 @@ ${choices}`,
     document.querySelectorAll("#sheet-form input, #sheet-form select, #sheet-form textarea, #sheet-form button").forEach((control) => {
       control.disabled = !canEdit;
     });
-    document.getElementById("save-sheet-btn").classList.toggle("hidden", !canEdit);
-    document.getElementById("delete-sheet-btn").classList.toggle("hidden", !canEdit || !hasCharacter);
-    const ownerNote = document.getElementById("sheet-owner-note");
+    getElementById("save-sheet-btn").classList.toggle("hidden", !canEdit);
+    getElementById("delete-sheet-btn").classList.toggle("hidden", !canEdit || !hasCharacter);
+    const ownerNote = getElementById("sheet-owner-note");
     ownerNote.textContent = canEdit ? "" : "Only this character\u2019s owner or the Dungeon Master can edit it.";
-    updateSubraceOptions(document.getElementById("sf-subrace").value);
-    updateSubclassOptions(document.getElementById("sf-subclass").value);
+    updateSubraceOptions(getElementById("sf-subrace").value);
+    updateSubclassOptions(getElementById("sf-subclass").value);
   }
   function normalizeInventory(inventory) {
     const source = Array.isArray(inventory) ? inventory : typeof inventory === "string" && inventory.trim() ? inventory.split(/\n|,/).map((name) => ({ name, qty: 1 })) : [];
@@ -3536,7 +3536,7 @@ ${choices}`,
     return "Manual";
   }
   function renderFeatureUsageEditor() {
-    const container = document.getElementById("feature-usage-editor");
+    const container = getElementById("feature-usage-editor");
     if (!container) return;
     container.innerHTML = "";
     editingFeatureUses.forEach((feature) => {
@@ -3665,7 +3665,7 @@ ${choices}`,
     return current?.location === "carried" ? "carried" : "backpack";
   }
   function renderInventoryContainerOptions() {
-    const select = document.getElementById("inv-item-container");
+    const select = getElementById("inv-item-container");
     if (!select) return;
     const selected = select.value;
     select.innerHTML = '<option value="">No container</option>';
@@ -3959,7 +3959,7 @@ ${choices}`,
     return wrapper;
   }
   function renderInventoryEditor() {
-    const list = document.getElementById("inventory-list");
+    const list = getElementById("inventory-list");
     if (!list) return;
     list.innerHTML = "";
     renderInventoryContainerOptions();
@@ -4006,15 +4006,15 @@ ${choices}`,
       list.appendChild(group);
     });
   }
-  document.getElementById("inv-add-btn").onclick = () => {
-    const nameInput2 = document.getElementById("inv-item-name");
-    const qtyInput = document.getElementById("inv-item-qty");
-    const locationInput = document.getElementById("inv-item-location");
-    const containerInput = document.getElementById("inv-item-container");
-    const containerFlag = document.getElementById("inv-item-is-container");
-    const descriptionInput = document.getElementById("inv-item-description");
-    const usageMaxInput = document.getElementById("inv-item-usage-max");
-    const usageResetInput = document.getElementById("inv-item-usage-reset");
+  getElementById("inv-add-btn").onclick = () => {
+    const nameInput2 = getElementById("inv-item-name");
+    const qtyInput = getElementById("inv-item-qty");
+    const locationInput = getElementById("inv-item-location");
+    const containerInput = getElementById("inv-item-container");
+    const containerFlag = getElementById("inv-item-is-container");
+    const descriptionInput = getElementById("inv-item-description");
+    const usageMaxInput = getElementById("inv-item-usage-max");
+    const usageResetInput = getElementById("inv-item-usage-reset");
     const name = nameInput2.value.trim();
     if (!name) return;
     const parent = editingInventory.find((item2) => item2.id === containerInput.value && item2.isContainer);
@@ -4034,11 +4034,11 @@ ${choices}`,
     editingInventory.push(item);
     if (parent) inventoryExpandedContainers.add(parent.id);
     nameInput2.value = "";
-    qtyInput.value = 1;
+    qtyInput.value = "1";
     containerInput.value = "";
     containerFlag.checked = false;
     descriptionInput.value = "";
-    usageMaxInput.value = 0;
+    usageMaxInput.value = "0";
     usageResetInput.value = "long-rest";
     renderInventoryEditor();
   };
@@ -4059,7 +4059,7 @@ ${choices}`,
     return (Array.isArray(raw) ? raw : []).map(normalizeAttack).filter(Boolean);
   }
   function initializeAttackPresetControls() {
-    const select = document.getElementById("attack-preset-select");
+    const select = getElementById("attack-preset-select");
     creationPresets.ATTACK_PRESETS.forEach((preset) => {
       const option = document.createElement("option");
       option.value = preset.name;
@@ -4067,24 +4067,24 @@ ${choices}`,
       select.appendChild(option);
     });
     applyPresetSearch("attack-preset-select", "attack-preset-search");
-    document.getElementById("attack-add-btn").onclick = () => openAttackForm(null);
-    document.getElementById("attack-form-cancel").onclick = closeAttackForm;
-    document.getElementById("attack-preset-load").onclick = () => {
+    getElementById("attack-add-btn").onclick = () => openAttackForm(null);
+    getElementById("attack-form-cancel").onclick = closeAttackForm;
+    getElementById("attack-preset-load").onclick = () => {
       const preset = creationPresets.ATTACK_PRESETS.find((entry) => entry.name === select.value);
       if (!preset) return showToast("Choose an attack preset first.");
-      const scores = Object.fromEntries(ABILITIES.map((ability) => [ability, document.getElementById(`sf-${ability}`).value]));
-      populateAttackForm(creationPresets.attackPresetValues(preset, scores, document.getElementById("sf-prof-bonus").value));
+      const scores = Object.fromEntries(ABILITIES.map((ability) => [ability, getElementById(`sf-${ability}`).value]));
+      populateAttackForm(creationPresets.attackPresetValues(preset, scores, getElementById("sf-prof-bonus").value));
     };
-    document.getElementById("attack-form-save").onclick = () => {
-      const name = document.getElementById("attack-form-name").value.trim();
+    getElementById("attack-form-save").onclick = () => {
+      const name = getElementById("attack-form-name").value.trim();
       if (!name) return showToast("Give the attack a name first.");
       const value = normalizeAttack({
         id: editingAttackId || `attack-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
         name,
-        bonus: document.getElementById("attack-form-bonus").value,
-        damage: document.getElementById("attack-form-damage").value,
-        details: document.getElementById("attack-form-details").value,
-        source: document.getElementById("attack-add-form").dataset.attackSource || ""
+        bonus: getElementById("attack-form-bonus").value,
+        damage: getElementById("attack-form-damage").value,
+        details: getElementById("attack-form-details").value,
+        source: getElementById("attack-add-form").dataset.attackSource || ""
       });
       if (editingAttackId) {
         const index = editingAttacks.findIndex((entry) => entry.id === editingAttackId);
@@ -4097,25 +4097,25 @@ ${choices}`,
     };
   }
   function populateAttackForm(value = {}) {
-    document.getElementById("attack-add-form").dataset.attackSource = value.source || "";
-    document.getElementById("attack-form-name").value = value.name || "";
-    document.getElementById("attack-form-bonus").value = value.bonus || "";
-    document.getElementById("attack-form-damage").value = value.damage || "";
-    document.getElementById("attack-form-details").value = value.details || "";
+    getElementById("attack-add-form").dataset.attackSource = value.source || "";
+    getElementById("attack-form-name").value = value.name || "";
+    getElementById("attack-form-bonus").value = value.bonus || "";
+    getElementById("attack-form-damage").value = value.damage || "";
+    getElementById("attack-form-details").value = value.details || "";
   }
   function openAttackForm(value) {
     editingAttackId = value?.id || null;
-    document.getElementById("attack-add-form").classList.remove("hidden");
-    document.getElementById("attack-preset-select").value = "";
+    getElementById("attack-add-form").classList.remove("hidden");
+    getElementById("attack-preset-select").value = "";
     populateAttackForm(value || {});
-    document.getElementById("attack-form-name").focus();
+    getElementById("attack-form-name").focus();
   }
   function closeAttackForm() {
     editingAttackId = null;
-    document.getElementById("attack-add-form").classList.add("hidden");
+    getElementById("attack-add-form").classList.add("hidden");
   }
   function renderAttackEditor() {
-    const list = document.getElementById("attack-list");
+    const list = getElementById("attack-list");
     list.innerHTML = "";
     if (!editingAttacks.length) {
       list.innerHTML = '<p class="sidebar-help">No attacks configured yet.</p>';
@@ -4147,7 +4147,7 @@ ${choices}`,
     });
   }
   function initializeNpcPresetControls() {
-    const select = document.getElementById("npc-sheet-preset");
+    const select = getElementById("npc-sheet-preset");
     const groups = /* @__PURE__ */ new Map();
     creationPresets.NPC_PRESETS.forEach((preset) => {
       if (!groups.has(preset.source)) {
@@ -4162,7 +4162,7 @@ ${choices}`,
       groups.get(preset.source).appendChild(option);
     });
     applyPresetSearch("npc-sheet-preset", "npc-preset-search");
-    document.getElementById("npc-sheet-preset-load").onclick = () => {
+    getElementById("npc-sheet-preset-load").onclick = () => {
       const preset = creationPresets.NPC_PRESETS.find((entry) => entry.id === select.value);
       if (!preset) return showToast("Choose an NPC preset first.");
       applyImportedStatBlock(creationPresets.parseStatBlock(preset.statBlock, {
@@ -4170,24 +4170,24 @@ ${choices}`,
         spellPresets: allSpellPresets()
       }));
     };
-    document.getElementById("npc-statblock-import-btn").onclick = () => {
-      const text = document.getElementById("npc-statblock-import").value;
+    getElementById("npc-statblock-import-btn").onclick = () => {
+      const text = getElementById("npc-statblock-import").value;
       applyImportedStatBlock(creationPresets.parseStatBlock(text, { spellPresets: allSpellPresets() }));
     };
-    document.getElementById("npc-statblock-clear-btn").onclick = () => {
-      document.getElementById("npc-statblock-import").value = "";
+    getElementById("npc-statblock-clear-btn").onclick = () => {
+      getElementById("npc-statblock-import").value = "";
     };
   }
   function applyImportedStatBlock(parsed) {
     if (parsed.error) return showToast(parsed.error);
-    const form = document.getElementById("sheet-form");
+    const form = getElementById("sheet-form");
     form.reset();
     const fields = parsed.fields || {};
     form.querySelectorAll('[id^="sf-"]').forEach((input) => {
-      if (input.type === "file") return;
+      if (input instanceof HTMLInputElement && input.type === "file") return;
       const key = input.id.slice(3);
       if (!Object.prototype.hasOwnProperty.call(fields, key)) return;
-      if (input.type === "checkbox") input.checked = !!fields[key];
+      if (input instanceof HTMLInputElement && input.type === "checkbox") input.checked = !!fields[key];
       else input.value = fields[key] ?? "";
     });
     setCharacterRuleSelections(fields);
@@ -4204,14 +4204,14 @@ ${choices}`,
     renderReactionEditor();
     editingSpells = normalizeSpellList(parsed.spells);
     editingSpellId = null;
-    document.getElementById("spell-add-form").classList.add("hidden");
+    getElementById("spell-add-form").classList.add("hidden");
     renderSpellListEditor();
     form.dataset.npcChallenge = parsed.challenge || "";
     refreshCharacterCalculations(false, false);
-    document.getElementById("sf-ac").value = fields.ac || "10";
-    document.getElementById("sf-ac-method").value = "manual";
+    getElementById("sf-ac").value = fields.ac || "10";
+    getElementById("sf-ac-method").value = "manual";
     refreshArmorClass();
-    document.getElementById("sf-name").focus();
+    getElementById("sf-name").focus();
     showToast(`${parsed.name} imported. Review it, add a portrait if wanted, then save.`);
   }
   const REACTION_PRESET_GROUPS = [
@@ -4750,7 +4750,7 @@ ${choices}`,
   }
   function reactionPresetSearchText() {
     const ids = ["sf-class", "sf-subclass", "sf-species", "sf-subrace", "sf-features", "sf-feats", "sf-racial-traits"];
-    const sheetText = ids.map((id) => String(document.getElementById(id)?.value || "")).join(" ");
+    const sheetText = ids.map((id) => String(getElementByIdAs(id)?.value || "")).join(" ");
     const spellText = editingSpells.map((spell) => spell.name).join(" ");
     return `${sheetText} ${spellText}`.toLowerCase();
   }
@@ -4761,7 +4761,7 @@ ${choices}`,
     parent.appendChild(option);
   }
   function renderReactionPresetOptions() {
-    const select = document.getElementById("reaction-preset-select");
+    const select = getElementById("reaction-preset-select");
     select.innerHTML = '<option value="">Choose a reaction...</option>';
     const searchText = reactionPresetSearchText();
     const suggested = REACTION_PRESETS.filter((preset) => preset.alwaysSuggested || (preset.suggestedTags || []).some((tag) => searchText.includes(tag)));
@@ -4782,11 +4782,11 @@ ${choices}`,
     applyPresetSearch("reaction-preset-select", "reaction-preset-search");
   }
   function renderBonusActionPresetOptions() {
-    const search = document.getElementById("bonus-action-preset-search");
-    const list = document.getElementById("bonus-action-preset-list");
-    const select = document.getElementById("bonus-action-preset-select");
+    const search = getElementById("bonus-action-preset-search");
+    const list = getElementById("bonus-action-preset-list");
+    const select = getElementById("bonus-action-preset-select");
     const query = search.value.trim().toLowerCase();
-    const sheetText = `${String(document.getElementById("sf-class")?.value || "")} ${String(document.getElementById("sf-subclass")?.value || "")} ${String(document.getElementById("sf-feats")?.value || "")}`.toLowerCase();
+    const sheetText = `${String(getElementById("sf-class")?.value || "")} ${String(getElementById("sf-subclass")?.value || "")} ${String(getElementById("sf-feats")?.value || "")}`.toLowerCase();
     list.innerHTML = "";
     const orderedGroups = ["Suggested for this sheet", ...BONUS_ACTION_PRESET_GROUPS];
     let matches = 0;
@@ -4825,9 +4825,9 @@ ${choices}`,
     }
   }
   function initializeBonusActionPresetControls() {
-    const search = document.getElementById("bonus-action-preset-search");
-    const combobox = document.getElementById("bonus-action-combobox");
-    const list = document.getElementById("bonus-action-preset-list");
+    const search = getElementById("bonus-action-preset-search");
+    const combobox = getElementById("bonus-action-combobox");
+    const list = getElementById("bonus-action-preset-list");
     renderBonusActionPresetOptions();
     const openList = () => {
       renderBonusActionPresetOptions();
@@ -4849,11 +4849,11 @@ ${choices}`,
         search.setAttribute("aria-expanded", "false");
       }
     });
-    document.getElementById("bonus-action-preset-add").onclick = () => {
-      const select = document.getElementById("bonus-action-preset-select");
+    getElementById("bonus-action-preset-add").onclick = () => {
+      const select = getElementById("bonus-action-preset-select");
       const preset = BONUS_ACTION_PRESETS.find((entry) => entry.id === select.value);
       if (!preset) return showToast("Choose a bonus action preset first.");
-      const textarea = document.getElementById("sf-bonus-actions");
+      const textarea = getElementById("sf-bonus-actions");
       const line = `${preset.name}${preset.resource ? ` \u2014 ${preset.resource}` : ""}: ${preset.effect}`;
       const current = textarea.value.trim();
       if (current.split(/\n+/).some((entry) => entry.toLowerCase().startsWith(`${preset.name.toLowerCase()} \u2014`))) {
@@ -4870,24 +4870,24 @@ ${line}` : line;
   }
   function initializeReactionPresetControls() {
     applyPresetSearch("reaction-preset-select", "reaction-preset-search");
-    document.getElementById("reaction-add-btn").onclick = () => openReactionForm(null);
-    document.getElementById("reaction-form-cancel").onclick = closeReactionForm;
-    document.getElementById("reaction-preset-load").onclick = () => {
-      const preset = REACTION_PRESETS.find((entry) => entry.id === document.getElementById("reaction-preset-select").value);
+    getElementById("reaction-add-btn").onclick = () => openReactionForm(null);
+    getElementById("reaction-form-cancel").onclick = closeReactionForm;
+    getElementById("reaction-preset-load").onclick = () => {
+      const preset = REACTION_PRESETS.find((entry) => entry.id === getElementById("reaction-preset-select").value);
       if (!preset) return showToast("Choose a reaction preset first.");
       populateReactionForm(preset);
     };
-    document.getElementById("reaction-form-save").onclick = () => {
-      const name = document.getElementById("reaction-form-name").value.trim();
+    getElementById("reaction-form-save").onclick = () => {
+      const name = getElementById("reaction-form-name").value.trim();
       if (!name) return showToast("Give the reaction a name first.");
       const value = normalizeReaction({
         id: editingReactionId || `reaction-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
         name,
-        trigger: document.getElementById("reaction-form-trigger").value,
-        effect: document.getElementById("reaction-form-effect").value,
-        resource: document.getElementById("reaction-form-resource").value,
-        requirement: document.getElementById("reaction-form-requirement").value,
-        source: document.getElementById("reaction-form-source").value
+        trigger: getElementById("reaction-form-trigger").value,
+        effect: getElementById("reaction-form-effect").value,
+        resource: getElementById("reaction-form-resource").value,
+        requirement: getElementById("reaction-form-requirement").value,
+        source: getElementById("reaction-form-source").value
       });
       if (editingReactionId) {
         const index = editingReactions.findIndex((entry) => entry.id === editingReactionId);
@@ -4900,27 +4900,27 @@ ${line}` : line;
     };
   }
   function populateReactionForm(value = {}) {
-    document.getElementById("reaction-form-name").value = value.name || "";
-    document.getElementById("reaction-form-trigger").value = value.trigger || "";
-    document.getElementById("reaction-form-effect").value = value.effect || "";
-    document.getElementById("reaction-form-resource").value = value.resource || "";
-    document.getElementById("reaction-form-requirement").value = value.requirement || "";
-    document.getElementById("reaction-form-source").value = value.source || "";
+    getElementById("reaction-form-name").value = value.name || "";
+    getElementById("reaction-form-trigger").value = value.trigger || "";
+    getElementById("reaction-form-effect").value = value.effect || "";
+    getElementById("reaction-form-resource").value = value.resource || "";
+    getElementById("reaction-form-requirement").value = value.requirement || "";
+    getElementById("reaction-form-source").value = value.source || "";
   }
   function openReactionForm(value) {
     editingReactionId = value?.id || null;
     renderReactionPresetOptions();
-    document.getElementById("reaction-preset-select").value = "";
-    document.getElementById("reaction-add-form").classList.remove("hidden");
+    getElementById("reaction-preset-select").value = "";
+    getElementById("reaction-add-form").classList.remove("hidden");
     populateReactionForm(value || {});
-    document.getElementById("reaction-form-name").focus();
+    getElementById("reaction-form-name").focus();
   }
   function closeReactionForm() {
     editingReactionId = null;
-    document.getElementById("reaction-add-form").classList.add("hidden");
+    getElementById("reaction-add-form").classList.add("hidden");
   }
   function renderReactionEditor() {
-    const list = document.getElementById("reaction-list");
+    const list = getElementById("reaction-list");
     list.innerHTML = "";
     if (!editingReactions.length) {
       list.innerHTML = '<p class="sidebar-help">No reactions configured yet. Add one or start from a preset.</p>';
@@ -5142,10 +5142,10 @@ ${line}` : line;
     return migrated;
   }
   function syncSpellListField() {
-    document.getElementById("sf-spell-list").value = JSON.stringify(editingSpells);
+    getElementById("sf-spell-list").value = JSON.stringify(editingSpells);
   }
   function renderSpellListEditor() {
-    const container = document.getElementById("spell-list");
+    const container = getElementById("spell-list");
     container.innerHTML = "";
     if (!editingSpells.length) {
       container.innerHTML = '<p class="sidebar-help">No spells added yet.</p>';
@@ -5153,8 +5153,8 @@ ${line}` : line;
       return;
     }
     const preparesSpells = characterRules.preparedSpellCount(
-      document.getElementById("sf-class").value,
-      document.getElementById("sf-level").value,
+      getElementById("sf-class").value,
+      getElementById("sf-level").value,
       10
     ) !== null;
     const byLevel = /* @__PURE__ */ new Map();
@@ -5242,30 +5242,30 @@ ${line}` : line;
     syncSpellListField();
   }
   function populateSpellForm(spell = {}) {
-    const form = document.getElementById("spell-add-form");
+    const form = getElementById("spell-add-form");
     const normalized = normalizeSpell({ name: spell.name || " ", ...spell }) || {};
     form.dataset.spellSource = normalized.source || "";
-    document.getElementById("spell-form-name").value = spell.name || "";
-    document.getElementById("spell-form-level").value = normalized.level ?? "0";
-    document.getElementById("spell-form-school").value = normalized.school || "";
-    document.getElementById("spell-form-range").value = normalized.range || "";
-    document.getElementById("spell-form-casting-time").value = normalized.castingTime || "";
-    document.getElementById("spell-form-duration").value = normalized.duration || "";
-    document.getElementById("spell-form-components").value = normalized.components || "";
-    document.getElementById("spell-form-attack").value = normalized.attack || "";
-    document.getElementById("spell-form-damage").value = normalized.damage || "";
-    document.getElementById("spell-form-effect").value = normalized.effect || "";
-    document.getElementById("spell-form-always-prepared").checked = !!normalized.alwaysPrepared;
+    getElementById("spell-form-name").value = spell.name || "";
+    getElementById("spell-form-level").value = normalized.level ?? "0";
+    getElementById("spell-form-school").value = normalized.school || "";
+    getElementById("spell-form-range").value = normalized.range || "";
+    getElementById("spell-form-casting-time").value = normalized.castingTime || "";
+    getElementById("spell-form-duration").value = normalized.duration || "";
+    getElementById("spell-form-components").value = normalized.components || "";
+    getElementById("spell-form-attack").value = normalized.attack || "";
+    getElementById("spell-form-damage").value = normalized.damage || "";
+    getElementById("spell-form-effect").value = normalized.effect || "";
+    getElementById("spell-form-always-prepared").checked = !!normalized.alwaysPrepared;
   }
   function openSpellForm(spell) {
-    const form = document.getElementById("spell-add-form");
+    const form = getElementById("spell-add-form");
     form.classList.remove("hidden");
     editingSpellId = spell ? spell.id : null;
-    document.getElementById("spell-preset-select").value = "";
+    getElementById("spell-preset-select").value = "";
     populateSpellForm(spell || {});
-    document.getElementById("spell-form-name").focus();
+    getElementById("spell-form-name").focus();
   }
-  const spellPresetSelect = document.getElementById("spell-preset-select");
+  const spellPresetSelect = getElementById("spell-preset-select");
   ["Humblewood", "Player's Handbook (2014)"].forEach((source) => {
     const group = document.createElement("optgroup");
     group.label = source;
@@ -5300,39 +5300,39 @@ ${line}` : line;
       added += 1;
     });
     renderSpellListEditor();
-    document.getElementById("spell-bulk-list").value = "";
+    getElementById("spell-bulk-list").value = "";
     showToast(added ? `Added ${added} spell${added === 1 ? "" : "s"}.` : "Those spells are already on the sheet.");
   }
-  document.getElementById("spell-preset-load").onclick = () => {
+  getElementById("spell-preset-load").onclick = () => {
     const preset = selectedSpellPreset();
     if (!preset) return showToast("Choose a spell preset first.");
     populateSpellForm(preset);
   };
-  document.getElementById("spell-bulk-add").onclick = () => addSpellNames(document.getElementById("spell-bulk-list").value);
-  document.getElementById("spell-add-btn").onclick = () => openSpellForm(null);
-  document.getElementById("spell-form-cancel").onclick = () => {
-    document.getElementById("spell-add-form").classList.add("hidden");
+  getElementById("spell-bulk-add").onclick = () => addSpellNames(getElementById("spell-bulk-list").value);
+  getElementById("spell-add-btn").onclick = () => openSpellForm(null);
+  getElementById("spell-form-cancel").onclick = () => {
+    getElementById("spell-add-form").classList.add("hidden");
     editingSpellId = null;
   };
-  document.getElementById("spell-form-save").onclick = () => {
-    const name = document.getElementById("spell-form-name").value.trim();
+  getElementById("spell-form-save").onclick = () => {
+    const name = getElementById("spell-form-name").value.trim();
     if (!name) return alert("Give the spell a name first.");
     const existing = editingSpells.find((entry) => entry.id === editingSpellId);
     const spell = normalizeSpell({
       id: editingSpellId || `spell-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       name,
-      level: document.getElementById("spell-form-level").value,
-      school: document.getElementById("spell-form-school").value,
-      range: document.getElementById("spell-form-range").value,
-      castingTime: document.getElementById("spell-form-casting-time").value,
-      duration: document.getElementById("spell-form-duration").value,
-      components: document.getElementById("spell-form-components").value,
-      attack: document.getElementById("spell-form-attack").value,
-      damage: document.getElementById("spell-form-damage").value,
-      effect: document.getElementById("spell-form-effect").value,
-      source: document.getElementById("spell-add-form").dataset.spellSource || "",
+      level: getElementById("spell-form-level").value,
+      school: getElementById("spell-form-school").value,
+      range: getElementById("spell-form-range").value,
+      castingTime: getElementById("spell-form-casting-time").value,
+      duration: getElementById("spell-form-duration").value,
+      components: getElementById("spell-form-components").value,
+      attack: getElementById("spell-form-attack").value,
+      damage: getElementById("spell-form-damage").value,
+      effect: getElementById("spell-form-effect").value,
+      source: getElementById("spell-add-form").dataset.spellSource || "",
       prepared: existing?.prepared,
-      alwaysPrepared: document.getElementById("spell-form-always-prepared").checked
+      alwaysPrepared: getElementById("spell-form-always-prepared").checked
     });
     if (editingSpellId) {
       const index = editingSpells.findIndex((entry) => entry.id === editingSpellId);
@@ -5341,18 +5341,19 @@ ${line}` : line;
       editingSpells.push(spell);
     }
     editingSpellId = null;
-    document.getElementById("spell-add-form").classList.add("hidden");
+    getElementById("spell-add-form").classList.add("hidden");
     renderSpellListEditor();
   };
-  document.getElementById("sf-portrait").onchange = (event) => {
-    pendingPortraitFile = event.target.files[0] || null;
+  getElementById("sf-portrait").onchange = (event) => {
+    const input = event.target instanceof HTMLInputElement ? event.target : null;
+    pendingPortraitFile = input?.files?.[0] || null;
     if (!pendingPortraitFile) return renderPortraitPreview(editingPortraitUrl);
     const reader = new FileReader();
     reader.onload = () => renderPortraitPreview(reader.result);
     reader.readAsDataURL(pendingPortraitFile);
   };
   function renderPortraitPreview(url) {
-    const preview = document.getElementById("portrait-preview");
+    const preview = getElementById("portrait-preview");
     preview.innerHTML = "";
     if (!url) {
       preview.textContent = "\u{1F343}";
@@ -5366,13 +5367,13 @@ ${line}` : line;
   function collectCharacterFields() {
     const fields = {};
     document.querySelectorAll('#sheet-form [id^="sf-"]').forEach((input) => {
-      if (input.type === "file") return;
+      if (input instanceof HTMLInputElement && input.type === "file") return;
       const key = input.id.slice(3);
-      fields[key] = input.type === "checkbox" ? input.checked : input.value;
+      fields[key] = input instanceof HTMLInputElement && input.type === "checkbox" ? input.checked : input.value;
     });
     return fields;
   }
-  document.getElementById("save-sheet-btn").onclick = async () => {
+  getElementById("save-sheet-btn").onclick = async () => {
     if (!editingCanEdit) return;
     refreshCharacterCalculations(false);
     let fields = collectCharacterFields();
@@ -5386,7 +5387,7 @@ ${line}` : line;
       characterRules.applyPlayerCharacterConstraints(constrainedCharacter);
       fields = constrainedCharacter.fields;
     }
-    const saveButton = document.getElementById("save-sheet-btn");
+    const saveButton = getElementById("save-sheet-btn");
     saveButton.disabled = true;
     saveButton.textContent = "Saving\u2026";
     try {
@@ -5478,20 +5479,20 @@ ${line}` : line;
         sheet: {
           ...sheet,
           portraitUrl: editingPortraitUrl,
-          challenge: document.getElementById("sheet-form").dataset.npcChallenge || existing?.sheet?.challenge || "",
+          challenge: getElementById("sheet-form").dataset.npcChallenge || existing?.sheet?.challenge || "",
           spells: editingSpells.map((spell) => ({ ...spell }))
         }
       };
       socket.emit(existing ? "npc:update" : "npc:create", npcPayload);
     } else {
       socket.emit("character:save", sheet);
-      document.getElementById("sheet-editor").classList.add("hidden");
+      getElementById("sheet-editor").classList.add("hidden");
     }
     saveButton.disabled = false;
     saveButton.textContent = isNpc ? "Save NPC" : "Save character";
     if (!isNpc) showToast(`${name} saved.`);
   };
-  document.getElementById("delete-sheet-btn").onclick = () => {
+  getElementById("delete-sheet-btn").onclick = () => {
     if (editingNpcSheetId) {
       if (editingNpcSheetId !== "__new__" && confirm(`Delete ${state.npcs?.[editingNpcSheetId]?.name || "this NPC"}?`)) {
         socket.emit("npc:delete", { id: editingNpcSheetId });
@@ -5499,7 +5500,7 @@ ${line}` : line;
         return;
       }
       editingNpcSheetId = null;
-      document.getElementById("sheet-editor").classList.add("hidden");
+      getElementById("sheet-editor").classList.add("hidden");
       return;
     }
     if (editingOriginalName && confirm(`Delete ${editingOriginalName}?`)) {
@@ -5507,7 +5508,7 @@ ${line}` : line;
     } else if (editingOriginalName) {
       return;
     }
-    document.getElementById("sheet-editor").classList.add("hidden");
+    getElementById("sheet-editor").classList.add("hidden");
   };
   function abilityModifier(score) {
     return Math.floor(((Number(score) || 10) - 10) / 2);
@@ -5516,35 +5517,35 @@ ${line}` : line;
     return 2 + Math.floor((Math.max(1, Math.min(20, Number(level) || 1)) - 1) / 4);
   }
   function updateSpellSlotsForLevel() {
-    const className = document.getElementById("sf-class").value;
-    const subclass = document.getElementById("sf-subclass").value;
-    const level = document.getElementById("sf-level").value;
+    const className = getElementById("sf-class").value;
+    const subclass = getElementById("sf-subclass").value;
+    const level = getElementById("sf-level").value;
     const slots = characterRules.spellSlotsFor(className, subclass, level);
     for (let spellLevel = 1; spellLevel <= 9; spellLevel += 1) {
       const maximum = slots[spellLevel - 1] || 0;
-      const maximumInput = document.getElementById(`sf-spell-slots-${spellLevel}`);
-      const usedInput = document.getElementById(`sf-spell-used-${spellLevel}`);
-      maximumInput.value = maximum;
-      usedInput.value = Math.min(maximum, Math.max(0, Number(usedInput.value) || 0));
+      const maximumInput = getElementById(`sf-spell-slots-${spellLevel}`);
+      const usedInput = getElementById(`sf-spell-used-${spellLevel}`);
+      maximumInput.value = String(maximum);
+      usedInput.value = String(Math.min(maximum, Math.max(0, Number(usedInput.value) || 0)));
     }
   }
   function refreshArmorClass() {
-    const methodInput = document.getElementById("sf-ac-method");
-    const armorClassInput = document.getElementById("sf-ac");
-    const baseInput = document.getElementById("sf-ac-base");
+    const methodInput = getElementById("sf-ac-method");
+    const armorClassInput = getElementById("sf-ac");
+    const baseInput = getElementById("sf-ac-base");
     const method = methodInput.value;
     const calculated = characterRules.armorClass({
       method,
       base: baseInput.value,
-      bonus: document.getElementById("sf-ac-bonus").value,
-      dex: document.getElementById("sf-dex").value,
-      con: document.getElementById("sf-con").value,
-      wis: document.getElementById("sf-wis").value
+      bonus: getElementById("sf-ac-bonus").value,
+      dex: getElementById("sf-dex").value,
+      con: getElementById("sf-con").value,
+      wis: getElementById("sf-wis").value
     });
     const automatic = calculated !== null;
     armorClassInput.readOnly = automatic;
     baseInput.readOnly = !["light", "medium", "heavy"].includes(method);
-    if (automatic) armorClassInput.value = calculated;
+    if (automatic) armorClassInput.value = String(calculated);
     const notes = {
       manual: "Manual AC remains unchanged.",
       unarmored: "10 + Dexterity modifier + the shield/other bonus.",
@@ -5556,88 +5557,88 @@ ${line}` : line;
       hedge: "14 + Dexterity modifier + the shield/other bonus. Hedges cannot wear armor.",
       "hedge-curled": "19 + the shield/other bonus while curled up; Dexterity does not apply."
     };
-    document.getElementById("ac-calculation-note").textContent = notes[method] || notes.manual;
+    getElementById("ac-calculation-note").textContent = notes[method] || notes.manual;
   }
   function refreshCharacterCalculations(force, recalculateSpell = false) {
-    const level = document.getElementById("sf-level");
+    const level = getElementById("sf-level");
     const bonus = proficiencyBonus(level.value);
-    document.getElementById("sf-prof-bonus").value = bonus;
+    getElementById("sf-prof-bonus").value = String(bonus);
     ABILITIES.forEach((ability) => {
-      const modifier = abilityModifier(document.getElementById(`sf-${ability}`).value);
-      document.getElementById(`mod-${ability}`).textContent = signed(modifier);
-      const saveInput = document.getElementById(`sf-save-${ability}`);
-      const saveValue = modifier + (document.getElementById(`sf-save-${ability}-prof`).checked ? bonus : 0);
-      if (force || saveInput.value === "") saveInput.value = saveValue;
+      const modifier = abilityModifier(getElementById(`sf-${ability}`).value);
+      getElementById(`mod-${ability}`).textContent = signed(modifier);
+      const saveInput = getElementById(`sf-save-${ability}`);
+      const saveValue = modifier + (getElementById(`sf-save-${ability}-prof`).checked ? bonus : 0);
+      if (force || saveInput.value === "") saveInput.value = String(saveValue);
     });
     Object.entries(SKILL_ABILITIES).forEach(([skill, ability]) => {
-      const input = document.getElementById(`sf-skill-${skill}`);
-      const value = abilityModifier(document.getElementById(`sf-${ability}`).value) + (document.getElementById(`sf-skill-${skill}-prof`).checked ? bonus : 0);
-      if (force || input.value === "") input.value = value;
+      const input = getElementById(`sf-skill-${skill}`);
+      const value = abilityModifier(getElementById(`sf-${ability}`).value) + (getElementById(`sf-skill-${skill}-prof`).checked ? bonus : 0);
+      if (force || input.value === "") input.value = String(value);
     });
-    const initiativeInput = document.getElementById("sf-initiative");
+    const initiativeInput = getElementById("sf-initiative");
     if (!initiativeManuallyEdited && (force || initiativeInput.value === "")) {
-      initiativeInput.value = abilityModifier(document.getElementById("sf-dex").value);
+      initiativeInput.value = String(abilityModifier(getElementById("sf-dex").value));
     }
-    const passive = document.getElementById("sf-passive-perception");
-    if (force || passive.value === "") passive.value = 10 + Number(document.getElementById("sf-skill-perception").value || 0);
-    const spellAbility = document.getElementById("sf-spell-ability").value.toLowerCase();
+    const passive = getElementById("sf-passive-perception");
+    if (force || passive.value === "") passive.value = String(10 + Number(getElementById("sf-skill-perception").value || 0));
+    const spellAbility = getElementById("sf-spell-ability").value.toLowerCase();
     if (ABILITIES.includes(spellAbility)) {
       const calculated = characterRules.spellcastingValues(
-        document.getElementById(`sf-${spellAbility}`).value,
+        getElementById(`sf-${spellAbility}`).value,
         level.value
       );
-      const spellDc = document.getElementById("sf-spell-dc");
-      const spellAttack = document.getElementById("sf-spell-attack");
-      if (recalculateSpell || spellDc.value === "") spellDc.value = calculated.saveDc;
-      if (recalculateSpell || spellAttack.value === "") spellAttack.value = calculated.attackBonus;
+      const spellDc = getElementById("sf-spell-dc");
+      const spellAttack = getElementById("sf-spell-attack");
+      if (recalculateSpell || spellDc.value === "") spellDc.value = String(calculated.saveDc);
+      if (recalculateSpell || spellAttack.value === "") spellAttack.value = String(calculated.attackBonus);
     }
-    const className = document.getElementById("sf-class").value;
-    const subclass = document.getElementById("sf-subclass").value;
+    const className = getElementById("sf-class").value;
+    const subclass = getElementById("sf-subclass").value;
     const preparedAbility = characterRules.spellcastingAbilityFor(className, subclass) || spellAbility;
     const prepared = characterRules.preparedSpellCount(
       className,
       level.value,
-      ABILITIES.includes(preparedAbility) ? document.getElementById(`sf-${preparedAbility}`).value : 10
+      ABILITIES.includes(preparedAbility) ? getElementById(`sf-${preparedAbility}`).value : 10
     );
-    document.getElementById("sf-spells-prepared").value = prepared === null ? "" : prepared;
+    getElementById("sf-spells-prepared").value = prepared === null ? "" : String(prepared);
     refreshArmorClass();
   }
-  ABILITIES.forEach((ability) => document.getElementById(`sf-${ability}`).addEventListener("input", () => {
-    const spellAbility = document.getElementById("sf-spell-ability").value.toLowerCase();
+  ABILITIES.forEach((ability) => getElementById(`sf-${ability}`).addEventListener("input", () => {
+    const spellAbility = getElementById("sf-spell-ability").value.toLowerCase();
     if (ability === "con") refreshNewCharacterHitPoints();
     refreshCharacterCalculations(true, ability === spellAbility);
   }));
-  document.getElementById("sf-level").addEventListener("input", () => {
+  getElementById("sf-level").addEventListener("input", () => {
     refreshCharacterCalculations(true, true);
     syncAutomaticClassFeatures(true);
     renderSpellListEditor();
   });
-  document.getElementById("sf-initiative").addEventListener("input", () => {
+  getElementById("sf-initiative").addEventListener("input", () => {
     initiativeManuallyEdited = true;
   });
-  ABILITIES.forEach((ability) => document.getElementById(`sf-save-${ability}-prof`).addEventListener("change", () => refreshCharacterCalculations(true)));
-  Object.keys(SKILL_ABILITIES).forEach((skill) => document.getElementById(`sf-skill-${skill}-prof`).addEventListener("change", () => refreshCharacterCalculations(true)));
-  document.getElementById("sf-spell-ability").addEventListener("change", () => refreshCharacterCalculations(false, true));
-  document.getElementById("sf-ac-method").addEventListener("change", () => {
+  ABILITIES.forEach((ability) => getElementById(`sf-save-${ability}-prof`).addEventListener("change", () => refreshCharacterCalculations(true)));
+  Object.keys(SKILL_ABILITIES).forEach((skill) => getElementById(`sf-skill-${skill}-prof`).addEventListener("change", () => refreshCharacterCalculations(true)));
+  getElementById("sf-spell-ability").addEventListener("change", () => refreshCharacterCalculations(false, true));
+  getElementById("sf-ac-method").addEventListener("change", () => {
     acMethodManuallySelected = true;
     refreshArmorClass();
   });
-  document.getElementById("sf-ac-base").addEventListener("input", refreshArmorClass);
-  document.getElementById("sf-ac-bonus").addEventListener("input", refreshArmorClass);
+  getElementById("sf-ac-base").addEventListener("input", refreshArmorClass);
+  getElementById("sf-ac-bonus").addEventListener("input", refreshArmorClass);
   function formatSpellSlots(slots) {
     const parts = slots.map((count, index) => count ? `${index + 1}st${index ? "" : ""}: ${count}` : "").filter(Boolean);
     return parts.length ? parts.join(", ").replace(/2st/g, "2nd").replace(/3st/g, "3rd").replace(/([4-9])st/g, "$1th") : "none";
   }
   function abilitySelectMarkup(className) {
     return `<select class="${className}"><option value="">Choose an ability...</option>${ABILITIES.map(
-      (ability) => `<option value="${ability}">${ABILITY_LABELS[ability]} (${document.getElementById(`sf-${ability}`).value})</option>`
+      (ability) => `<option value="${ability}">${ABILITY_LABELS[ability]} (${getElementById(`sf-${ability}`).value})</option>`
     ).join("")}</select>`;
   }
   function closeLevelUpDialog(resetLevel = true) {
-    const overlay = document.getElementById("level-up-overlay");
+    const overlay = getElementById("level-up-overlay");
     if (resetLevel && pendingLevelUp) {
       suppressLevelUpPrompt = true;
-      document.getElementById("sf-level").value = pendingLevelUp.fromLevel;
+      getElementById("sf-level").value = pendingLevelUp.fromLevel;
       suppressLevelUpPrompt = false;
       refreshCharacterCalculations(true, true);
     }
@@ -5651,11 +5652,11 @@ ${line}` : line;
     const { fromLevel, toLevel, className, subclass, species } = pendingLevelUp;
     const hitDie = characterRules.hitDieFor(className);
     const average = characterRules.averageHitDieRoll(className);
-    const constitutionModifier = characterRules.abilityModifier(document.getElementById("sf-con").value);
+    const constitutionModifier = characterRules.abilityModifier(getElementById("sf-con").value);
     const gains = characterRules.levelUpGains({ className, subclass, species, fromLevel, toLevel });
-    document.getElementById("level-up-title").textContent = `${className} level ${fromLevel} \u2192 ${toLevel}`;
-    document.getElementById("level-up-intro").textContent = `Complete the choices below, then apply the milestone level-up. No experience points are required.`;
-    const hpContainer = document.getElementById("level-up-hp-rows");
+    getElementById("level-up-title").textContent = `${className} level ${fromLevel} \u2192 ${toLevel}`;
+    getElementById("level-up-intro").textContent = `Complete the choices below, then apply the milestone level-up. No experience points are required.`;
+    const hpContainer = getElementById("level-up-hp-rows");
     hpContainer.innerHTML = gains.map((gain) => `
     <div class="level-up-hp-row" data-level="${gain.level}">
       <strong>Level ${gain.level}</strong>
@@ -5668,7 +5669,7 @@ ${line}` : line;
     hpContainer.querySelectorAll(".level-up-hp-row").forEach((row) => {
       const rollInput = row.querySelector(".level-up-hp-roll");
       row.querySelector(".level-up-roll-btn").addEventListener("click", () => {
-        rollInput.value = Math.floor(Math.random() * hitDie) + 1;
+        rollInput.value = String(Math.floor(Math.random() * hitDie) + 1);
         row.querySelector('input[value="roll"]').checked = true;
       });
       rollInput.addEventListener("input", () => {
@@ -5676,8 +5677,8 @@ ${line}` : line;
       });
     });
     const asiLevels = gains.filter((gain) => gain.asi).map((gain) => gain.level);
-    const asiCard = document.getElementById("level-up-asi-card");
-    const asiContainer = document.getElementById("level-up-asi-rows");
+    const asiCard = getElementById("level-up-asi-card");
+    const asiContainer = getElementById("level-up-asi-rows");
     asiCard.classList.toggle("hidden", !asiLevels.length);
     asiContainer.innerHTML = asiLevels.map((level) => `
     <div class="level-up-asi-row" data-level="${level}">
@@ -5701,7 +5702,7 @@ ${line}` : line;
         });
       });
     });
-    const summary = document.getElementById("level-up-summary");
+    const summary = getElementById("level-up-summary");
     summary.innerHTML = gains.map((gain) => {
       const items = ["Increase maximum HP and gain one Hit Die"];
       if (gain.asi) {
@@ -5728,8 +5729,8 @@ ${line}` : line;
     if (slotsChanged) automaticParts.push(`Spell slots change from ${formatSpellSlots(oldSlots)} to ${formatSpellSlots(newSlots)}.`);
     if (characterRules.preparedSpellCount(className, toLevel, 10) !== null) automaticParts.push("The prepared-spell limit will recalculate from the final spellcasting ability score.");
     automaticParts.push("AC will recalculate only when an automatic AC method is selected on the sheet.");
-    document.getElementById("level-up-automatic-summary").textContent = automaticParts.join(" ");
-    const overlay = document.getElementById("level-up-overlay");
+    getElementById("level-up-automatic-summary").textContent = automaticParts.join(" ");
+    const overlay = getElementById("level-up-overlay");
     overlay.classList.remove("hidden");
     overlay.setAttribute("aria-hidden", "false");
   }
@@ -5737,9 +5738,9 @@ ${line}` : line;
     if (suppressLevelUpPrompt || !editingCanEdit) return;
     const target = Math.max(1, Math.min(20, Number(targetLevel) || editingBaseLevel));
     if (target <= editingBaseLevel) return;
-    const className = characterRules.canonicalClass(document.getElementById("sf-class").value);
+    const className = characterRules.canonicalClass(getElementById("sf-class").value);
     if (!className) {
-      document.getElementById("sf-level").value = editingBaseLevel;
+      getElementById("sf-level").value = String(editingBaseLevel);
       refreshCharacterCalculations(true, true);
       return showToast("Choose a class before leveling up.");
     }
@@ -5747,17 +5748,17 @@ ${line}` : line;
       fromLevel: editingBaseLevel,
       toLevel: target,
       className,
-      subclass: document.getElementById("sf-subclass").value,
-      species: document.getElementById("sf-species").value,
-      oldConstitution: Number(document.getElementById("sf-con").value) || 10,
-      oldMaximumHp: Number(document.getElementById("sf-maxhp").value) || 0,
-      oldCurrentHp: Number(document.getElementById("sf-hp").value) || 0,
-      oldHitDiceLeft: Math.max(0, Number(document.getElementById("sf-hitdice-left").value) || 0)
+      subclass: getElementById("sf-subclass").value,
+      species: getElementById("sf-species").value,
+      oldConstitution: Number(getElementById("sf-con").value) || 10,
+      oldMaximumHp: Number(getElementById("sf-maxhp").value) || 0,
+      oldCurrentHp: Number(getElementById("sf-hp").value) || 0,
+      oldHitDiceLeft: Math.max(0, Number(getElementById("sf-hitdice-left").value) || 0)
     };
     renderLevelUpDialog();
   }
   function collectLevelUpAbilityChoices() {
-    const scores = Object.fromEntries(ABILITIES.map((ability) => [ability, Number(document.getElementById(`sf-${ability}`).value) || 10]));
+    const scores = Object.fromEntries(ABILITIES.map((ability) => [ability, Number(getElementById(`sf-${ability}`).value) || 10]));
     const feats = [];
     for (const row of document.querySelectorAll(".level-up-asi-row")) {
       const level = Number(row.dataset.level);
@@ -5801,10 +5802,10 @@ ${line}` : line;
     const choices = collectLevelUpAbilityChoices();
     if (choices.error) return showToast(choices.error);
     ABILITIES.forEach((ability) => {
-      document.getElementById(`sf-${ability}`).value = choices.scores[ability];
+      getElementById(`sf-${ability}`).value = String(choices.scores[ability]);
     });
     if (choices.feats.length) {
-      const featField = document.getElementById("sf-feats");
+      const featField = getElementById("sf-feats");
       const existing = featField.value.trim();
       const additions = choices.feats.filter((feat) => !new RegExp(`(^|\\n)${feat.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(\\n|$)`, "i").test(existing));
       featField.value = [existing, additions.join("\n\n")].filter(Boolean).join("\n\n");
@@ -5817,11 +5818,11 @@ ${line}` : line;
       hitDieResults
     );
     const newMaximumHp = Math.max(1, oldMaximumHp + hpIncrease);
-    document.getElementById("sf-maxhp").value = newMaximumHp;
-    document.getElementById("sf-hp").value = document.getElementById("level-up-current-hp").checked ? Math.min(newMaximumHp, oldCurrentHp + hpIncrease) : Math.min(newMaximumHp, oldCurrentHp);
-    document.getElementById("sf-hitdice").value = `${toLevel}d${hitDie}`;
-    document.getElementById("sf-hitdice-left").value = Math.min(toLevel, oldHitDiceLeft + (toLevel - fromLevel));
-    document.getElementById("sf-level").value = toLevel;
+    getElementById("sf-maxhp").value = String(newMaximumHp);
+    getElementById("sf-hp").value = String(getElementById("level-up-current-hp").checked ? Math.min(newMaximumHp, oldCurrentHp + hpIncrease) : Math.min(newMaximumHp, oldCurrentHp));
+    getElementById("sf-hitdice").value = `${toLevel}d${hitDie}`;
+    getElementById("sf-hitdice-left").value = String(Math.min(toLevel, oldHitDiceLeft + (toLevel - fromLevel)));
+    getElementById("sf-level").value = String(toLevel);
     updateSpellSlotsForLevel();
     initiativeManuallyEdited = false;
     refreshCharacterCalculations(true, true);
@@ -5829,25 +5830,25 @@ ${line}` : line;
     closeLevelUpDialog(false);
     showToast(`Level ${toLevel} applied. Review the listed features and save the character.`);
   }
-  document.getElementById("sf-level").addEventListener("change", () => requestLevelUp(document.getElementById("sf-level").value));
-  document.getElementById("level-up-btn").addEventListener("click", () => {
+  getElementById("sf-level").addEventListener("change", () => requestLevelUp(getElementById("sf-level").value));
+  getElementById("level-up-btn").addEventListener("click", () => {
     if (editingBaseLevel >= 20) return showToast("This character is already level 20.");
-    const target = Math.max(editingBaseLevel + 1, Number(document.getElementById("sf-level").value) || editingBaseLevel + 1);
-    document.getElementById("sf-level").value = Math.min(20, target);
-    requestLevelUp(document.getElementById("sf-level").value);
+    const target = Math.max(editingBaseLevel + 1, Number(getElementById("sf-level").value) || editingBaseLevel + 1);
+    getElementById("sf-level").value = String(Math.min(20, target));
+    requestLevelUp(getElementById("sf-level").value);
   });
-  document.getElementById("level-up-close-btn").addEventListener("click", () => closeLevelUpDialog(true));
-  document.getElementById("level-up-cancel-btn").addEventListener("click", () => closeLevelUpDialog(true));
-  document.getElementById("level-up-apply-btn").addEventListener("click", applyLevelUp);
-  const audioEl = document.getElementById("audio-el");
-  const trackPresetSelect = document.getElementById("track-preset-select");
-  const trackTitleInput = document.getElementById("track-title");
-  const trackUrlInput = document.getElementById("track-url");
-  const trackFileInput = document.getElementById("track-file");
-  const addTrackButton = document.getElementById("add-track-btn");
-  const jukeboxVolumeInput = document.getElementById("jukebox-volume");
-  const jukeboxVolumeValue = document.getElementById("jukebox-volume-value");
-  const jukeboxVolumeIcon = document.getElementById("jukebox-volume-icon");
+  getElementById("level-up-close-btn").addEventListener("click", () => closeLevelUpDialog(true));
+  getElementById("level-up-cancel-btn").addEventListener("click", () => closeLevelUpDialog(true));
+  getElementById("level-up-apply-btn").addEventListener("click", applyLevelUp);
+  const audioEl = getElementById("audio-el");
+  const trackPresetSelect = getElementById("track-preset-select");
+  const trackTitleInput = getElementById("track-title");
+  const trackUrlInput = getElementById("track-url");
+  const trackFileInput = getElementById("track-file");
+  const addTrackButton = getElementById("add-track-btn");
+  const jukeboxVolumeInput = getElementById("jukebox-volume");
+  const jukeboxVolumeValue = getElementById("jukebox-volume-value");
+  const jukeboxVolumeIcon = getElementById("jukebox-volume-icon");
   const JUKEBOX_VOLUME_STORAGE_KEY = "humblewood:jukebox-volume";
   let availableMusicTracks = [];
   function normalizedJukeboxVolume(value) {
@@ -5885,7 +5886,7 @@ ${line}` : line;
   });
   function renderMusicTrackOptions() {
     trackPresetSelect.innerHTML = '<option value="">Choose an existing track\u2026</option>';
-    const storedList = document.getElementById("stored-track-list");
+    const storedList = getElementById("stored-track-list");
     storedList.innerHTML = "";
     if (!availableMusicTracks.length) {
       storedList.textContent = "No server tracks stored.";
@@ -5979,7 +5980,7 @@ ${line}` : line;
     }
   };
   loadMusicTracks();
-  document.getElementById("jb-playpause").onclick = () => {
+  getElementById("jb-playpause").onclick = () => {
     if (state.jukebox.isPlaying) {
       socket.emit("jukebox:pause");
     } else if (state.jukebox.currentIndex === -1 && state.jukebox.playlist.length) {
@@ -5988,17 +5989,17 @@ ${line}` : line;
       socket.emit("jukebox:resume");
     }
   };
-  document.getElementById("jb-next").onclick = () => {
+  getElementById("jb-next").onclick = () => {
     const next = (state.jukebox.currentIndex + 1) % Math.max(1, state.jukebox.playlist.length);
     socket.emit("jukebox:play", { index: next });
   };
-  document.getElementById("jb-prev").onclick = () => {
+  getElementById("jb-prev").onclick = () => {
     const prev = (state.jukebox.currentIndex - 1 + state.jukebox.playlist.length) % Math.max(1, state.jukebox.playlist.length);
     socket.emit("jukebox:play", { index: prev });
   };
   function renderJukebox() {
     const j = state.jukebox;
-    const list = document.getElementById("playlist");
+    const list = getElementById("playlist");
     list.innerHTML = "";
     j.playlist.forEach((track, i) => {
       const row = document.createElement("div");
@@ -6013,10 +6014,10 @@ ${line}` : line;
       list.appendChild(row);
     });
     const current = j.playlist[j.currentIndex];
-    document.getElementById("now-playing").textContent = current ? current.title : "Nothing playing";
-    document.getElementById("now-playing-sub").textContent = current ? "from the Humblewood jukebox" : "add a track below to begin";
-    document.getElementById("jukebox-art").classList.toggle("spinning", j.isPlaying);
-    const playPauseButton = document.getElementById("jb-playpause");
+    getElementById("now-playing").textContent = current ? current.title : "Nothing playing";
+    getElementById("now-playing-sub").textContent = current ? "from the Humblewood jukebox" : "add a track below to begin";
+    getElementById("jukebox-art").classList.toggle("spinning", j.isPlaying);
+    const playPauseButton = getElementById("jb-playpause");
     playPauseButton.setAttribute("aria-label", j.isPlaying ? "Pause" : "Play");
     playPauseButton.innerHTML = j.isPlaying ? '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="4" width="4" height="16" rx="1"></rect><rect x="14" y="4" width="4" height="16" rx="1"></rect></svg>' : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4 20 12 7 20Z"></path></svg>';
     if (current) {
@@ -6043,7 +6044,7 @@ ${line}` : line;
   }
   audioEl.onended = () => {
     if (state.jukebox.playlist.length > 1) {
-      document.getElementById("jb-next").click();
+      getElementById("jb-next").click();
     } else {
       socket.emit("jukebox:pause");
     }
@@ -6056,8 +6057,8 @@ ${line}` : line;
   };
   function renderDmPrivateRollMode() {
     const active = myRole === "dm" && dmPrivateRollsEnabled;
-    const toggle = document.getElementById("dm-private-roll-toggle");
-    const banner = document.getElementById("dm-private-roll-banner");
+    const toggle = getElementById("dm-private-roll-toggle");
+    const banner = getElementById("dm-private-roll-banner");
     const panel = document.querySelector(".dice-panel");
     if (toggle) {
       toggle.classList.toggle("active", active);
@@ -6068,7 +6069,7 @@ ${line}` : line;
     if (panel) panel.classList.toggle("dm-private-mode", active);
   }
   function privateDiceRollActive() {
-    return myRole === "dm" && dmPrivateRollsEnabled && document.getElementById("view-dice")?.classList.contains("active");
+    return myRole === "dm" && dmPrivateRollsEnabled && getElementById("view-dice")?.classList.contains("active");
   }
   function setPendingDiceRollMode(mode = "normal") {
     pendingDiceRollMode = ["advantage", "disadvantage"].includes(mode) ? mode : "normal";
@@ -6077,7 +6078,7 @@ ${line}` : line;
       button.classList.toggle("active", active);
       button.setAttribute("aria-pressed", String(active));
     });
-    const hint = document.getElementById("dice-roll-mode-hint");
+    const hint = getElementById("dice-roll-mode-hint");
     if (hint) {
       hint.textContent = pendingDiceRollMode === "normal" ? "" : `${pendingDiceRollMode === "advantage" ? "Advantage" : "Disadvantage"} is on for one roll.`;
     }
@@ -6161,7 +6162,7 @@ ${line}` : line;
     return `[${rolls.join(", ")}]${entry.mode && entry.mode !== "normal" ? ` \u2192 kept ${kept}` : ""}${modifier}`;
   }
   function renderRollLog() {
-    const log = document.getElementById("roll-log");
+    const log = getElementById("roll-log");
     if (!log) return;
     log.innerHTML = "";
     const entries = [
@@ -6198,11 +6199,11 @@ ${line}` : line;
   function openCharacterRoller(name) {
     switchView("dice");
     refreshCharacterRoller(name);
-    document.getElementById("character-roller-title").scrollIntoView({ behavior: "smooth", block: "start" });
+    getElementById("character-roller-title").scrollIntoView({ behavior: "smooth", block: "start" });
   }
   function refreshCharacterRoller(preferredName = "") {
     if (!state) return;
-    const select = document.getElementById("dice-character");
+    const select = getElementById("dice-character");
     const characters = rollableCharacters();
     const npcs = myRole === "dm" ? Object.values(state.npcs || {}).sort((a, b) => a.name.localeCompare(b.name)) : [];
     const previous = preferredName || select.value;
@@ -6237,9 +6238,9 @@ ${line}` : line;
     renderCharacterRollOptions();
   }
   function renderCharacterRollOptions() {
-    const container = document.getElementById("character-roll-options");
+    const container = getElementById("character-roll-options");
     container.innerHTML = "";
-    const selected = document.getElementById("dice-character").value;
+    const selected = getElementById("dice-character").value;
     if (myRole === "dm" && selected.startsWith("npc:")) {
       const npc = state?.npcs?.[selected.slice(4)];
       if (npc) return renderNpcRollOptions(container, npc);
@@ -6462,7 +6463,7 @@ ${line}` : line;
     const character = state?.characters?.[name];
     if (!character?.canManage) return showToast("You can only manage combat for your own character.");
     activeCombatTarget = { type: "character", id: name };
-    const overlay = document.getElementById("combat-overlay");
+    const overlay = getElementById("combat-overlay");
     overlay.classList.remove("hidden");
     overlay.setAttribute("aria-hidden", "false");
     renderCombatManager();
@@ -6471,14 +6472,14 @@ ${line}` : line;
     const token = state?.tokens?.find((entry) => entry.id === id && entry.kind === "npc");
     if (myRole !== "dm" || !token) return showToast("Only the DM can manage NPC combat.");
     activeCombatTarget = { type: "npc", id };
-    const overlay = document.getElementById("combat-overlay");
+    const overlay = getElementById("combat-overlay");
     overlay.classList.remove("hidden");
     overlay.setAttribute("aria-hidden", "false");
     renderCombatManager();
   }
   function closeCombatManager() {
     activeCombatTarget = null;
-    const overlay = document.getElementById("combat-overlay");
+    const overlay = getElementById("combat-overlay");
     overlay.classList.add("hidden");
     overlay.setAttribute("aria-hidden", "true");
   }
@@ -6529,37 +6530,37 @@ ${line}` : line;
       spellSlots: {},
       reactionAvailable: true
     };
-    document.getElementById("combat-kicker").textContent = isNpc ? "NPC combat controls" : "Character combat controls";
-    document.getElementById("combat-title").textContent = name;
-    const portrait = document.getElementById("combat-portrait");
+    getElementById("combat-kicker").textContent = isNpc ? "NPC combat controls" : "Character combat controls";
+    getElementById("combat-title").textContent = name;
+    const portrait = getElementById("combat-portrait");
     const portraitUrl = isNpc ? entity.imageUrl : entity.portraitUrl;
     const safePortraitUrl = safeImageUrl(portraitUrl);
     portrait.innerHTML = safePortraitUrl ? `<img src="${escapeAttr(safePortraitUrl)}" alt="">` : isNpc ? "\u{1F98A}" : "\u{1F343}";
-    document.getElementById("combat-hp").textContent = `${Number(entity.hp) || 0} / ${Number(entity.maxHp) || 0}`;
-    document.getElementById("combat-temp-hp").textContent = Number(entity.tempHp) || 0;
-    document.getElementById("combat-ac").textContent = Number(entity.ac) || 0;
-    document.getElementById("combat-life-status").textContent = combat.dead ? "Dead" : combat.stable ? "Stable" : entity.hp <= 0 ? "Down" : "Ready";
+    getElementById("combat-hp").textContent = `${Number(entity.hp) || 0} / ${Number(entity.maxHp) || 0}`;
+    getElementById("combat-temp-hp").textContent = String(Number(entity.tempHp) || 0);
+    getElementById("combat-ac").textContent = String(Number(entity.ac) || 0);
+    getElementById("combat-life-status").textContent = combat.dead ? "Dead" : combat.stable ? "Stable" : entity.hp <= 0 ? "Down" : "Ready";
     renderCombatRage(entity, isNpc);
     renderCombatFeatureUses(entity, isNpc);
     renderCombatMovement(entity, isNpc);
-    const notes = document.getElementById("combat-notes");
+    const notes = getElementById("combat-notes");
     notes.classList.toggle("hidden", !isNpc || !entity.notes);
     notes.textContent = isNpc ? entity.notes || "" : "";
-    document.getElementById("combat-death-section").classList.toggle("hidden", isNpc);
+    getElementById("combat-death-section").classList.toggle("hidden", isNpc);
     const hasSpellSlots = Object.values(combat.spellSlots || {}).some((slot) => Number(slot.total) > 0);
-    document.getElementById("combat-spell-slots-section").classList.toggle("hidden", isNpc && !hasSpellSlots);
+    getElementById("combat-spell-slots-section").classList.toggle("hidden", isNpc && !hasSpellSlots);
     const preparesSpells = !isNpc && characterPreparationDetails(entity) !== null;
-    document.getElementById("combat-long-rest-btn").textContent = isNpc ? "Restore NPC" : preparesSpells ? "Long rest & prepare spells" : "Complete long rest";
+    getElementById("combat-long-rest-btn").textContent = isNpc ? "Restore NPC" : preparesSpells ? "Long rest & prepare spells" : "Complete long rest";
     renderCombatRolls(entity, isNpc);
     renderCombatBonusActions(entity, isNpc);
     renderCombatReactions(entity, isNpc);
-    const concentration = document.getElementById("combat-concentration");
+    const concentration = getElementById("combat-concentration");
     concentration.checked = !!combat.concentration;
     concentration.disabled = !isNpc && !!combat.rage?.active;
-    document.getElementById("combat-exhaustion").textContent = Number(combat.exhaustion) || 0;
-    document.getElementById("combat-death-successes").textContent = `${Number(combat.deathSaves?.successes) || 0} / 3`;
-    document.getElementById("combat-death-failures").textContent = `${Number(combat.deathSaves?.failures) || 0} / 3`;
-    const conditions = document.getElementById("combat-conditions");
+    getElementById("combat-exhaustion").textContent = String(Number(combat.exhaustion) || 0);
+    getElementById("combat-death-successes").textContent = `${Number(combat.deathSaves?.successes) || 0} / 3`;
+    getElementById("combat-death-failures").textContent = `${Number(combat.deathSaves?.failures) || 0} / 3`;
+    const conditions = getElementById("combat-conditions");
     conditions.innerHTML = "";
     CONDITIONS.forEach((condition) => {
       const button = document.createElement("button");
@@ -6569,7 +6570,7 @@ ${line}` : line;
       button.onclick = () => combatAction("condition:toggle", { condition });
       conditions.appendChild(button);
     });
-    const slots = document.getElementById("combat-spell-slots");
+    const slots = getElementById("combat-spell-slots");
     slots.innerHTML = "";
     Object.entries(combat.spellSlots || {}).filter(([, slot]) => Number(slot.total) > 0).forEach(([level, slot]) => {
       const row = document.createElement("div");
@@ -6589,12 +6590,12 @@ ${line}` : line;
     });
     if (!slots.children.length) slots.innerHTML = '<p class="empty-roll-options">No spell slots are configured on this sheet.</p>';
     const check = isNpc ? null : pendingConcentrationChecks.get(entity.name);
-    const checkButton = document.getElementById("combat-concentration-roll");
+    const checkButton = getElementById("combat-concentration-roll");
     checkButton.classList.toggle("hidden", !check);
     if (check) checkButton.textContent = `Roll Constitution save \xB7 DC ${check.dc}`;
   }
   function renderCombatMovement(entity, isNpc = false) {
-    const container = document.getElementById("combat-movement");
+    const container = getElementById("combat-movement");
     if (!container) return;
     const fields = isNpc ? entity.sheet?.fields || {} : entity.fields || {};
     const speed = entity.speed || fields.speed || entity.sheet?.speed || "";
@@ -6642,7 +6643,7 @@ ${line}` : line;
     return String(character.fields?.["ac-method"] || "").toLowerCase() === "heavy";
   }
   function renderCombatRage(character, isNpc = false) {
-    const section = document.getElementById("combat-rage-section");
+    const section = getElementById("combat-rage-section");
     if (!section) return;
     const available = !isNpc && barbarianClass(character);
     section.classList.toggle("hidden", !available);
@@ -6652,10 +6653,10 @@ ${line}` : line;
     const maxUses = barbarianRageMaxUses(character.level || character.fields?.level);
     const used = Math.min(maxUses, Math.max(0, Number(rage.used) || 0));
     const remaining = maxUses - used;
-    const stateLabel = document.getElementById("combat-rage-state");
-    const usesLabel = document.getElementById("combat-rage-uses");
-    const toggle = document.getElementById("combat-rage-toggle");
-    const note = document.getElementById("combat-rage-note");
+    const stateLabel = getElementById("combat-rage-state");
+    const usesLabel = getElementById("combat-rage-uses");
+    const toggle = getElementById("combat-rage-toggle");
+    const note = getElementById("combat-rage-note");
     stateLabel.textContent = active ? "Active" : "Inactive";
     stateLabel.classList.toggle("active", active);
     usesLabel.textContent = `${remaining} / ${maxUses} uses remaining`;
@@ -6665,8 +6666,8 @@ ${line}` : line;
     toggle.onclick = () => combatAction("rage:toggle", { active: !active });
   }
   function renderCombatFeatureUses(character, isNpc = false) {
-    const section = document.getElementById("combat-feature-uses-section");
-    const container = document.getElementById("combat-feature-uses");
+    const section = getElementById("combat-feature-uses-section");
+    const container = getElementById("combat-feature-uses");
     if (!section || !container) return;
     const features = isNpc ? character.combat?.featureUses || [] : character.combat?.featureUses || [];
     section.classList.toggle("hidden", !features.length);
@@ -6699,14 +6700,14 @@ ${line}` : line;
     });
   }
   function renderCombatRolls(character, isNpc = false) {
-    const mode = () => document.getElementById("combat-roll-mode").value;
-    const initiativeButton = document.getElementById("combat-initiative-roll");
+    const mode = () => getElementById("combat-roll-mode").value;
+    const initiativeButton = getElementById("combat-initiative-roll");
     const initiativeModifier = isNpc ? Number(character.initiativeModifier) || 0 : characterInitiativeModifier(character);
     initiativeButton.textContent = `Initiative ${signed(initiativeModifier)}`;
     initiativeButton.onclick = () => isNpc ? rollNpcInitiative(character, mode()) : rollCharacterInitiative(character, mode());
     const spellAttackValue = character.spellcasting?.attackBonus ?? character.fields?.["spell-attack"];
     const hasSpellAttack = spellAttackValue !== "" && spellAttackValue !== void 0 && spellAttackValue !== null;
-    const spellAttackButton = document.getElementById("combat-spell-attack-roll");
+    const spellAttackButton = getElementById("combat-spell-attack-roll");
     const rageActive = !isNpc && barbarianClass(character) && character.combat?.rage?.active && !characterWearsHeavyArmor(character);
     spellAttackButton.classList.toggle("hidden", !hasSpellAttack || rageActive);
     if (hasSpellAttack) {
@@ -6718,12 +6719,12 @@ ${line}` : line;
       };
     }
     const spellDcValue = character.spellcasting?.saveDc ?? character.fields?.["spell-dc"];
-    const spellDc = document.getElementById("combat-spell-dc");
+    const spellDc = getElementById("combat-spell-dc");
     const hasSpellDc = spellDcValue !== "" && spellDcValue !== void 0 && spellDcValue !== null;
     spellDc.classList.toggle("hidden", !hasSpellDc || rageActive);
     if (hasSpellDc) spellDc.textContent = `Spell save DC ${Number(spellDcValue) || 0}`;
-    const strengthCheck = document.getElementById("combat-strength-check");
-    const strengthSave = document.getElementById("combat-strength-save");
+    const strengthCheck = getElementById("combat-strength-check");
+    const strengthSave = getElementById("combat-strength-save");
     const showRageRolls = rageActive;
     strengthCheck.classList.toggle("hidden", !showRageRolls);
     strengthSave.classList.toggle("hidden", !showRageRolls);
@@ -6734,7 +6735,7 @@ ${line}` : line;
       strengthCheck.onclick = () => rollCharacterD20(character, "Strength check", strengthModifier, { mode: "advantage" });
       strengthSave.onclick = () => rollCharacterD20(character, "Strength save", characterSaveModifier(character, "str"), { mode: "advantage" });
     }
-    const attacks = document.getElementById("combat-attacks");
+    const attacks = getElementById("combat-attacks");
     attacks.innerHTML = "";
     const rageBonus = rageActive ? barbarianRageDamageBonus(character.level) : 0;
     const rageAttackMode = mode() === "disadvantage" ? "normal" : rageActive ? "advantage" : mode();
@@ -6770,7 +6771,7 @@ ${line}` : line;
       attacks.appendChild(row);
     });
     if (!attacks.children.length) attacks.innerHTML = '<p class="empty-roll-options">No attacks are configured.</p>';
-    const spells = document.getElementById("combat-spells");
+    const spells = getElementById("combat-spells");
     spells.innerHTML = "";
     if (rageActive) {
       spells.innerHTML = '<p class="empty-roll-options">Spells cannot be cast while raging.</p>';
@@ -6847,17 +6848,17 @@ ${line}` : line;
     return `${count}d${sides}${modifier ? modifier > 0 ? `+${modifier}` : modifier : ""}`;
   }
   function renderCombatBonusActions(character, isNpc = false) {
-    const copy = document.getElementById("combat-bonus-actions-copy");
+    const copy = getElementById("combat-bonus-actions-copy");
     if (!copy) return;
     const bonusActions = isNpc ? character.sheet?.fields?.["bonus-actions"] || "" : character.fields?.["bonus-actions"] || "";
     copy.textContent = String(bonusActions || "").trim() || "No bonus actions are configured on this sheet.";
     copy.classList.toggle("empty", !String(bonusActions || "").trim());
   }
   function renderCombatReactions(character, isNpc = false) {
-    const section = document.getElementById("combat-reactions-section");
-    const container = document.getElementById("combat-reactions");
-    const stateLabel = document.getElementById("combat-reaction-state");
-    const refreshButton = document.getElementById("combat-reaction-refresh-btn");
+    const section = getElementById("combat-reactions-section");
+    const container = getElementById("combat-reactions");
+    const stateLabel = getElementById("combat-reaction-state");
+    const refreshButton = getElementById("combat-reaction-refresh-btn");
     if (!section || !container || !stateLabel || !refreshButton) return;
     const reactions = normalizeReactionList(
       isNpc ? character.reactions || state?.npcs?.[character.npcId]?.reactions : character.reactions
@@ -6973,7 +6974,7 @@ ${line}` : line;
   }
   function closeSpellPreparation() {
     pendingSpellPreparation = null;
-    const overlay = document.getElementById("spell-preparation-overlay");
+    const overlay = getElementById("spell-preparation-overlay");
     overlay.classList.add("hidden");
     overlay.setAttribute("aria-hidden", "true");
   }
@@ -6981,15 +6982,15 @@ ${line}` : line;
     if (!pendingSpellPreparation) return;
     const { selected, target, alwaysPrepared } = pendingSpellPreparation;
     const valid = selected.size === target;
-    const count = document.getElementById("spell-preparation-count");
+    const count = getElementById("spell-preparation-count");
     count.textContent = `${selected.size} / ${target} selected${alwaysPrepared.length ? ` \xB7 ${alwaysPrepared.length} always prepared` : ""}`;
     count.classList.toggle("invalid", !valid);
-    document.getElementById("spell-preparation-complete-btn").disabled = !valid;
+    getElementById("spell-preparation-complete-btn").disabled = !valid;
   }
   function renderSpellPreparationList() {
     if (!pendingSpellPreparation) return;
-    const container = document.getElementById("spell-preparation-list");
-    const query = document.getElementById("spell-preparation-search").value.trim().toLowerCase();
+    const container = getElementById("spell-preparation-list");
+    const query = getElementById("spell-preparation-search").value.trim().toLowerCase();
     const visible = pendingSpellPreparation.available.filter((spell) => !query || [spell.name, spell.school, spell.source].some((value) => String(value || "").toLowerCase().includes(query)));
     container.innerHTML = "";
     if (!visible.length) {
@@ -7052,33 +7053,35 @@ ${line}` : line;
       preparation.selectable.forEach((spell) => selected.add(spell.id));
     }
     pendingSpellPreparation = { characterName: character.name, ...preparation, selected };
-    document.getElementById("spell-preparation-title").textContent = `Prepare ${character.name}\u2019s spells`;
-    document.getElementById("spell-preparation-intro").textContent = `${preparation.className} level ${character.level || character.fields?.level || 1} can prepare ${preparation.limit} spell${preparation.limit === 1 ? "" : "s"} of level ${preparation.maximumSpellLevel} or lower. Choose ${preparation.target} from the spells currently on the sheet.`;
-    document.getElementById("spell-preparation-note").textContent = preparation.alwaysPrepared.length ? "Cantrips and always-prepared spells remain available without using this limit." : "Cantrips are always available and do not need to be prepared.";
-    document.getElementById("spell-preparation-search").value = "";
-    const overlay = document.getElementById("spell-preparation-overlay");
+    getElementById("spell-preparation-title").textContent = `Prepare ${character.name}\u2019s spells`;
+    getElementById("spell-preparation-intro").textContent = `${preparation.className} level ${character.level || character.fields?.level || 1} can prepare ${preparation.limit} spell${preparation.limit === 1 ? "" : "s"} of level ${preparation.maximumSpellLevel} or lower. Choose ${preparation.target} from the spells currently on the sheet.`;
+    getElementById("spell-preparation-note").textContent = preparation.alwaysPrepared.length ? "Cantrips and always-prepared spells remain available without using this limit." : "Cantrips are always available and do not need to be prepared.";
+    getElementById("spell-preparation-search").value = "";
+    const overlay = getElementById("spell-preparation-overlay");
     overlay.classList.remove("hidden");
     overlay.setAttribute("aria-hidden", "false");
     renderSpellPreparationList();
-    document.getElementById("spell-preparation-search").focus();
+    getElementById("spell-preparation-search").focus();
     return true;
   }
-  document.getElementById("combat-close-btn").onclick = closeCombatManager;
-  document.getElementById("combat-overlay").addEventListener("mousedown", (event) => {
-    if (event.target.id === "combat-overlay") closeCombatManager();
+  getElementById("combat-close-btn").onclick = closeCombatManager;
+  getElementById("combat-overlay").addEventListener("mousedown", (event) => {
+    if (event.target instanceof Element && event.target.id === "combat-overlay") closeCombatManager();
   });
   document.addEventListener("keydown", (event) => {
     if (event.key !== "Escape") return;
     if (pendingSpellPreparation) closeSpellPreparation();
     else if (activeCombatTarget) closeCombatManager();
   });
-  document.getElementById("combat-damage-btn").onclick = () => combatAction("damage", {
-    amount: Number(document.getElementById("combat-amount").value) || 0,
-    damageType: document.getElementById("combat-damage-type").value
+  getElementById("combat-damage-btn").onclick = () => combatAction("damage", {
+    amount: Number(getElementById("combat-amount").value) || 0,
+    damageType: getElementById("combat-damage-type").value
   });
-  document.getElementById("combat-heal-btn").onclick = () => combatAction("heal", { amount: Number(document.getElementById("combat-amount").value) || 0 });
-  document.getElementById("combat-temp-btn").onclick = () => combatAction("tempHp", { amount: Number(document.getElementById("combat-amount").value) || 0 });
-  document.getElementById("combat-concentration").onchange = (event) => combatAction("concentration:set", { value: event.target.checked });
+  getElementById("combat-heal-btn").onclick = () => combatAction("heal", { amount: Number(getElementById("combat-amount").value) || 0 });
+  getElementById("combat-temp-btn").onclick = () => combatAction("tempHp", { amount: Number(getElementById("combat-amount").value) || 0 });
+  getElementById("combat-concentration").onchange = (event) => {
+    if (event.target instanceof HTMLInputElement) combatAction("concentration:set", { value: event.target.checked });
+  };
   document.querySelectorAll("[data-combat-action]").forEach((button) => {
     button.onclick = () => {
       const actions = {
@@ -7093,9 +7096,9 @@ ${line}` : line;
       combatAction(action, extra);
     };
   });
-  document.getElementById("combat-restore-slots-btn").onclick = () => combatAction("restoreAllSlots");
-  document.getElementById("combat-reaction-refresh-btn").onclick = () => combatAction("reaction:refresh");
-  document.getElementById("combat-long-rest-btn").onclick = () => {
+  getElementById("combat-restore-slots-btn").onclick = () => combatAction("restoreAllSlots");
+  getElementById("combat-reaction-refresh-btn").onclick = () => combatAction("reaction:refresh");
+  getElementById("combat-long-rest-btn").onclick = () => {
     const target = activeCombatEntity();
     if (!target) return;
     const name = target.type === "npc" ? target.entity.label : target.entity.name;
@@ -7110,19 +7113,19 @@ ${line}` : line;
     }
     if (confirm(`Give ${name} a long rest? This restores HP and all spell slots.`)) combatAction("longRest");
   };
-  document.getElementById("spell-preparation-close-btn").onclick = closeSpellPreparation;
-  document.getElementById("spell-preparation-overlay").addEventListener("mousedown", (event) => {
-    if (event.target.id === "spell-preparation-overlay") closeSpellPreparation();
+  getElementById("spell-preparation-close-btn").onclick = closeSpellPreparation;
+  getElementById("spell-preparation-overlay").addEventListener("mousedown", (event) => {
+    if (event.target instanceof Element && event.target.id === "spell-preparation-overlay") closeSpellPreparation();
   });
-  document.getElementById("spell-preparation-search").addEventListener("input", renderSpellPreparationList);
-  document.getElementById("spell-preparation-complete-btn").onclick = () => {
+  getElementById("spell-preparation-search").addEventListener("input", renderSpellPreparationList);
+  getElementById("spell-preparation-complete-btn").onclick = () => {
     if (!pendingSpellPreparation || pendingSpellPreparation.selected.size !== pendingSpellPreparation.target) return;
     const characterName = pendingSpellPreparation.characterName;
     const preparedSpellIds = [...pendingSpellPreparation.selected];
     closeSpellPreparation();
     socket.emit("character:combat:update", { name: characterName, action: "longRest", preparedSpellIds });
   };
-  document.getElementById("combat-concentration-roll").onclick = () => {
+  getElementById("combat-concentration-roll").onclick = () => {
     if (activeCombatTarget?.type !== "character") return;
     const character = state?.characters?.[activeCombatTarget.id];
     const check = pendingConcentrationChecks.get(activeCombatTarget.id);
@@ -7340,6 +7343,12 @@ ${line}` : line;
   function escapeAttr(value) {
     return escapeHtml(value);
   }
+  function getElementById(id) {
+    return document.getElementById(id);
+  }
+  function getElementByIdAs(id) {
+    return document.getElementById(id);
+  }
   function getRequiredElement(selector, root = document) {
     const element = root.querySelector(selector);
     if (!element) throw new Error(`Required element not found: ${selector}`);
@@ -7368,8 +7377,8 @@ ${line}` : line;
     return safeAssetUrl(url, ["uploads", "images"]);
   }
   function applyPresetSearch(selectId, searchId) {
-    const select = document.getElementById(selectId);
-    const search = document.getElementById(searchId);
+    const select = getElementById(selectId);
+    const search = getElementById(searchId);
     if (!select || !search) return;
     select.classList.add("hidden");
     select.setAttribute("tabindex", "-1");
@@ -7448,7 +7457,7 @@ ${line}` : line;
     renderList();
   }
   function showToast(message) {
-    const toast = document.getElementById("toast");
+    const toast = getElementById("toast");
     toast.textContent = message;
     toast.classList.add("visible");
     clearTimeout(toastTimer);

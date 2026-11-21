@@ -114,11 +114,11 @@ function migrateLegacySpellText(fields) {
 }
 
 function syncSpellListField() {
-  document.getElementById('sf-spell-list').value = JSON.stringify(editingSpells);
+  getElementById('sf-spell-list').value = JSON.stringify(editingSpells);
 }
 
 function renderSpellListEditor() {
-  const container = document.getElementById('spell-list');
+  const container = getElementById('spell-list');
   container.innerHTML = '';
   if (!editingSpells.length) {
     container.innerHTML = '<p class="sidebar-help">No spells added yet.</p>';
@@ -126,8 +126,8 @@ function renderSpellListEditor() {
     return;
   }
   const preparesSpells = characterRules.preparedSpellCount(
-    document.getElementById('sf-class').value,
-    document.getElementById('sf-level').value,
+    getElementById('sf-class').value,
+    getElementById('sf-level').value,
     10
   ) !== null;
   const byLevel = new Map();
@@ -210,32 +210,32 @@ function renderSpellListEditor() {
 }
 
 function populateSpellForm(spell: any = {}) {
-  const form = document.getElementById('spell-add-form');
+  const form = getElementById('spell-add-form');
   const normalized: any = normalizeSpell({ name: spell.name || ' ', ...spell }) || {};
   form.dataset.spellSource = normalized.source || '';
-  document.getElementById('spell-form-name').value = spell.name || '';
-  document.getElementById('spell-form-level').value = normalized.level ?? '0';
-  document.getElementById('spell-form-school').value = normalized.school || '';
-  document.getElementById('spell-form-range').value = normalized.range || '';
-  document.getElementById('spell-form-casting-time').value = normalized.castingTime || '';
-  document.getElementById('spell-form-duration').value = normalized.duration || '';
-  document.getElementById('spell-form-components').value = normalized.components || '';
-  document.getElementById('spell-form-attack').value = normalized.attack || '';
-  document.getElementById('spell-form-damage').value = normalized.damage || '';
-  document.getElementById('spell-form-effect').value = normalized.effect || '';
-  document.getElementById('spell-form-always-prepared').checked = !!normalized.alwaysPrepared;
+  getElementById('spell-form-name').value = spell.name || '';
+  getElementById('spell-form-level').value = normalized.level ?? '0';
+  getElementById('spell-form-school').value = normalized.school || '';
+  getElementById('spell-form-range').value = normalized.range || '';
+  getElementById('spell-form-casting-time').value = normalized.castingTime || '';
+  getElementById('spell-form-duration').value = normalized.duration || '';
+  getElementById('spell-form-components').value = normalized.components || '';
+  getElementById('spell-form-attack').value = normalized.attack || '';
+  getElementById('spell-form-damage').value = normalized.damage || '';
+  getElementById('spell-form-effect').value = normalized.effect || '';
+  getElementById('spell-form-always-prepared').checked = !!normalized.alwaysPrepared;
 }
 
 function openSpellForm(spell) {
-  const form = document.getElementById('spell-add-form');
+  const form = getElementById('spell-add-form');
   form.classList.remove('hidden');
   editingSpellId = spell ? spell.id : null;
-  document.getElementById('spell-preset-select').value = '';
+  getElementById('spell-preset-select').value = '';
   populateSpellForm(spell || {});
-  document.getElementById('spell-form-name').focus();
+  getElementById('spell-form-name').focus();
 }
 
-const spellPresetSelect = document.getElementById('spell-preset-select');
+const spellPresetSelect = getElementById('spell-preset-select');
 ['Humblewood', "Player's Handbook (2014)"].forEach(source => {
   const group = document.createElement('optgroup');
   group.label = source;
@@ -275,41 +275,41 @@ function addSpellNames(raw) {
     added += 1;
   });
   renderSpellListEditor();
-  document.getElementById('spell-bulk-list').value = '';
+  getElementById('spell-bulk-list').value = '';
   showToast(added ? `Added ${added} spell${added === 1 ? '' : 's'}.` : 'Those spells are already on the sheet.');
 }
 
-document.getElementById('spell-preset-load').onclick = () => {
+getElementById('spell-preset-load').onclick = () => {
   const preset = selectedSpellPreset();
   if (!preset) return showToast('Choose a spell preset first.');
   populateSpellForm(preset);
 };
-document.getElementById('spell-bulk-add').onclick = () => addSpellNames(document.getElementById('spell-bulk-list').value);
+getElementById('spell-bulk-add').onclick = () => addSpellNames(getElementById('spell-bulk-list').value);
 
-document.getElementById('spell-add-btn').onclick = () => openSpellForm(null);
-document.getElementById('spell-form-cancel').onclick = () => {
-  document.getElementById('spell-add-form').classList.add('hidden');
+getElementById('spell-add-btn').onclick = () => openSpellForm(null);
+getElementById('spell-form-cancel').onclick = () => {
+  getElementById('spell-add-form').classList.add('hidden');
   editingSpellId = null;
 };
-document.getElementById('spell-form-save').onclick = () => {
-  const name = document.getElementById('spell-form-name').value.trim();
+getElementById('spell-form-save').onclick = () => {
+  const name = getElementById('spell-form-name').value.trim();
   if (!name) return alert('Give the spell a name first.');
   const existing = editingSpells.find(entry => entry.id === editingSpellId);
   const spell = normalizeSpell({
     id: editingSpellId || `spell-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
     name,
-    level: document.getElementById('spell-form-level').value,
-    school: document.getElementById('spell-form-school').value,
-    range: document.getElementById('spell-form-range').value,
-    castingTime: document.getElementById('spell-form-casting-time').value,
-    duration: document.getElementById('spell-form-duration').value,
-    components: document.getElementById('spell-form-components').value,
-    attack: document.getElementById('spell-form-attack').value,
-    damage: document.getElementById('spell-form-damage').value,
-    effect: document.getElementById('spell-form-effect').value,
-    source: document.getElementById('spell-add-form').dataset.spellSource || '',
+    level: getElementById('spell-form-level').value,
+    school: getElementById('spell-form-school').value,
+    range: getElementById('spell-form-range').value,
+    castingTime: getElementById('spell-form-casting-time').value,
+    duration: getElementById('spell-form-duration').value,
+    components: getElementById('spell-form-components').value,
+    attack: getElementById('spell-form-attack').value,
+    damage: getElementById('spell-form-damage').value,
+    effect: getElementById('spell-form-effect').value,
+    source: getElementById('spell-add-form').dataset.spellSource || '',
     prepared: existing?.prepared,
-    alwaysPrepared: document.getElementById('spell-form-always-prepared').checked
+    alwaysPrepared: getElementById('spell-form-always-prepared').checked
   });
   if (editingSpellId) {
     const index = editingSpells.findIndex(entry => entry.id === editingSpellId);
@@ -318,12 +318,13 @@ document.getElementById('spell-form-save').onclick = () => {
     editingSpells.push(spell);
   }
   editingSpellId = null;
-  document.getElementById('spell-add-form').classList.add('hidden');
+  getElementById('spell-add-form').classList.add('hidden');
   renderSpellListEditor();
 };
 
-document.getElementById('sf-portrait').onchange = (event) => {
-  pendingPortraitFile = event.target.files[0] || null;
+getElementById('sf-portrait').onchange = (event) => {
+  const input = event.target instanceof HTMLInputElement ? event.target : null;
+  pendingPortraitFile = input?.files?.[0] || null;
   if (!pendingPortraitFile) return renderPortraitPreview(editingPortraitUrl);
   const reader = new FileReader();
   reader.onload = () => renderPortraitPreview(reader.result);
@@ -331,7 +332,7 @@ document.getElementById('sf-portrait').onchange = (event) => {
 };
 
 function renderPortraitPreview(url) {
-  const preview = document.getElementById('portrait-preview');
+  const preview = getElementById('portrait-preview');
   preview.innerHTML = '';
   if (!url) {
     preview.textContent = '🍃';
@@ -345,15 +346,15 @@ function renderPortraitPreview(url) {
 
 function collectCharacterFields() {
   const fields: any = {};
-  document.querySelectorAll('#sheet-form [id^="sf-"]').forEach(input => {
-    if (input.type === 'file') return;
+  document.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>('#sheet-form [id^="sf-"]').forEach(input => {
+    if (input instanceof HTMLInputElement && input.type === 'file') return;
     const key = input.id.slice(3);
-    fields[key] = input.type === 'checkbox' ? input.checked : input.value;
+    fields[key] = input instanceof HTMLInputElement && input.type === 'checkbox' ? input.checked : input.value;
   });
   return fields;
 }
 
-document.getElementById('save-sheet-btn').onclick = async () => {
+getElementById('save-sheet-btn').onclick = async () => {
   if (!editingCanEdit) return;
   refreshCharacterCalculations(false);
   let fields = collectCharacterFields();
@@ -367,7 +368,7 @@ document.getElementById('save-sheet-btn').onclick = async () => {
     characterRules.applyPlayerCharacterConstraints(constrainedCharacter);
     fields = constrainedCharacter.fields;
   }
-  const saveButton = document.getElementById('save-sheet-btn');
+  const saveButton = getElementById('save-sheet-btn');
   saveButton.disabled = true;
   saveButton.textContent = 'Saving…';
   try {
@@ -449,21 +450,21 @@ document.getElementById('save-sheet-btn').onclick = async () => {
       sheet: {
         ...sheet,
         portraitUrl: editingPortraitUrl,
-        challenge: document.getElementById('sheet-form').dataset.npcChallenge || existing?.sheet?.challenge || '',
+        challenge: getElementById('sheet-form').dataset.npcChallenge || existing?.sheet?.challenge || '',
         spells: editingSpells.map(spell => ({ ...spell }))
       }
     };
     socket.emit(existing ? 'npc:update' : 'npc:create', npcPayload);
   } else {
     socket.emit('character:save', sheet);
-    document.getElementById('sheet-editor').classList.add('hidden');
+    getElementById('sheet-editor').classList.add('hidden');
   }
   saveButton.disabled = false;
   saveButton.textContent = isNpc ? 'Save NPC' : 'Save character';
   if (!isNpc) showToast(`${name} saved.`);
 };
 
-document.getElementById('delete-sheet-btn').onclick = () => {
+getElementById('delete-sheet-btn').onclick = () => {
   if (editingNpcSheetId) {
     if (editingNpcSheetId !== '__new__' && confirm(`Delete ${state.npcs?.[editingNpcSheetId]?.name || 'this NPC'}?`)) {
       socket.emit('npc:delete', { id: editingNpcSheetId });
@@ -471,7 +472,7 @@ document.getElementById('delete-sheet-btn').onclick = () => {
       return;
     }
     editingNpcSheetId = null;
-    document.getElementById('sheet-editor').classList.add('hidden');
+    getElementById('sheet-editor').classList.add('hidden');
     return;
   }
   if (editingOriginalName && confirm(`Delete ${editingOriginalName}?`)) {
@@ -479,7 +480,7 @@ document.getElementById('delete-sheet-btn').onclick = () => {
   } else if (editingOriginalName) {
     return;
   }
-  document.getElementById('sheet-editor').classList.add('hidden');
+  getElementById('sheet-editor').classList.add('hidden');
 };
 
 function abilityModifier(score) {
@@ -491,36 +492,36 @@ function proficiencyBonus(level) {
 }
 
 function updateSpellSlotsForLevel() {
-  const className = document.getElementById('sf-class').value;
-  const subclass = document.getElementById('sf-subclass').value;
-  const level = document.getElementById('sf-level').value;
+  const className = getElementById('sf-class').value;
+  const subclass = getElementById('sf-subclass').value;
+  const level = getElementById('sf-level').value;
   const slots = characterRules.spellSlotsFor(className, subclass, level);
   for (let spellLevel = 1; spellLevel <= 9; spellLevel += 1) {
     const maximum = slots[spellLevel - 1] || 0;
-    const maximumInput = document.getElementById(`sf-spell-slots-${spellLevel}`);
-    const usedInput = document.getElementById(`sf-spell-used-${spellLevel}`);
-    maximumInput.value = maximum;
-    usedInput.value = Math.min(maximum, Math.max(0, Number(usedInput.value) || 0));
+    const maximumInput = getElementById(`sf-spell-slots-${spellLevel}`);
+    const usedInput = getElementById(`sf-spell-used-${spellLevel}`);
+    maximumInput.value = String(maximum);
+    usedInput.value = String(Math.min(maximum, Math.max(0, Number(usedInput.value) || 0)));
   }
 }
 
 function refreshArmorClass() {
-  const methodInput = document.getElementById('sf-ac-method');
-  const armorClassInput = document.getElementById('sf-ac');
-  const baseInput = document.getElementById('sf-ac-base');
+  const methodInput = getElementById('sf-ac-method');
+  const armorClassInput = getElementById('sf-ac');
+  const baseInput = getElementById('sf-ac-base');
   const method = methodInput.value;
   const calculated = characterRules.armorClass({
     method,
     base: baseInput.value,
-    bonus: document.getElementById('sf-ac-bonus').value,
-    dex: document.getElementById('sf-dex').value,
-    con: document.getElementById('sf-con').value,
-    wis: document.getElementById('sf-wis').value
+    bonus: getElementById('sf-ac-bonus').value,
+    dex: getElementById('sf-dex').value,
+    con: getElementById('sf-con').value,
+    wis: getElementById('sf-wis').value
   });
   const automatic = calculated !== null;
   armorClassInput.readOnly = automatic;
   baseInput.readOnly = !['light', 'medium', 'heavy'].includes(method);
-  if (automatic) armorClassInput.value = calculated;
+  if (automatic) armorClassInput.value = String(calculated);
 
   const notes = {
     manual: 'Manual AC remains unchanged.',
@@ -533,72 +534,72 @@ function refreshArmorClass() {
     hedge: '14 + Dexterity modifier + the shield/other bonus. Hedges cannot wear armor.',
     'hedge-curled': '19 + the shield/other bonus while curled up; Dexterity does not apply.'
   };
-  document.getElementById('ac-calculation-note').textContent = notes[method] || notes.manual;
+  getElementById('ac-calculation-note').textContent = notes[method] || notes.manual;
 }
 
 function refreshCharacterCalculations(force, recalculateSpell = false) {
-  const level = document.getElementById('sf-level');
+  const level = getElementById('sf-level');
   const bonus = proficiencyBonus(level.value);
-  document.getElementById('sf-prof-bonus').value = bonus;
+  getElementById('sf-prof-bonus').value = String(bonus);
   ABILITIES.forEach(ability => {
-    const modifier = abilityModifier(document.getElementById(`sf-${ability}`).value);
-    document.getElementById(`mod-${ability}`).textContent = signed(modifier);
-    const saveInput = document.getElementById(`sf-save-${ability}`);
-    const saveValue = modifier + (document.getElementById(`sf-save-${ability}-prof`).checked ? bonus : 0);
-    if (force || saveInput.value === '') saveInput.value = saveValue;
+    const modifier = abilityModifier(getElementById(`sf-${ability}`).value);
+    getElementById(`mod-${ability}`).textContent = signed(modifier);
+    const saveInput = getElementById(`sf-save-${ability}`);
+    const saveValue = modifier + (getElementById(`sf-save-${ability}-prof`).checked ? bonus : 0);
+    if (force || saveInput.value === '') saveInput.value = String(saveValue);
   });
   Object.entries(SKILL_ABILITIES).forEach(([skill, ability]) => {
-    const input = document.getElementById(`sf-skill-${skill}`);
-    const value = abilityModifier(document.getElementById(`sf-${ability}`).value) +
-      (document.getElementById(`sf-skill-${skill}-prof`).checked ? bonus : 0);
-    if (force || input.value === '') input.value = value;
+    const input = getElementById(`sf-skill-${skill}`);
+    const value = abilityModifier(getElementById(`sf-${ability}`).value) +
+      (getElementById(`sf-skill-${skill}-prof`).checked ? bonus : 0);
+    if (force || input.value === '') input.value = String(value);
   });
-  const initiativeInput = document.getElementById('sf-initiative');
+  const initiativeInput = getElementById('sf-initiative');
   if (!initiativeManuallyEdited && (force || initiativeInput.value === '')) {
-    initiativeInput.value = abilityModifier(document.getElementById('sf-dex').value);
+    initiativeInput.value = String(abilityModifier(getElementById('sf-dex').value));
   }
-  const passive = document.getElementById('sf-passive-perception');
-  if (force || passive.value === '') passive.value = 10 + Number(document.getElementById('sf-skill-perception').value || 0);
-  const spellAbility = document.getElementById('sf-spell-ability').value.toLowerCase();
+  const passive = getElementById('sf-passive-perception');
+  if (force || passive.value === '') passive.value = String(10 + Number(getElementById('sf-skill-perception').value || 0));
+  const spellAbility = getElementById('sf-spell-ability').value.toLowerCase();
   if (ABILITIES.includes(spellAbility)) {
     const calculated = characterRules.spellcastingValues(
-      document.getElementById(`sf-${spellAbility}`).value,
+      getElementById(`sf-${spellAbility}`).value,
       level.value
     );
-    const spellDc = document.getElementById('sf-spell-dc');
-    const spellAttack = document.getElementById('sf-spell-attack');
-    if (recalculateSpell || spellDc.value === '') spellDc.value = calculated.saveDc;
-    if (recalculateSpell || spellAttack.value === '') spellAttack.value = calculated.attackBonus;
+    const spellDc = getElementById('sf-spell-dc');
+    const spellAttack = getElementById('sf-spell-attack');
+    if (recalculateSpell || spellDc.value === '') spellDc.value = String(calculated.saveDc);
+    if (recalculateSpell || spellAttack.value === '') spellAttack.value = String(calculated.attackBonus);
   }
-  const className = document.getElementById('sf-class').value;
-  const subclass = document.getElementById('sf-subclass').value;
+  const className = getElementById('sf-class').value;
+  const subclass = getElementById('sf-subclass').value;
   const preparedAbility = characterRules.spellcastingAbilityFor(className, subclass) || spellAbility;
   const prepared = characterRules.preparedSpellCount(
     className,
     level.value,
-    ABILITIES.includes(preparedAbility) ? document.getElementById(`sf-${preparedAbility}`).value : 10
+    ABILITIES.includes(preparedAbility) ? getElementById(`sf-${preparedAbility}`).value : 10
   );
-  document.getElementById('sf-spells-prepared').value = prepared === null ? '' : prepared;
+  getElementById('sf-spells-prepared').value = prepared === null ? '' : String(prepared);
   refreshArmorClass();
 }
 
-ABILITIES.forEach(ability => document.getElementById(`sf-${ability}`).addEventListener('input', () => {
-  const spellAbility = document.getElementById('sf-spell-ability').value.toLowerCase();
+ABILITIES.forEach(ability => getElementById(`sf-${ability}`).addEventListener('input', () => {
+  const spellAbility = getElementById('sf-spell-ability').value.toLowerCase();
   if (ability === 'con') refreshNewCharacterHitPoints();
   refreshCharacterCalculations(true, ability === spellAbility);
 }));
-document.getElementById('sf-level').addEventListener('input', () => {
+getElementById('sf-level').addEventListener('input', () => {
   refreshCharacterCalculations(true, true);
   syncAutomaticClassFeatures(true);
   renderSpellListEditor();
 });
-document.getElementById('sf-initiative').addEventListener('input', () => { initiativeManuallyEdited = true; });
-ABILITIES.forEach(ability => document.getElementById(`sf-save-${ability}-prof`).addEventListener('change', () => refreshCharacterCalculations(true)));
-Object.keys(SKILL_ABILITIES).forEach(skill => document.getElementById(`sf-skill-${skill}-prof`).addEventListener('change', () => refreshCharacterCalculations(true)));
-document.getElementById('sf-spell-ability').addEventListener('change', () => refreshCharacterCalculations(false, true));
-document.getElementById('sf-ac-method').addEventListener('change', () => {
+getElementById('sf-initiative').addEventListener('input', () => { initiativeManuallyEdited = true; });
+ABILITIES.forEach(ability => getElementById(`sf-save-${ability}-prof`).addEventListener('change', () => refreshCharacterCalculations(true)));
+Object.keys(SKILL_ABILITIES).forEach(skill => getElementById(`sf-skill-${skill}-prof`).addEventListener('change', () => refreshCharacterCalculations(true)));
+getElementById('sf-spell-ability').addEventListener('change', () => refreshCharacterCalculations(false, true));
+getElementById('sf-ac-method').addEventListener('change', () => {
   acMethodManuallySelected = true;
   refreshArmorClass();
 });
-document.getElementById('sf-ac-base').addEventListener('input', refreshArmorClass);
-document.getElementById('sf-ac-bonus').addEventListener('input', refreshArmorClass);
+getElementById('sf-ac-base').addEventListener('input', refreshArmorClass);
+getElementById('sf-ac-bonus').addEventListener('input', refreshArmorClass);

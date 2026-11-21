@@ -203,7 +203,7 @@ function renderLibrary() {
         </div>`;
       card.querySelector('.library-file-name').textContent = file.name;
       card.querySelector('.library-file-meta').textContent = `${String(file.kind || 'file').toUpperCase()} · ${libraryFileSize(file.size)} · ${libraryFolderName(file.folderId, library.folders)}`;
-      const folderSelect = card.querySelector('.library-file-folder');
+      const folderSelect = card.querySelector<HTMLSelectElement>('.library-file-folder');
       folderSelect.innerHTML = '<option value="">Unfiled</option>';
       folderOptions.forEach(({ folder, depth }) => {
         const option = document.createElement('option');
@@ -213,15 +213,15 @@ function renderLibrary() {
       });
       folderSelect.value = file.folderId || '';
       folderSelect.onchange = () => socket.emit('library:file:move', { id: file.id, folderId: folderSelect.value });
-      card.querySelector('.library-share-btn').onclick = () => {
+      card.querySelector<HTMLButtonElement>('.library-share-btn').onclick = () => {
         const duration = Number(getRequiredInput('library-broadcast-duration').value) || 0;
         socket.emit('library:broadcast', { fileId: file.id, duration });
       };
-      card.querySelector('.library-rename-btn').onclick = () => {
+      card.querySelector<HTMLButtonElement>('.library-rename-btn').onclick = () => {
         const name = prompt('File name', file.name);
         if (name?.trim()) socket.emit('library:file:rename', { id: file.id, name: name.trim() });
       };
-      card.querySelector('.library-delete-btn').onclick = () => {
+      card.querySelector<HTMLButtonElement>('.library-delete-btn').onclick = () => {
         if (confirm(`Delete “${file.name}” from the library?`)) socket.emit('library:file:delete', { id: file.id });
       };
       fileList.appendChild(card);
@@ -362,11 +362,11 @@ document.addEventListener('click', event => {
 });
 
 function activeShopFrame() {
-  return document.querySelector('#shared-handout-content iframe[data-shop-handout="true"]');
+  return document.querySelector<HTMLIFrameElement>('#shared-handout-content iframe[data-shop-handout="true"]');
 }
 
 function activePuzzleFrame() {
-  return document.querySelector('#shared-handout-content iframe[data-puzzle-handout="true"]');
+  return document.querySelector<HTMLIFrameElement>('#shared-handout-content iframe[data-puzzle-handout="true"]');
 }
 
 function postShopMessage(message, frame = activeShopFrame()) {

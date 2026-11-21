@@ -4,7 +4,7 @@ let isErasing = false;
 let currentPath = null;
 let lastErasePoint = null;
 let doodleTouchId = null;
-const doodleCanvas = document.getElementById('doodle-canvas');
+const doodleCanvas = getElementById('doodle-canvas');
 const doodleCtx = doodleCanvas.getContext('2d');
 
 doodleCanvas.onmousedown = (event) => {
@@ -61,7 +61,7 @@ function startDoodle(point) {
   isDrawing = true;
   currentPath = {
     id: 'd' + Date.now(),
-    color: document.getElementById('doodle-color').value,
+    color: getElementById('doodle-color').value,
     width: 3,
     points: [point]
   };

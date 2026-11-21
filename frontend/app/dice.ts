@@ -12,8 +12,8 @@ getRequiredButton('dm-private-roll-toggle').onclick = () => {
 
 function renderDmPrivateRollMode() {
   const active = myRole === 'dm' && dmPrivateRollsEnabled;
-  const toggle = document.getElementById('dm-private-roll-toggle');
-  const banner = document.getElementById('dm-private-roll-banner');
+  const toggle = getElementById('dm-private-roll-toggle');
+  const banner = getElementById('dm-private-roll-banner');
   const panel = document.querySelector('.dice-panel');
   if (toggle) {
     toggle.classList.toggle('active', active);
@@ -26,17 +26,17 @@ function renderDmPrivateRollMode() {
 
 function privateDiceRollActive() {
   return myRole === 'dm' && dmPrivateRollsEnabled &&
-    document.getElementById('view-dice')?.classList.contains('active');
+    getElementById('view-dice')?.classList.contains('active');
 }
 
 function setPendingDiceRollMode(mode = 'normal') {
   pendingDiceRollMode = ['advantage', 'disadvantage'].includes(mode) ? mode : 'normal';
-  document.querySelectorAll('.dice-roll-mode-btn').forEach(button => {
+  document.querySelectorAll<HTMLButtonElement>('.dice-roll-mode-btn').forEach(button => {
     const active = button.dataset.mode === pendingDiceRollMode;
     button.classList.toggle('active', active);
     button.setAttribute('aria-pressed', String(active));
   });
-  const hint = document.getElementById('dice-roll-mode-hint');
+  const hint = getElementById('dice-roll-mode-hint');
   if (hint) {
     hint.textContent = pendingDiceRollMode === 'normal'
       ? ''
@@ -50,7 +50,7 @@ function consumePendingDiceRollMode() {
   return mode;
 }
 
-document.querySelectorAll('.dice-roll-mode-btn').forEach(button => {
+document.querySelectorAll<HTMLButtonElement>('.dice-roll-mode-btn').forEach(button => {
   button.onclick = () => {
     const requested = button.dataset.mode;
     setPendingDiceRollMode(pendingDiceRollMode === requested ? 'normal' : requested);
@@ -64,7 +64,7 @@ function rollDiceFromDiceScreen(count, sides, modifier, options: any = {}) {
   });
 }
 
-document.querySelectorAll('.die-btn').forEach(btn => {
+document.querySelectorAll<HTMLButtonElement>('.die-btn').forEach(btn => {
   btn.onclick = () => rollDiceFromDiceScreen(1, Number(btn.dataset.sides), 0, { label: `Quick d${btn.dataset.sides}` });
 });
 getRequiredButton('roll-custom-btn').onclick = () => {
@@ -136,7 +136,7 @@ function rollBreakdownText(entry) {
 }
 
 function renderRollLog() {
-  const log = document.getElementById('roll-log');
+  const log = getElementById('roll-log');
   if (!log) return;
   log.innerHTML = '';
   const entries = [
@@ -179,12 +179,12 @@ function rollableCharacters() {
 function openCharacterRoller(name) {
   switchView('dice');
   refreshCharacterRoller(name);
-  document.getElementById('character-roller-title').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  getElementById('character-roller-title').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function refreshCharacterRoller(preferredName = '') {
   if (!state) return;
-  const select = document.getElementById('dice-character');
+  const select = getElementById('dice-character');
   const characters = rollableCharacters();
   const npcs = myRole === 'dm'
     ? Object.values(state.npcs || {}).sort((a, b) => a.name.localeCompare(b.name))
@@ -222,9 +222,9 @@ function refreshCharacterRoller(preferredName = '') {
 }
 
 function renderCharacterRollOptions() {
-  const container = document.getElementById('character-roll-options');
+  const container = getElementById('character-roll-options');
   container.innerHTML = '';
-  const selected = document.getElementById('dice-character').value;
+  const selected = getElementById('dice-character').value;
   if (myRole === 'dm' && selected.startsWith('npc:')) {
     const npc = state?.npcs?.[selected.slice(4)];
     if (npc) return renderNpcRollOptions(container, npc);

@@ -1,5 +1,5 @@
 /** Shared player doodle corner canvas. */
-const doodleCornerCanvas = document.getElementById('doodle-corner-canvas') as HTMLCanvasElement;
+const doodleCornerCanvas = getElementById('doodle-corner-canvas') as HTMLCanvasElement;
 const doodleCornerContext = doodleCornerCanvas.getContext('2d');
 let doodleCornerDrawing = false;
 let doodleCornerPath: any = null;
@@ -9,11 +9,11 @@ let doodleCornerOpen = false;
 let doodleCornerTool = 'draw';
 let doodleCornerDrag: any = null;
 
-const doodleCornerPanel = document.getElementById('doodle-corner');
-const doodleCornerToggle = document.getElementById('doodle-corner-toggle');
-const doodleCornerDragHandle = document.getElementById('doodle-corner-drag-handle');
-const doodleCornerDrawButton = document.getElementById('doodle-corner-draw-btn');
-const doodleCornerEraserButton = document.getElementById('doodle-corner-eraser-btn');
+const doodleCornerPanel = getElementById('doodle-corner');
+const doodleCornerToggle = getElementById('doodle-corner-toggle');
+const doodleCornerDragHandle = getElementById('doodle-corner-drag-handle');
+const doodleCornerDrawButton = getElementById('doodle-corner-draw-btn');
+const doodleCornerEraserButton = getElementById('doodle-corner-eraser-btn');
 
 function setDoodleCornerOpen(open) {
   doodleCornerOpen = !!open;
@@ -23,7 +23,7 @@ function setDoodleCornerOpen(open) {
 }
 
 function resetDoodleCornerPosition() {
-  const mapStageWrap = document.getElementById('map-stage-wrap');
+  const mapStageWrap = getElementById('map-stage-wrap');
   if (!mapStageWrap) return;
 
   doodleCornerPanel.style.position = 'fixed';
@@ -103,7 +103,7 @@ doodleCornerCanvas.onpointerdown = event => {
   doodleCornerDrawing = true;
   doodleCornerCanvas.setPointerCapture(event.pointerId);
   doodleCornerPath = {
-    color: document.getElementById('doodle-corner-color').value,
+    color: getElementById('doodle-corner-color').value,
     width: 3,
     points: [doodleCornerPoint(event)]
   };
@@ -145,8 +145,8 @@ doodleCornerCanvas.onpointercancel = finishDoodleCorner;
 doodleCornerDrawButton.onclick = () => setDoodleCornerTool('draw');
 doodleCornerEraserButton.onclick = () => setDoodleCornerTool('eraser');
 doodleCornerToggle.onclick = () => setDoodleCornerOpen(!doodleCornerOpen);
-document.getElementById('doodle-corner-undo-btn').onclick = () => socket.emit('scene:doodleCorner:undo');
-document.getElementById('doodle-corner-clear-btn').onclick = () => socket.emit('scene:doodleCorner:clear');
+getElementById('doodle-corner-undo-btn').onclick = () => socket.emit('scene:doodleCorner:undo');
+getElementById('doodle-corner-clear-btn').onclick = () => socket.emit('scene:doodleCorner:clear');
 
 doodleCornerDragHandle.onpointerdown = event => {
   if (event.target.closest('button, input')) return;

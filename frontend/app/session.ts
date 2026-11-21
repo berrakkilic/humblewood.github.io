@@ -184,8 +184,8 @@ function renderRoute(viewName, route) {
     router.navigate('map');
     return;
   }
-  document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.view === viewName));
-  document.querySelectorAll('.tab-btn').forEach(btn => {
+  document.querySelectorAll<HTMLButtonElement>('.tab-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.view === viewName));
+  document.querySelectorAll<HTMLButtonElement>('.tab-btn').forEach(btn => {
     if (btn.dataset.view === viewName) btn.setAttribute('aria-current', 'page');
     else btn.removeAttribute('aria-current');
   });
@@ -348,7 +348,7 @@ socket.on('npc:saved', ({ id, name }) => {
   resetNpcEditor();
   if (editingNpcSheetId === id || (editingNpcSheetId === '__new__' && state.npcs?.[id])) {
     editingNpcSheetId = null;
-    document.getElementById('sheet-editor').classList.add('hidden');
+    getElementById('sheet-editor').classList.add('hidden');
   }
   showToast(`Saved ${name}.`);
 });
@@ -356,7 +356,7 @@ socket.on('npc:deleted', ({ id, name }) => {
   if (editingNpcId === id) resetNpcEditor();
   if (editingNpcSheetId === id) {
     editingNpcSheetId = null;
-    document.getElementById('sheet-editor').classList.add('hidden');
+    getElementById('sheet-editor').classList.add('hidden');
   }
   showToast(`Deleted ${name}.`);
 });

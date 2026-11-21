@@ -156,7 +156,7 @@ function renderMapTokens() {
         else openNpcCombatManager(t.id);
       }
     };
-    el.querySelectorAll('.token-controls button').forEach(button => {
+    el.querySelectorAll<HTMLButtonElement>('.token-controls button').forEach(button => {
       button.onmousedown = (e) => e.stopPropagation();
       button.ontouchstart = (e) => e.stopPropagation();
       button.onclick = (e) => {
@@ -341,7 +341,7 @@ function setTool(tool) {
   selectedTool = tool;
   if ((previousTool === 'doodle' || previousTool === 'eraser') && tool !== previousTool) cancelDoodle();
   ['move', 'pan', 'grid-move', 'ruler', 'ping', 'doodle', 'eraser', 'fog-reveal', 'fog-hide'].forEach(name => {
-    document.getElementById(`tool-${name}`)?.classList.toggle('active', tool === name);
+    getElementById(`tool-${name}`)?.classList.toggle('active', tool === name);
   });
   const stage = getRequiredElement<HTMLElement>('#map-stage');
   stage.classList.toggle('doodling', tool === 'doodle' || tool === 'eraser'); stage.classList.toggle('erasing', tool === 'eraser');

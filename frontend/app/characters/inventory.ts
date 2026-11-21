@@ -91,7 +91,7 @@ function featureResetLabel(reset) {
 }
 
 function renderFeatureUsageEditor() {
-  const container = document.getElementById('feature-usage-editor');
+  const container = getElementById('feature-usage-editor');
   if (!container) return;
   container.innerHTML = '';
   editingFeatureUses.forEach(feature => {
@@ -235,7 +235,7 @@ function inventoryEffectiveLocation(item) {
 }
 
 function renderInventoryContainerOptions() {
-  const select = document.getElementById('inv-item-container');
+  const select = getElementById('inv-item-container');
   if (!select) return;
   const selected = select.value;
   select.innerHTML = '<option value="">No container</option>';
@@ -532,7 +532,7 @@ function renderInventoryItem(item) {
 }
 
 function renderInventoryEditor() {
-  const list = document.getElementById('inventory-list');
+  const list = getElementById('inventory-list');
   if (!list) return;
   list.innerHTML = '';
   renderInventoryContainerOptions();
@@ -580,15 +580,15 @@ function renderInventoryEditor() {
   });
 }
 
-document.getElementById('inv-add-btn').onclick = () => {
-  const nameInput = document.getElementById('inv-item-name');
-  const qtyInput = document.getElementById('inv-item-qty');
-  const locationInput = document.getElementById('inv-item-location');
-  const containerInput = document.getElementById('inv-item-container');
-  const containerFlag = document.getElementById('inv-item-is-container');
-  const descriptionInput = document.getElementById('inv-item-description');
-  const usageMaxInput = document.getElementById('inv-item-usage-max');
-  const usageResetInput = document.getElementById('inv-item-usage-reset');
+getElementById('inv-add-btn').onclick = () => {
+  const nameInput = getElementById('inv-item-name');
+  const qtyInput = getElementById('inv-item-qty');
+  const locationInput = getElementById('inv-item-location');
+  const containerInput = getElementById('inv-item-container');
+  const containerFlag = getElementById('inv-item-is-container');
+  const descriptionInput = getElementById('inv-item-description');
+  const usageMaxInput = getElementById('inv-item-usage-max');
+  const usageResetInput = getElementById('inv-item-usage-reset');
   const name = nameInput.value.trim();
   if (!name) return;
   const parent = editingInventory.find(item => item.id === containerInput.value && item.isContainer);
@@ -608,11 +608,11 @@ document.getElementById('inv-add-btn').onclick = () => {
   editingInventory.push(item);
   if (parent) inventoryExpandedContainers.add(parent.id);
   nameInput.value = '';
-  qtyInput.value = 1;
+  qtyInput.value = '1';
   containerInput.value = '';
   containerFlag.checked = false;
   descriptionInput.value = '';
-  usageMaxInput.value = 0;
+  usageMaxInput.value = '0';
   usageResetInput.value = 'long-rest';
   renderInventoryEditor();
 };
