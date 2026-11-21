@@ -38,6 +38,12 @@ assert.doesNotMatch(indexHtml, /external audio URL/i, 'The UI must not encourage
 assert.doesNotMatch(librarySource, /postMessage\([^;]*,\s*['"]\*['"]\)/s, 'Local handout messaging must not target every origin.');
 assert.doesNotMatch(handoutSources, /postMessage\([^;]*,\s*['"]\*['"]\)/s, 'Handout messaging must not target every origin.');
 assert.doesNotMatch(shopSource, /postMessage\([^;]*,\s*['"]\*['"]\)/s, 'Shop messaging must not target every origin.');
+for (const typeName of ['SocketInitiativeState', 'SocketLibraryState', 'SocketNotification', 'SocketRollEntry', 'SocketShopPurchaseResult']) {
+  assert.match(frontendTypesSource, new RegExp(`interface ${typeName}\\b`), `${typeName} should have a focused Socket.IO payload type.`);
+}
+for (const eventType of ["'initiative:update': [SocketInitiativeState]", "'library:update': [SocketLibraryState]", "'notifications:update': [SocketNotification[]]", "'roll:made': [SocketRollEntry]"]) {
+  assert.match(frontendTypesSource, new RegExp(eventType.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')), `${eventType} should use its focused payload type.`);
+}
 assert.strictEqual((bootstrap.match(/socket\.connect\(\)/g) || []).length, 1, 'Bootstrap should connect its socket exactly once.');
 assert.ok(bundle.lastIndexOf('socket.connect()') > bundle.lastIndexOf('initializeAttackPresetControls()'), 'The initial socket connection must remain after feature initialization.');
 assert.ok(bundle.lastIndexOf('socket.connect()') > bundle.lastIndexOf('initializeReactionPresetControls()'), 'Reaction presets must initialize before the socket connects.');

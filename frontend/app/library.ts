@@ -59,7 +59,7 @@ getRequiredButton('delete-scene-btn').onclick = () => {
 
 // ---- DM library and shared handouts ----
 function libraryData() {
-  const library = state?.library || {};
+  const library = state?.library || { folders: [], files: [], broadcast: null };
   return {
     folders: Array.isArray(library.folders) ? library.folders : [],
     files: Array.isArray(library.files) ? library.files : [],

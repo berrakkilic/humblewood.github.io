@@ -556,6 +556,91 @@ interface JukeboxTrack extends LegacyRecord {
   source?: string;
 }
 
+interface SocketInitiativeEntry {
+  id: string;
+  name: string;
+  value: number;
+  tokenId: string | null;
+}
+
+interface SocketInitiativeState {
+  entries: SocketInitiativeEntry[];
+  round: number;
+  currentIndex: number;
+}
+
+interface SocketLibraryFolder {
+  id: string;
+  name: string;
+  parentId: string | null;
+}
+
+interface SocketLibraryFile extends SocketLibraryFilePayload {
+  id: string;
+  name: string;
+  kind: string;
+  url: string;
+  folderId: string | null;
+}
+
+interface SocketLibraryBroadcast {
+  fileId: string;
+  name: string;
+  kind: string;
+  url: string;
+  expiresAt: number;
+  startedAt?: number;
+}
+
+interface SocketLibraryState {
+  folders: SocketLibraryFolder[];
+  files: SocketLibraryFile[];
+  broadcast: SocketLibraryBroadcast | null;
+}
+
+interface SocketNotification {
+  id: string;
+  type: 'question' | 'safety';
+  createdAt: number;
+  read: boolean;
+  anonymous: boolean;
+  senderName: string | null;
+  question: string;
+}
+
+interface SocketRollEntry {
+  id: string;
+  name: string;
+  characterName: string | null;
+  npcId: string | null;
+  label: string;
+  expression: string;
+  count: number;
+  sides: number;
+  rolls: number[];
+  rollSets: number[][];
+  rollSetTotals: number[];
+  keptRolls: number[] | null;
+  keptSetIndex: number | null;
+  kept: number | null;
+  mode: 'normal' | 'advantage' | 'disadvantage';
+  modifier: number;
+  total: number;
+  targetDc?: number;
+  success?: boolean;
+  private?: boolean;
+  ts: number;
+}
+
+interface SocketShopPurchaseResult {
+  requestId: string;
+  itemId: string;
+  ok: boolean;
+  message: string;
+  characterName?: string;
+  stock?: number | null;
+}
+
 interface RoomState extends LegacyRecord {
   scene: RoomScene;
   tokens: RoomToken[];
@@ -563,10 +648,10 @@ interface RoomState extends LegacyRecord {
   npcs: Record<string, RoomNpc>;
   savedScenes: LegacyRecord[] | Record<string, LegacyRecord>;
   jukebox: LegacyRecord & { playlist: JukeboxTrack[]; currentIndex: number };
-  library: LegacyRecord;
-  notifications: LegacyRecord[];
-  rollLog: LegacyRecord[];
-  initiative: LegacyRecord;
+  library: SocketLibraryState;
+  notifications: SocketNotification[];
+  rollLog: SocketRollEntry[];
+  initiative: SocketInitiativeState;
 }
 
 interface OnlineUser extends LegacyRecord {
@@ -641,14 +726,14 @@ type FrontendSocketEvents = {
   'token:update': [RoomToken];
   'token:move': [{ id: string; x: number; y: number }];
   'token:remove': [{ id: string }];
-  'library:update': [LegacyRecord];
-  'library:broadcast': [LegacyRecord | null];
+  'library:update': [SocketLibraryState];
+  'library:broadcast': [SocketLibraryBroadcast | null];
   'jukebox:update': [RoomState['jukebox']];
-  'initiative:update': [LegacyRecord];
+  'initiative:update': [SocketInitiativeState];
   'presence:list': [OnlineUser[]];
-  'accounts:update': [LegacyRecord[]];
-  'roll:made': [LegacyRecord];
-  'roll:private': [LegacyRecord];
+  'accounts:update': [{ username: string; displayName: string; createdAt: number }[]];
+  'roll:made': [SocketRollEntry];
+  'roll:private': [SocketRollEntry];
   'action:denied': [{ message?: string }];
   'connect': [];
   'disconnect': [];
@@ -666,7 +751,7 @@ type FrontendSocketEvents = {
   'session:result': [{ ok: boolean; message?: string }];
   'scene:dirty': [{ dirty: boolean }];
   'scene:fog:update': [{ enabled: boolean; shapes: LegacyRecord[] }];
-  'scenes:update': [LegacyRecord[]];
+  'scenes:update': [Record<string, unknown>[]];
   'scene:active': [{ name?: string | null }];
   'scene:saved': [{ name: string }];
   'scene:loaded': [{ name: string }];
@@ -679,17 +764,17 @@ type FrontendSocketEvents = {
   'npc:deleted': [{ id: string; name: string }];
   'token:exists': [RoomToken];
   'concentration:required': [{ name: string; damage: number; dc: number }];
-  'shop:stock:update': [LegacyRecord];
-  'shop:purchase:result': [LegacyRecord];
+  'shop:stock:update': [Record<string, number>];
+  'shop:purchase:result': [SocketShopPurchaseResult];
   'presence': [{ role: 'dm' | 'player'; name: string; connected: boolean }];
   'pointer:move': [SocketPoint & { id: string; name?: string }];
   'pointer:hide': [{ id: string }];
   'pointer:ping': [SocketPoint & { id: string; name?: string }];
   'safety:submitted': [{ cooldown?: boolean; breakMinutes?: number }];
   'question:submitted': [];
-  'notifications:update': [LegacyRecord[]];
+  'notifications:update': [SocketNotification[]];
   'account:passwordReset': [{ username: string }];
-  'puzzle:update': [LegacyRecord];
+  'puzzle:update': [{ fileId: string; state: Record<string, unknown> | null; updatedAt: number }];
   'scene:doodle:add': [SocketDoodlePath];
   'scene:doodle:clear': [];
   'scene:doodle:redrawAll': [SocketDoodlePath[]];
@@ -731,13 +816,13 @@ type FrontendSocketEmitEvents = {
   'token:combat:update': [{ id: string; action: string; [key: string]: unknown }];
   'npc:place': [{ id: string }];
   'npc:delete': [{ id: string }];
-  'character:save': [LegacyRecord];
+  'character:save': [Record<string, unknown>];
   'character:remove': [{ name: string }];
   'character:claim': [{ name: string }];
   'character:ownership:release': [{ name: string }];
   'character:combat:update': [{ name: string; action: string; [key: string]: unknown }];
-  'npc:create': [LegacyRecord];
-  'npc:update': [LegacyRecord];
+  'npc:create': [Record<string, unknown>];
+  'npc:update': [Record<string, unknown>];
   'initiative:add': [{ name: string; value: number; tokenId: string | null }];
   'initiative:edit': [{ id: string; value: number }];
   'initiative:remove': [{ id: string }];
@@ -764,8 +849,8 @@ type FrontendSocketEmitEvents = {
   'safety:request': [];
   'question:submit': [{ question: string; anonymous: boolean }];
   'puzzle:request': [];
-  'puzzle:update': [{ fileId: string; state: LegacyRecord }];
-  'shop:purchase': [LegacyRecord];
+  'puzzle:update': [{ fileId: string; state: Record<string, unknown> }];
+  'shop:purchase': [{ requestId: string; itemId: string; characterName: string }];
   'pointer:move': [SocketPoint];
   'pointer:ping': [SocketPoint];
   'pointer:hide': [];

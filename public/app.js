@@ -1945,7 +1945,7 @@
     if (confirm(`Delete the saved scene \u201C${name}\u201D?`)) socket.emit("scene:delete", { name });
   };
   function libraryData() {
-    const library = state?.library || {};
+    const library = state?.library || { folders: [], files: [], broadcast: null };
     return {
       folders: Array.isArray(library.folders) ? library.folders : [],
       files: Array.isArray(library.files) ? library.files : [],
