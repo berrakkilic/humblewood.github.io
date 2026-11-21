@@ -12,6 +12,11 @@ const mapMarkup = almanac.renderEntry(map.entries[0], false);
 assert.match(mapMarkup, /almanac-entry-wide/);
 assert.match(mapMarkup, /humblewood-expanded-nohex-v0\.3\.png/);
 assert.match(mapMarkup, /<details[^>]* open>/);
+assert.doesNotMatch(
+  almanac.renderEntry({ title: 'Remote', summary: '', image: { src: 'https://example.com/track.png' } }, false),
+  /example\.com/,
+  'Almanac images must not load from external origins.'
+);
 assert.doesNotMatch(JSON.stringify(data), /A\.A\.Y\./);
 
 const faith = data.find(category => category.id === 'faith');

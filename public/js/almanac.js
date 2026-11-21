@@ -55,12 +55,13 @@
   }
 
   function renderImage(image) {
-    if (!image?.src) return '';
+    const source = String(image?.src || '');
+    if (!/^\/(?:images|uploads|handouts)\/[A-Za-z0-9._~%()+-]+$/.test(source)) return '';
     const caption = image.caption ? `<figcaption>${escapeHtml(image.caption)}</figcaption>` : '';
     return `
       <figure class="almanac-entry-image">
-        <a href="${escapeHtml(image.src)}" target="_blank" rel="noopener" title="Open full-size image">
-          <img src="${escapeHtml(image.src)}" alt="${escapeHtml(image.alt || '')}" loading="lazy">
+        <a href="${escapeHtml(source)}" target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer" title="Open full-size image">
+          <img src="${escapeHtml(source)}" alt="${escapeHtml(image.alt || '')}" loading="lazy">
         </a>
         ${caption}
       </figure>
