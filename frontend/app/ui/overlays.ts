@@ -25,6 +25,12 @@ function createDialogController(dialog: any, options: any = {}) {
       fallbackOpen = true;
       dialog.setAttribute('open', '');
     }
+    queueMicrotask(() => {
+      const firstFocusable = dialog.querySelector(
+        '[autofocus], button, input, select, textarea, [tabindex]:not([tabindex="-1"])'
+      );
+      if (firstFocusable?.focus) firstFocusable.focus({ preventScroll: true });
+    });
     if (typeof options.onOpen === 'function') options.onOpen();
   }
 
@@ -48,6 +54,22 @@ function createDialogController(dialog: any, options: any = {}) {
   dialog.addEventListener('cancel', event => {
     if (options.closeOnEscape === false) event.preventDefault();
     else dialog.returnValue = 'escape';
+  });
+  dialog.addEventListener('keydown', event => {
+    if (event.key !== 'Tab' || !fallbackOpen) return;
+    const focusable = (Array.from(dialog.querySelectorAll(
+      'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])'
+    )) as HTMLElement[]).filter(element => !element.hidden);
+    if (!focusable.length) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
   });
   dialog.addEventListener('close', () => finalizeClose(dialog.returnValue || 'dismiss'));
 

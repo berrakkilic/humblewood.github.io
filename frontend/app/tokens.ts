@@ -1,14 +1,14 @@
 /** Token and NPC creation, rosters, directory filters, and sidebars. */
 
 // ---- Token and NPC creation ----
-document.getElementById('token-kind').onchange = updateTokenCreateForm;
-document.getElementById('cancel-npc-edit-btn').onclick = resetNpcEditor;
+getRequiredSelect('token-kind').onchange = updateTokenCreateForm;
+getRequiredButton('cancel-npc-edit-btn').onclick = resetNpcEditor;
 
 function updateTokenCreateForm() {
-  const kind = document.getElementById('token-kind').value;
-  document.getElementById('npc-create-fields').classList.toggle('hidden', kind !== 'npc');
-  document.getElementById('token-pronouns').classList.toggle('hidden', kind === 'item');
-  if (!editingNpcId) document.getElementById('add-token-btn').textContent = kind === 'npc' ? 'Create NPC & place' : 'Add to map';
+  const kind = getRequiredSelect('token-kind').value;
+  getRequiredElement<HTMLElement>('#npc-create-fields').classList.toggle('hidden', kind !== 'npc');
+  getRequiredElement<HTMLElement>('#token-pronouns').classList.toggle('hidden', kind === 'item');
+  if (!editingNpcId) getRequiredButton('add-token-btn').textContent = kind === 'npc' ? 'Create NPC & place' : 'Add to map';
 }
 
 function parseNpcAttacks(text) {
@@ -22,11 +22,11 @@ function npcAttacksText(attacks) {
   return (attacks || []).map(attack => [attack.name, attack.bonus, attack.damage].join(' | ')).join('\n');
 }
 
-document.getElementById('add-token-btn').onclick = async () => {
-  const name = document.getElementById('token-name').value.trim();
+getRequiredButton('add-token-btn').onclick = async () => {
+  const name = getRequiredInput('token-name').value.trim();
   if (!name) return showToast('Give the token a name first.');
-  const kind = document.getElementById('token-kind').value;
-  const file = document.getElementById('token-image').files[0];
+  const kind = getRequiredSelect('token-kind').value;
+  const file = getRequiredInput('token-image').files?.[0];
   let imageUrl;
   if (file) imageUrl = await uploadFile(file);
 
@@ -35,13 +35,13 @@ document.getElementById('add-token-btn').onclick = async () => {
       id: editingNpcId,
       name,
       ...(imageUrl !== undefined ? { imageUrl } : {}),
-      hp: Number(document.getElementById('npc-hp').value) || 1,
-      maxHp: Number(document.getElementById('npc-hp').value) || 1,
-      ac: Number(document.getElementById('npc-ac').value) || 0,
-      initiativeModifier: Number(document.getElementById('npc-initiative').value) || 0,
-      pronouns: document.getElementById('token-pronouns').value.trim(),
-      attacks: parseNpcAttacks(document.getElementById('npc-attacks').value),
-      notes: document.getElementById('npc-notes').value.trim()
+      hp: Number(getRequiredInput('npc-hp').value) || 1,
+      maxHp: Number(getRequiredInput('npc-hp').value) || 1,
+      ac: Number(getRequiredInput('npc-ac').value) || 0,
+      initiativeModifier: Number(getRequiredInput('npc-initiative').value) || 0,
+      pronouns: getRequiredInput('token-pronouns').value.trim(),
+      attacks: parseNpcAttacks(getRequiredInput('npc-attacks').value),
+      notes: getRequiredInput('npc-notes').value.trim()
     });
     return;
   }
@@ -50,13 +50,13 @@ document.getElementById('add-token-btn').onclick = async () => {
     label: name,
     kind,
     imageUrl: imageUrl || null,
-    hp: kind === 'npc' ? Number(document.getElementById('npc-hp').value) || 1 : undefined,
-    maxHp: kind === 'npc' ? Number(document.getElementById('npc-hp').value) || 1 : undefined,
-    ac: Number(document.getElementById('npc-ac').value) || 0,
-    initiativeModifier: Number(document.getElementById('npc-initiative').value) || 0,
-    pronouns: kind === 'item' ? '' : document.getElementById('token-pronouns').value.trim(),
-    attacks: parseNpcAttacks(document.getElementById('npc-attacks').value),
-    notes: document.getElementById('npc-notes').value.trim()
+    hp: kind === 'npc' ? Number(getRequiredInput('npc-hp').value) || 1 : undefined,
+    maxHp: kind === 'npc' ? Number(getRequiredInput('npc-hp').value) || 1 : undefined,
+    ac: Number(getRequiredInput('npc-ac').value) || 0,
+    initiativeModifier: Number(getRequiredInput('npc-initiative').value) || 0,
+    pronouns: kind === 'item' ? '' : getRequiredInput('token-pronouns').value.trim(),
+    attacks: parseNpcAttacks(getRequiredInput('npc-attacks').value),
+    notes: getRequiredInput('npc-notes').value.trim()
   });
   resetNpcEditor();
 };
@@ -65,38 +65,38 @@ function editNpc(npcId) {
   const npc = state.npcs?.[npcId];
   if (!npc) return;
   editingNpcId = npcId;
-  document.getElementById('token-kind').value = 'npc';
-  document.getElementById('token-kind').disabled = true;
-  document.getElementById('token-name').value = npc.name;
-  document.getElementById('npc-hp').value = Number(npc.maxHp) || 1;
-  document.getElementById('npc-ac').value = Number(npc.ac) || 0;
-  document.getElementById('npc-initiative').value = Number(npc.initiativeModifier) || 0;
-  document.getElementById('token-pronouns').value = npc.pronouns || npc.sheet?.pronouns || npc.sheet?.fields?.pronouns || '';
-  document.getElementById('npc-attacks').value = npcAttacksText(npc.attacks);
-  document.getElementById('npc-notes').value = npc.notes || '';
-  document.getElementById('add-token-btn').textContent = 'Save NPC changes';
-  document.getElementById('cancel-npc-edit-btn').classList.remove('hidden');
+  getRequiredSelect('token-kind').value = 'npc';
+  getRequiredSelect('token-kind').disabled = true;
+  getRequiredInput('token-name').value = npc.name;
+  getRequiredInput('npc-hp').value = String(Number(npc.maxHp) || 1);
+  getRequiredInput('npc-ac').value = String(Number(npc.ac) || 0);
+  getRequiredInput('npc-initiative').value = String(Number(npc.initiativeModifier) || 0);
+  getRequiredInput('token-pronouns').value = npc.pronouns || npc.sheet?.pronouns || npc.sheet?.fields?.pronouns || '';
+  getRequiredInput('npc-attacks').value = npcAttacksText(npc.attacks);
+  getRequiredInput('npc-notes').value = npc.notes || '';
+  getRequiredButton('add-token-btn').textContent = 'Save NPC changes';
+  getRequiredButton('cancel-npc-edit-btn').classList.remove('hidden');
   updateTokenCreateForm();
-  document.getElementById('token-name').focus();
+  getRequiredInput('token-name').focus();
 }
 
 function resetNpcEditor() {
   editingNpcId = null;
-  document.getElementById('token-kind').disabled = false;
-  document.getElementById('token-name').value = '';
-  document.getElementById('token-image').value = '';
-  document.getElementById('npc-hp').value = 10;
-  document.getElementById('npc-ac').value = 10;
-  document.getElementById('npc-initiative').value = 0;
-  document.getElementById('token-pronouns').value = '';
-  document.getElementById('npc-attacks').value = '';
-  document.getElementById('npc-notes').value = '';
-  document.getElementById('cancel-npc-edit-btn').classList.add('hidden');
+  getRequiredSelect('token-kind').disabled = false;
+  getRequiredInput('token-name').value = '';
+  getRequiredInput('token-image').value = '';
+  getRequiredInput('npc-hp').value = '10';
+  getRequiredInput('npc-ac').value = '10';
+  getRequiredInput('npc-initiative').value = '0';
+  getRequiredInput('token-pronouns').value = '';
+  getRequiredInput('npc-attacks').value = '';
+  getRequiredInput('npc-notes').value = '';
+  getRequiredButton('cancel-npc-edit-btn').classList.add('hidden');
   updateTokenCreateForm();
 }
 
 function renderTokenTray() {
-  const list = document.getElementById('token-list');
+  const list = getRequiredElement<HTMLElement>('#token-list');
   list.innerHTML = '';
   state.tokens.forEach(t => {
     if (myRole === 'player' && t.visibleToPlayers === false) return;
@@ -113,9 +113,10 @@ function renderTokenTray() {
     chip.title = [hoverLabel, controlHint].filter(Boolean).join(' · ');
     chip.setAttribute('aria-label', hoverLabel);
     if (t.visibleToPlayers === false) chip.classList.add('hidden-token');
-    chip.innerHTML = (t.imageUrl ? `<img src="${escapeAttr(t.imageUrl)}" alt="${escapeAttr(displayLabel)}">` : emojiFor(t.kind)) +
+    const imageUrl = safeImageUrl(t.imageUrl);
+    chip.innerHTML = (imageUrl ? `<img src="${escapeAttr(imageUrl)}" alt="${escapeAttr(displayLabel)}">` : emojiFor(t.kind)) +
       (t.canControl ? '<span class="del" title="Remove from map">×</span>' : '');
-    const remove = chip.querySelector('.del');
+    const remove = getOptionalElement<HTMLSpanElement>('.del', chip);
     if (remove) remove.onclick = (e) => {
         e.stopPropagation();
         socket.emit('token:remove', { id: t.id });
@@ -137,24 +138,24 @@ function renderTokenTray() {
         <button class="btn-danger-soft token-remove" type="button">Remove</button>
       </div>
     `;
-    const sizeInput = details.querySelector('input[type="range"]');
-    const sizeOutput = details.querySelector('output');
+    const sizeInput = getRequiredElement<HTMLInputElement>('input[type="range"]', details);
+    const sizeOutput = getRequiredElement<HTMLOutputElement>('output', details);
     sizeInput.oninput = () => { sizeOutput.textContent = `${sizeInput.value}%`; };
     sizeInput.onchange = () => socket.emit('token:update', { id: t.id, sizeScale: Number(sizeInput.value) / 100 });
-    details.querySelector('.token-reset-size').onclick = () => socket.emit('token:update', { id: t.id, sizeScale: 1 });
-    details.querySelector('.token-visibility').onclick = () => socket.emit('token:update', { id: t.id, visibleToPlayers: t.visibleToPlayers === false });
-    details.querySelector('.token-duplicate').onclick = () => socket.emit('token:duplicate', { id: t.id });
-    details.querySelector('.token-remove').onclick = () => socket.emit('token:remove', { id: t.id });
+    getRequiredElement<HTMLButtonElement>('.token-reset-size', details).onclick = () => socket.emit('token:update', { id: t.id, sizeScale: 1 });
+    getRequiredElement<HTMLButtonElement>('.token-visibility', details).onclick = () => socket.emit('token:update', { id: t.id, visibleToPlayers: t.visibleToPlayers === false });
+    getRequiredElement<HTMLButtonElement>('.token-duplicate', details).onclick = () => socket.emit('token:duplicate', { id: t.id });
+    getRequiredElement<HTMLButtonElement>('.token-remove', details).onclick = () => socket.emit('token:remove', { id: t.id });
     entry.append(chip, details);
     list.appendChild(entry);
   });
   renderDmSidebarSummary();
 }
 
-document.getElementById('toggle-dm-sidebar-btn').onclick = () => {
-  const sidebar = document.getElementById('map-sidebar');
+getRequiredButton('toggle-dm-sidebar-btn').onclick = () => {
+  const sidebar = getRequiredElement<HTMLElement>('#map-sidebar');
   const expanded = sidebar.classList.toggle('dm-detailed');
-  const button = document.getElementById('toggle-dm-sidebar-btn');
+  const button = getRequiredButton('toggle-dm-sidebar-btn');
   button.textContent = expanded ? 'Compact' : 'Details';
   button.setAttribute('aria-expanded', String(expanded));
 };
@@ -170,8 +171,8 @@ document.querySelectorAll('.sidebar-accordion').forEach(details => {
 });
 
 function renderDmSidebarSummary() {
-  const summary = document.getElementById('dm-sidebar-summary');
-  if (!summary || !state) return;
+  const summary = getRequiredElement<HTMLElement>('#dm-sidebar-summary');
+  if (!state) return;
   const tokens = state.tokens || [];
   const counts = { pc: 0, npc: 0, item: 0 };
   tokens.forEach(token => { if (counts[token.kind] !== undefined) counts[token.kind] += 1; });
@@ -244,7 +245,7 @@ function refreshNpcViewsAfterFilter(event) {
   renderNpcRoster();
   renderCharacters();
   if (!focusedId) return;
-  const focused = document.getElementById(focusedId);
+  const focused = getOptionalElement<HTMLInputElement>(`#${CSS.escape(focusedId)}`);
   if (!focused) return;
   focused.focus();
   if (selectionStart !== null && typeof focused.setSelectionRange === 'function') {
@@ -265,18 +266,18 @@ function renderNpcFilterControls() {
     { prefix: 'npc-roster', summaryId: null },
     { prefix: 'npc-directory', summaryId: 'npc-directory-filter-summary' }
   ].forEach(({ prefix, summaryId }) => {
-    const tools = document.getElementById(`${prefix}-filter-tools`);
+    const tools = getOptionalElement<HTMLElement>(`#${prefix}-filter-tools`);
     if (!tools) return;
-    const search = document.getElementById(`${prefix}-search`);
-    const raceFilters = document.getElementById(`${prefix}-race-filters`);
-    const classFilter = document.getElementById(`${prefix}-class-filter`);
-    const clear = document.getElementById(`${prefix}-clear-filters`);
+    const search = getOptionalElement<HTMLInputElement>(`#${prefix}-search`);
+    const raceFilters = getOptionalElement<HTMLElement>(`#${prefix}-race-filters`);
+    const classFilter = getOptionalElement<HTMLSelectElement>(`#${prefix}-class-filter`);
+    const clear = getOptionalElement<HTMLButtonElement>(`#${prefix}-clear-filters`);
     if (!search || !raceFilters || !classFilter || !clear) return;
 
     search.value = npcSearchQuery;
-    search.oninput = event => {
-      npcSearchQuery = event.target.value;
-      refreshNpcViewsAfterFilter(event);
+    search.oninput = () => {
+      npcSearchQuery = search.value;
+      refreshNpcViewsAfterFilter({ target: search });
     };
 
     raceFilters.innerHTML = '';
@@ -288,9 +289,9 @@ function renderNpcFilterControls() {
       button.dataset.value = optionValue.key;
       button.textContent = optionValue.label;
       button.setAttribute('aria-pressed', String(npcRaceFilter === optionValue.key));
-      button.onclick = event => {
+      button.onclick = () => {
         npcRaceFilter = optionValue.key;
-        refreshNpcViewsAfterFilter(event);
+        refreshNpcViewsAfterFilter({ target: button });
       };
       raceFilters.appendChild(button);
     });
@@ -307,21 +308,21 @@ function renderNpcFilterControls() {
       classFilter.appendChild(option);
     });
     classFilter.value = npcClassFilter;
-    classFilter.onchange = event => {
-      npcClassFilter = event.target.value;
-      refreshNpcViewsAfterFilter(event);
+    classFilter.onchange = () => {
+      npcClassFilter = classFilter.value;
+      refreshNpcViewsAfterFilter({ target: classFilter });
     };
 
     const hasFilters = !!npcSearchQuery.trim() || npcRaceFilter !== 'all' || npcClassFilter !== 'all';
     clear.disabled = !hasFilters;
-    clear.onclick = event => {
+    clear.onclick = () => {
       npcSearchQuery = '';
       npcRaceFilter = 'all';
       npcClassFilter = 'all';
-      refreshNpcViewsAfterFilter(event);
+      refreshNpcViewsAfterFilter({ target: clear });
     };
     if (summaryId) {
-      const summary = document.getElementById(summaryId);
+      const summary = getOptionalElement<HTMLElement>(`#${summaryId}`);
       const visibleCount = filteredNpcDirectory(allNpcs).length;
       if (summary) summary.textContent = hasFilters ? `Showing ${visibleCount} of ${allNpcs.length} NPCs` : `${allNpcs.length} NPC${allNpcs.length === 1 ? '' : 's'}`;
     }
@@ -329,8 +330,8 @@ function renderNpcFilterControls() {
 }
 
 function renderNpcRoster() {
-  const roster = document.getElementById('npc-roster');
-  if (!roster || !state) return;
+  const roster = getRequiredElement<HTMLElement>('#npc-roster');
+  if (!state) return;
   renderNpcFilterControls();
   roster.innerHTML = '';
   const allNpcs = Object.values(state.npcs || {});
@@ -372,11 +373,11 @@ function renderNpcRoster() {
 }
 
 function renderOnlineUsers() {
-  const list = document.getElementById('dm-online-list');
-  const count = document.getElementById('dm-online-count');
-  if (!list || myRole !== 'dm') return;
+  const list = getRequiredElement<HTMLElement>('#dm-online-list');
+  const count = getRequiredElement<HTMLElement>('#dm-online-count');
+  if (myRole !== 'dm') return;
   const users = Array.isArray(onlineUsers) ? onlineUsers : [];
-  if (count) count.textContent = String(users.length);
+  count.textContent = String(users.length);
   list.innerHTML = '';
   if (!users.length) {
     list.innerHTML = '<p class="player-sidebar-empty">No one is currently connected.</p>';
@@ -396,8 +397,8 @@ function renderOnlineUsers() {
 }
 
 function renderPlayerSidebar() {
-  const container = document.getElementById('player-character-summary');
-  if (!container || !state) return;
+  const container = getRequiredElement<HTMLElement>('#player-character-summary');
+  if (!state) return;
   container.innerHTML = '';
   const characters = Object.values(state.characters || {}).filter(character => character.canManage);
   if (!characters.length) {

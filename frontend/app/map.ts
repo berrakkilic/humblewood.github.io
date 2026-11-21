@@ -2,18 +2,18 @@
 // ================= MAP =================
 // Gate map content until image dimensions and fog are ready, preventing a refresh flash.
 let mapRenderReady = false;
-const mapUpload = document.getElementById('map-upload');
+const mapUpload = getRequiredInput('map-upload');
 mapUpload.onchange = async () => {
-  const file = mapUpload.files[0];
+  const file = mapUpload.files?.[0];
   if (!file) return;
   const url = await uploadFile(file);
   socket.emit('scene:setMap', { mapUrl: url, mapName: file.name });
 };
 function renderMap() {
-  const img = document.getElementById('map-image');
-  const stage = document.getElementById('map-stage');
-  const empty = document.getElementById('empty-map');
-  const grid = document.getElementById('grid-overlay');
+  const img = getRequiredElement<HTMLImageElement>('#map-image');
+  const stage = getRequiredElement<HTMLElement>('#map-stage');
+  const empty = getRequiredElement<HTMLElement>('#empty-map');
+  const grid = getRequiredElement<HTMLElement>('#grid-overlay');
   const gridSize = Math.max(10, Number(state.scene.gridSize) || 50);
   const gridOffsetX = Number(state.scene.gridOffsetX) || 0;
   const gridOffsetY = Number(state.scene.gridOffsetY) || 0;
@@ -24,44 +24,44 @@ function renderMap() {
   grid.style.backgroundPosition = `${gridOffsetX}px ${gridOffsetY}px`;
   grid.style.setProperty('--grid-color', gridColor);
   grid.classList.toggle('visible', !!state.scene.gridVisible);
-  document.getElementById('grid-toggle').checked = !!state.scene.gridVisible;
-  document.getElementById('grid-size').value = gridSize;
-  document.getElementById('grid-color').value = gridColor;
-  document.getElementById('snap-toggle').checked = state.scene.snapToGrid !== false;
-  document.getElementById('fit-token-toggle').checked = state.scene.fitTokensToGrid !== false;
+  getRequiredInput('grid-toggle').checked = !!state.scene.gridVisible;
+  getRequiredInput('grid-size').value = String(gridSize);
+  getRequiredInput('grid-color').value = gridColor;
+  getRequiredInput('snap-toggle').checked = state.scene.snapToGrid !== false;
+  getRequiredInput('fit-token-toggle').checked = state.scene.fitTokensToGrid !== false;
   const timeOfDay = ['morning', 'afternoon', 'night'].includes(state.scene.timeOfDay) ? state.scene.timeOfDay : 'morning';
-  const timeOfDaySelect = document.getElementById('time-of-day-select');
-  if (timeOfDaySelect) timeOfDaySelect.value = timeOfDay;
+  getRequiredSelect('time-of-day-select').value = timeOfDay;
   const timeDetails = {
     morning: { label: 'Morning', icon: '☀️' },
     afternoon: { label: 'Afternoon', icon: '🌤️' },
     night: { label: 'Night', icon: '🌙' }
   }[timeOfDay];
-  const timeIndicator = document.getElementById('map-time-indicator');
+  const timeIndicator = getRequiredElement<HTMLElement>('#map-time-indicator');
   timeIndicator.dataset.timeOfDay = timeOfDay;
   timeIndicator.setAttribute('aria-label', timeDetails.label);
-  document.getElementById('map-time-icon').textContent = timeDetails.icon;
-  document.getElementById('map-time-label').textContent = timeDetails.label;
+  getRequiredElement<HTMLElement>('#map-time-icon').textContent = timeDetails.icon;
+  getRequiredElement<HTMLElement>('#map-time-label').textContent = timeDetails.label;
   if (!Array.isArray(state.scene.doodlePaths)) state.scene.doodlePaths = [];
   if (!Array.isArray(state.scene.fogShapes)) state.scene.fogShapes = [];
   updateMapPermissionControls();
   applyMapTransform();
   // Hide the old image before loading the next one; players get a CSS cover until fog is painted.
   mapRenderReady = false; img.style.display = 'none'; img.style.visibility = 'hidden';
-  stage.classList.toggle('map-loading', myRole === 'player' && !!state.scene.mapUrl && !!state.scene.fogEnabled);
+  const safeMapUrl = safeImageUrl(state.scene.mapUrl);
+  stage.classList.toggle('map-loading', myRole === 'player' && !!safeMapUrl && !!state.scene.fogEnabled);
   renderMapTokens();
-  if (state.scene.mapUrl) {
+  if (safeMapUrl) {
     const sizeMapStage = () => {
-      if (state?.scene?.mapUrl !== requestedMapUrl) return;
-      const stage = document.getElementById('map-stage');
+      if (safeImageUrl(state?.scene?.mapUrl) !== requestedMapUrl) return;
+      const stage = getRequiredElement<HTMLElement>('#map-stage');
       stage.style.width = img.naturalWidth + 'px';
       stage.style.height = img.naturalHeight + 'px';
       img.style.width = img.naturalWidth + 'px';
       img.style.height = img.naturalHeight + 'px';
-      const canvas = document.getElementById('doodle-canvas');
+      const canvas = getRequiredElement<HTMLCanvasElement>('#doodle-canvas');
       canvas.width = img.naturalWidth;
       canvas.height = img.naturalHeight;
-      const fogCanvas = document.getElementById('fog-canvas');
+      const fogCanvas = getRequiredElement<HTMLCanvasElement>('#fog-canvas');
       fogCanvas.width = img.naturalWidth;
       fogCanvas.height = img.naturalHeight;
       redrawAllDoodles();
@@ -69,19 +69,19 @@ function renderMap() {
       mapRenderReady = true;
       img.style.display = 'block'; img.style.visibility = 'visible'; stage.classList.remove('map-loading');
       renderMapTokens();
-      if (lastFittedMapUrl !== state.scene.mapUrl) {
-        lastFittedMapUrl = state.scene.mapUrl;
+      if (lastFittedMapUrl !== requestedMapUrl) {
+        lastFittedMapUrl = requestedMapUrl;
         fitMapToViewport();
       }
     };
-    const requestedMapUrl = state.scene.mapUrl;
+    const requestedMapUrl = safeMapUrl;
     img.onload = sizeMapStage;
     img.onerror = () => {
-      if (state?.scene?.mapUrl !== requestedMapUrl) return;
+      if (safeImageUrl(state?.scene?.mapUrl) !== requestedMapUrl) return;
       mapRenderReady = false; stage.classList.remove('map-loading');
       img.style.display = 'none'; img.style.visibility = 'hidden'; empty.style.display = 'flex'; renderMapTokens();
     };
-    img.src = state.scene.mapUrl;
+    img.src = safeMapUrl;
     empty.style.display = 'none';
     if (img.complete && img.naturalWidth) sizeMapStage();
   } else {
@@ -95,7 +95,7 @@ function renderMap() {
 }
 function renderMapTokens() {
   document.querySelectorAll('.token-on-map').forEach(el => el.remove());
-  const stage = document.getElementById('map-stage');
+  const stage = getRequiredElement<HTMLElement>('#map-stage');
   if (!mapRenderReady) return;
   const current = currentInitiativeEntry();
   state.tokens.forEach(t => {
@@ -129,7 +129,7 @@ function renderMapTokens() {
     ].join('');
     el.innerHTML = `
       ${displayLabel ? `<div class="label">${escapeHtml(displayLabel)}</div>` : ''}
-      ${t.imageUrl ? `<img src="${escapeAttr(t.imageUrl)}" alt="">` : emojiFor(t.kind)}
+      ${safeImageUrl(t.imageUrl) ? `<img src="${escapeAttr(safeImageUrl(t.imageUrl))}" alt="">` : emojiFor(t.kind)}
       ${t.maxHp ? `<div class="hp-bar"><div class="hp-fill" style="width:${Math.max(0, (t.hp / t.maxHp) * 100)}%"></div></div>` : ''}
       ${renderTokenConditionBadges(t, linkedCharacter)}
       ${controls ? `<div class="token-controls">${controls}</div>` : ''}
@@ -256,7 +256,7 @@ function startDragTokenAt(clientX, clientY, element, id) {
 
 function moveDraggedToken(clientX, clientY) {
   if (!draggingToken) return;
-  const stage = document.getElementById('map-stage');
+  const stage = getRequiredElement<HTMLElement>('#map-stage');
   const rect = stage.getBoundingClientRect();
   const x = (clientX - rect.left) / mapScale - dragOffset.x;
   const y = (clientY - rect.top) / mapScale - dragOffset.y;
@@ -273,7 +273,7 @@ function finishDraggedToken() {
   if (el) {
     let x = parseFloat(el.style.left);
     let y = parseFloat(el.style.top);
-    if (document.getElementById('snap-toggle').checked) {
+    if (getRequiredInput('snap-toggle').checked) {
       const size = Math.max(10, Number(state.scene.gridSize) || 50);
       x = snapCoordinateToCell(x, size, state.scene.gridOffsetX);
       y = snapCoordinateToCell(y, size, state.scene.gridOffsetY);
@@ -324,14 +324,15 @@ document.addEventListener('touchcancel', event => {
 }, { passive: false });
 
 // ---- Tool toggle ----
-document.getElementById('tool-move').onclick = () => setTool('move');
-document.getElementById('tool-pan').onclick = () => setTool('pan');
-document.getElementById('tool-grid-move').onclick = () => setTool('grid-move');
-document.getElementById('tool-ruler').onclick = () => setTool('ruler');
-document.getElementById('tool-ping').onclick = () => setTool('ping');
-document.getElementById('tool-doodle').onclick = () => setTool('doodle'); document.getElementById('tool-eraser').onclick = () => setTool('eraser');
-document.getElementById('tool-fog-reveal').onclick = () => setTool('fog-reveal');
-document.getElementById('tool-fog-hide').onclick = () => setTool('fog-hide');
+getRequiredButton('tool-move').onclick = () => setTool('move');
+getRequiredButton('tool-pan').onclick = () => setTool('pan');
+getRequiredButton('tool-grid-move').onclick = () => setTool('grid-move');
+getRequiredButton('tool-ruler').onclick = () => setTool('ruler');
+getRequiredButton('tool-ping').onclick = () => setTool('ping');
+getRequiredButton('tool-doodle').onclick = () => setTool('doodle');
+getRequiredButton('tool-eraser').onclick = () => setTool('eraser');
+getRequiredButton('tool-fog-reveal').onclick = () => setTool('fog-reveal');
+getRequiredButton('tool-fog-hide').onclick = () => setTool('fog-hide');
 function setTool(tool) {
   if ((tool === 'doodle' || tool === 'eraser') && !canDoodle()) return showToast('Player doodling is not enabled for this scene.');
   if (tool.startsWith('fog-') && (myRole !== 'dm' || !state.scene.fogEnabled)) return showToast('Enable fog of war first.');
@@ -342,7 +343,7 @@ function setTool(tool) {
   ['move', 'pan', 'grid-move', 'ruler', 'ping', 'doodle', 'eraser', 'fog-reveal', 'fog-hide'].forEach(name => {
     document.getElementById(`tool-${name}`)?.classList.toggle('active', tool === name);
   });
-  const stage = document.getElementById('map-stage');
+  const stage = getRequiredElement<HTMLElement>('#map-stage');
   stage.classList.toggle('doodling', tool === 'doodle' || tool === 'eraser'); stage.classList.toggle('erasing', tool === 'eraser');
   stage.classList.toggle('panning', tool === 'pan');
   stage.classList.toggle('grid-moving', tool === 'grid-move');
@@ -359,24 +360,24 @@ function canDoodle() {
 }
 function updateMapPermissionControls() {
   if (!state) return;
-  document.getElementById('player-doodling-toggle').checked = !!state.scene.playerDoodlingEnabled;
-  document.getElementById('token-labels-toggle').checked = state.scene.showTokenLabelsToPlayers !== false;
-  document.getElementById('fog-enabled-toggle').checked = !!state.scene.fogEnabled;
+  getRequiredInput('player-doodling-toggle').checked = !!state.scene.playerDoodlingEnabled;
+  getRequiredInput('token-labels-toggle').checked = state.scene.showTokenLabelsToPlayers !== false;
+  getRequiredInput('fog-enabled-toggle').checked = !!state.scene.fogEnabled;
   document.querySelectorAll('.doodle-control').forEach(element => element.classList.toggle('hidden', !canDoodle()));
   document.querySelectorAll('.fog-tool').forEach(element => element.classList.toggle('hidden', myRole !== 'dm' || !state.scene.fogEnabled));
   if ((selectedTool === 'doodle' || selectedTool === 'eraser') && !canDoodle()) setTool('move');
   if (selectedTool.startsWith('fog-') && !state.scene.fogEnabled) setTool('move');
 }
-document.getElementById('clear-doodles-btn').onclick = () => socket.emit('scene:doodle:clear');
-document.getElementById('undo-doodle-btn').onclick = () => socket.emit('scene:doodle:undo');
-document.getElementById('player-doodling-toggle').onchange = event => socket.emit('scene:setPlayerDoodling', { enabled: event.target.checked });
-document.getElementById('token-labels-toggle').onchange = event => socket.emit('scene:setTokenLabels', { visible: event.target.checked });
-document.getElementById('fog-enabled-toggle').onchange = event => socket.emit('scene:setFog', { enabled: event.target.checked });
-document.getElementById('undo-fog-btn').onclick = () => socket.emit('scene:fog:undo');
-document.getElementById('reset-fog-btn').onclick = () => {
+getRequiredButton('clear-doodles-btn').onclick = () => socket.emit('scene:doodle:clear');
+getRequiredButton('undo-doodle-btn').onclick = () => socket.emit('scene:doodle:undo');
+getRequiredInput('player-doodling-toggle').onchange = () => socket.emit('scene:setPlayerDoodling', { enabled: getRequiredInput('player-doodling-toggle').checked });
+getRequiredInput('token-labels-toggle').onchange = () => socket.emit('scene:setTokenLabels', { visible: getRequiredInput('token-labels-toggle').checked });
+getRequiredInput('fog-enabled-toggle').onchange = () => socket.emit('scene:setFog', { enabled: getRequiredInput('fog-enabled-toggle').checked });
+getRequiredButton('undo-fog-btn').onclick = () => socket.emit('scene:fog:undo');
+getRequiredButton('reset-fog-btn').onclick = () => {
   if (confirm('Reset fog to fully covered?')) socket.emit('scene:fog:reset');
 };
-const mapStageWrap = document.getElementById('map-stage-wrap');
+const mapStageWrap = getRequiredElement<HTMLElement>('#map-stage-wrap');
 mapStageWrap.addEventListener('mousedown', (e) => {
   const canStartPan = (selectedTool === 'pan' && e.button === 0) || e.button === 1 || (spacePanPressed && e.button === 0);
   if (selectedTool === 'grid-move' && e.button === 0 && myRole === 'dm' && isMapGestureTarget(e.target)) {
@@ -395,7 +396,7 @@ mapStageWrap.addEventListener('mousedown', (e) => {
 });
 document.addEventListener('mousemove', (e) => {
   if (gridMoveStart) {
-    const grid = document.getElementById('grid-overlay');
+    const grid = getRequiredElement<HTMLElement>('#grid-overlay');
     const gridSize = Math.max(10, Number(state.scene.gridSize) || 50);
     const dx = (e.clientX - gridMoveStart.clientX) / mapScale;
     const dy = (e.clientY - gridMoveStart.clientY) / mapScale;
@@ -415,11 +416,11 @@ document.addEventListener('mouseup', () => {
   if (gridMoveStart) {
     if (gridMoveStart.currentX !== undefined) {
       socket.emit('scene:setGrid', {
-        gridSize: Number(document.getElementById('grid-size').value) || 50,
-        gridVisible: document.getElementById('grid-toggle').checked,
-        gridColor: document.getElementById('grid-color').value,
-        snapToGrid: document.getElementById('snap-toggle').checked,
-        fitTokensToGrid: document.getElementById('fit-token-toggle').checked,
+        gridSize: Number(getRequiredInput('grid-size').value) || 50,
+        gridVisible: getRequiredInput('grid-toggle').checked,
+        gridColor: getRequiredInput('grid-color').value,
+        snapToGrid: getRequiredInput('snap-toggle').checked,
+        fitTokensToGrid: getRequiredInput('fit-token-toggle').checked,
         gridOffsetX: gridMoveStart.currentX,
         gridOffsetY: gridMoveStart.currentY
       });
@@ -435,7 +436,7 @@ document.addEventListener('keydown', event => {
   if (event.code !== 'Space' || typing) return;
   spacePanPressed = true;
   mapStageWrap.classList.add('space-pan-ready');
-  if (document.getElementById('view-map').classList.contains('active')) event.preventDefault();
+  if (getRequiredElement<HTMLElement>('#view-map').classList.contains('active')) event.preventDefault();
 });
 document.addEventListener('keyup', event => {
   if (event.code !== 'Space') return;
@@ -595,7 +596,7 @@ function createPinchGesture(touches) {
   };
 }
 
-const mapStage = document.getElementById('map-stage');
+const mapStage = getRequiredElement<HTMLElement>('#map-stage');
 mapStage.addEventListener('mousedown', event => {
   if (event.button !== 0) return;
   const point = getCanvasPos(event);
@@ -655,11 +656,11 @@ document.addEventListener('mouseup', event => {
 });
 
 function updateRuler(start, end) {
-  const overlay = document.getElementById('ruler-overlay');
-  const line = document.getElementById('ruler-line');
-  const startDot = document.getElementById('ruler-start');
-  const endDot = document.getElementById('ruler-end');
-  const label = document.getElementById('ruler-label');
+  const overlay = getRequiredElement<SVGElement>('#ruler-overlay');
+  const line = getRequiredElement<SVGLineElement>('#ruler-line');
+  const startDot = getRequiredElement<SVGCircleElement>('#ruler-start');
+  const endDot = getRequiredElement<SVGCircleElement>('#ruler-end');
+  const label = getRequiredElement<SVGTextElement>('#ruler-label');
   const gridSize = Math.max(10, Number(state.scene.gridSize) || 50);
   const measurement = gridMeasurement(
     start,
@@ -669,12 +670,12 @@ function updateRuler(start, end) {
     state.scene.gridOffsetY
   );
   overlay.classList.add('visible');
-  line.setAttribute('x1', measurement.start.x); line.setAttribute('y1', measurement.start.y);
-  line.setAttribute('x2', measurement.end.x); line.setAttribute('y2', measurement.end.y);
-  startDot.setAttribute('cx', measurement.start.x); startDot.setAttribute('cy', measurement.start.y);
-  endDot.setAttribute('cx', measurement.end.x); endDot.setAttribute('cy', measurement.end.y);
-  label.setAttribute('x', (measurement.start.x + measurement.end.x) / 2);
-  label.setAttribute('y', (measurement.start.y + measurement.end.y) / 2 - 10);
+  line.setAttribute('x1', String(measurement.start.x)); line.setAttribute('y1', String(measurement.start.y));
+  line.setAttribute('x2', String(measurement.end.x)); line.setAttribute('y2', String(measurement.end.y));
+  startDot.setAttribute('cx', String(measurement.start.x)); startDot.setAttribute('cy', String(measurement.start.y));
+  endDot.setAttribute('cx', String(measurement.end.x)); endDot.setAttribute('cy', String(measurement.end.y));
+  label.setAttribute('x', String((measurement.start.x + measurement.end.x) / 2));
+  label.setAttribute('y', String((measurement.start.y + measurement.end.y) / 2 - 10));
   const squareLabel = measurement.squares === 1 ? 'square' : 'squares';
   label.textContent = `${measurement.squares} ${squareLabel} · ${measurement.feet} ft`;
 }
@@ -682,11 +683,11 @@ function updateRuler(start, end) {
 function clearRuler() {
   rulerStartPoint = null;
   rulerAnchorPoint = null;
-  document.getElementById('ruler-overlay').classList.remove('visible');
+  getRequiredElement<SVGElement>('#ruler-overlay').classList.remove('visible');
 }
 
 function updateMapAreaSelection(drag) {
-  const selection = document.getElementById('map-area-selection');
+  const selection = getRequiredElement<HTMLElement>('#map-area-selection');
   const x = Math.min(drag.start.x, drag.current.x);
   const y = Math.min(drag.start.y, drag.current.y);
   selection.style.left = `${x}px`;
@@ -698,88 +699,88 @@ function updateMapAreaSelection(drag) {
 
 function clearMapAreaSelection() {
   mapAreaDrag = null;
-  const selection = document.getElementById('map-area-selection');
+  const selection = getRequiredElement<HTMLElement>('#map-area-selection');
   selection.className = '';
   selection.style.width = '0';
   selection.style.height = '0';
 }
 
-document.getElementById('grid-toggle').onchange = () => {
+getRequiredInput('grid-toggle').onchange = () => {
   socket.emit('scene:setGrid', {
-    gridSize: Number(document.getElementById('grid-size').value) || 50,
-    gridVisible: document.getElementById('grid-toggle').checked,
-    gridColor: document.getElementById('grid-color').value,
-    snapToGrid: document.getElementById('snap-toggle').checked,
-    fitTokensToGrid: document.getElementById('fit-token-toggle').checked
+    gridSize: Number(getRequiredInput('grid-size').value) || 50,
+    gridVisible: getRequiredInput('grid-toggle').checked,
+    gridColor: getRequiredInput('grid-color').value,
+    snapToGrid: getRequiredInput('snap-toggle').checked,
+    fitTokensToGrid: getRequiredInput('fit-token-toggle').checked
   });
 };
-document.getElementById('grid-size').onchange = () => {
+getRequiredInput('grid-size').onchange = () => {
   socket.emit('scene:setGrid', {
-    gridSize: Number(document.getElementById('grid-size').value) || 50,
-    gridVisible: document.getElementById('grid-toggle').checked,
-    gridColor: document.getElementById('grid-color').value,
-    snapToGrid: document.getElementById('snap-toggle').checked,
-    fitTokensToGrid: document.getElementById('fit-token-toggle').checked
+    gridSize: Number(getRequiredInput('grid-size').value) || 50,
+    gridVisible: getRequiredInput('grid-toggle').checked,
+    gridColor: getRequiredInput('grid-color').value,
+    snapToGrid: getRequiredInput('snap-toggle').checked,
+    fitTokensToGrid: getRequiredInput('fit-token-toggle').checked
   });
 };
-document.getElementById('grid-color').oninput = event => {
-  document.getElementById('grid-overlay').style.setProperty('--grid-color', event.target.value);
+getRequiredInput('grid-color').oninput = () => {
+  getRequiredElement<HTMLElement>('#grid-overlay').style.setProperty('--grid-color', getRequiredInput('grid-color').value);
 };
-document.getElementById('grid-color').onchange = () => {
+getRequiredInput('grid-color').onchange = () => {
   socket.emit('scene:setGrid', {
-    gridSize: Number(document.getElementById('grid-size').value) || 50,
-    gridVisible: document.getElementById('grid-toggle').checked,
-    gridColor: document.getElementById('grid-color').value,
-    snapToGrid: document.getElementById('snap-toggle').checked,
-    fitTokensToGrid: document.getElementById('fit-token-toggle').checked
+    gridSize: Number(getRequiredInput('grid-size').value) || 50,
+    gridVisible: getRequiredInput('grid-toggle').checked,
+    gridColor: getRequiredInput('grid-color').value,
+    snapToGrid: getRequiredInput('snap-toggle').checked,
+    fitTokensToGrid: getRequiredInput('fit-token-toggle').checked
   });
 };
-document.getElementById('snap-toggle').onchange = () => {
+getRequiredInput('snap-toggle').onchange = () => {
   socket.emit('scene:setGrid', {
-    gridSize: Number(document.getElementById('grid-size').value) || 50,
-    gridVisible: document.getElementById('grid-toggle').checked,
-    gridColor: document.getElementById('grid-color').value,
-    snapToGrid: document.getElementById('snap-toggle').checked,
-    fitTokensToGrid: document.getElementById('fit-token-toggle').checked
+    gridSize: Number(getRequiredInput('grid-size').value) || 50,
+    gridVisible: getRequiredInput('grid-toggle').checked,
+    gridColor: getRequiredInput('grid-color').value,
+    snapToGrid: getRequiredInput('snap-toggle').checked,
+    fitTokensToGrid: getRequiredInput('fit-token-toggle').checked
   });
 };
-document.getElementById('fit-token-toggle').onchange = () => {
+getRequiredInput('fit-token-toggle').onchange = () => {
   socket.emit('scene:setGrid', {
-    gridSize: Number(document.getElementById('grid-size').value) || 50,
-    gridVisible: document.getElementById('grid-toggle').checked,
-    gridColor: document.getElementById('grid-color').value,
-    snapToGrid: document.getElementById('snap-toggle').checked,
-    fitTokensToGrid: document.getElementById('fit-token-toggle').checked
+    gridSize: Number(getRequiredInput('grid-size').value) || 50,
+    gridVisible: getRequiredInput('grid-toggle').checked,
+    gridColor: getRequiredInput('grid-color').value,
+    snapToGrid: getRequiredInput('snap-toggle').checked,
+    fitTokensToGrid: getRequiredInput('fit-token-toggle').checked
   });
 };
-document.getElementById('time-of-day-select').onchange = event => {
-  socket.emit('scene:setTimeOfDay', { timeOfDay: event.target.value });
+getRequiredSelect('time-of-day-select').onchange = () => {
+  socket.emit('scene:setTimeOfDay', { timeOfDay: getRequiredSelect('time-of-day-select').value });
 };
-document.getElementById('grid-offset-reset').onclick = () => {
+getRequiredButton('grid-offset-reset').onclick = () => {
   socket.emit('scene:setGrid', {
-    gridSize: Number(document.getElementById('grid-size').value) || 50,
-    gridVisible: document.getElementById('grid-toggle').checked,
-    gridColor: document.getElementById('grid-color').value,
-    snapToGrid: document.getElementById('snap-toggle').checked,
-    fitTokensToGrid: document.getElementById('fit-token-toggle').checked,
+    gridSize: Number(getRequiredInput('grid-size').value) || 50,
+    gridVisible: getRequiredInput('grid-toggle').checked,
+    gridColor: getRequiredInput('grid-color').value,
+    snapToGrid: getRequiredInput('snap-toggle').checked,
+    fitTokensToGrid: getRequiredInput('fit-token-toggle').checked,
     gridOffsetX: 0,
     gridOffsetY: 0
   });
 };
 
-document.getElementById('zoom-in').onclick = () => setMapZoom(mapScale * 1.2, viewportCenter());
-document.getElementById('zoom-out').onclick = () => setMapZoom(mapScale / 1.2, viewportCenter());
-document.getElementById('zoom-reset').onclick = () => {
+getRequiredButton('zoom-in').onclick = () => setMapZoom(mapScale * 1.2, viewportCenter());
+getRequiredButton('zoom-out').onclick = () => setMapZoom(mapScale / 1.2, viewportCenter());
+getRequiredButton('zoom-reset').onclick = () => {
   mapScale = 1;
   mapPan = { x: 0, y: 0 };
   applyMapTransform();
 };
-document.getElementById('zoom-fit').onclick = fitMapToViewport;
+getRequiredButton('zoom-fit').onclick = fitMapToViewport;
 
-document.getElementById('toggle-initiative-btn').onclick = () => {
-  const mapView = document.getElementById('view-map');
+getRequiredButton('toggle-initiative-btn').onclick = () => {
+  const mapView = getRequiredElement<HTMLElement>('#view-map');
   const collapsed = mapView.classList.toggle('initiative-collapsed');
-  document.getElementById('toggle-initiative-btn').setAttribute('aria-expanded', String(!collapsed));
+  getRequiredButton('toggle-initiative-btn').setAttribute('aria-expanded', String(!collapsed));
 };
 
 function setMapZoom(value, clientPoint = viewportCenter()) {
@@ -805,7 +806,7 @@ function viewportCenter() {
 }
 
 function fitMapToViewport() {
-  const stage = document.getElementById('map-stage');
+  const stage = getRequiredElement<HTMLElement>('#map-stage');
   const stageWidth = stage.offsetWidth;
   const stageHeight = stage.offsetHeight;
   if (!stageWidth || !stageHeight) return;
@@ -822,15 +823,14 @@ function fitMapToViewport() {
 }
 
 function applyMapTransform() {
-  const stage = document.getElementById('map-stage');
-  if (!stage) return;
+  const stage = getRequiredElement<HTMLElement>('#map-stage');
   stage.style.transform = `translate(${mapPan.x}px, ${mapPan.y}px) scale(${mapScale})`;
-  document.getElementById('zoom-level').textContent = Math.round(mapScale * 100) + '%';
+  getRequiredElement<HTMLElement>('#zoom-level').textContent = Math.round(mapScale * 100) + '%';
 }
 
 function renderFog() {
-  const canvas = document.getElementById('fog-canvas');
-  if (!canvas || !state) return;
+  const canvas = getRequiredElement<HTMLCanvasElement>('#fog-canvas');
+  if (!state) return;
   const ctx = canvas.getContext('2d');
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   canvas.classList.toggle('active', !!state.scene.fogEnabled);
@@ -864,7 +864,7 @@ function renderSharedPointer({ id, name, color, x, y }: any = {}) {
     const label = document.createElement('span');
     label.className = 'shared-pointer-label';
     pointer.append(dot, label);
-    document.getElementById('map-stage').appendChild(pointer);
+    getRequiredElement<HTMLElement>('#map-stage').appendChild(pointer);
   }
   pointer.style.left = `${Number(x)}px`;
   pointer.style.top = `${Number(y)}px`;
@@ -897,6 +897,6 @@ function renderSharedPing({ name, color, x, y }: any = {}) {
   const label = document.createElement('span');
   label.textContent = name || 'Player';
   ping.appendChild(label);
-  document.getElementById('map-stage').appendChild(ping);
+  getRequiredElement<HTMLElement>('#map-stage').appendChild(ping);
   setTimeout(() => ping.remove(), 1500);
 }

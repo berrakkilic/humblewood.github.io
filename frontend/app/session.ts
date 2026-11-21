@@ -1,46 +1,65 @@
 /** Authentication, routing, socket synchronization, accounts, and presence. */
 
 // ---------------- Join flow ----------------
-document.getElementById('role-dm').onclick = () => setRole('dm');
-document.getElementById('role-player').onclick = () => setRole('player');
-document.getElementById('auth-login').onclick = () => setAuthMode('login');
-document.getElementById('auth-register').onclick = () => setAuthMode('register');
+const roleDmButton = getRequiredButton('role-dm');
+const rolePlayerButton = getRequiredButton('role-player');
+const authLoginButton = getRequiredButton('auth-login');
+const authRegisterButton = getRequiredButton('auth-register');
+const dmPinField = getRequiredElement<HTMLElement>('#dm-pin-field');
+const playerAuthFields = getRequiredElement<HTMLElement>('#player-auth-fields');
+const nameField = getRequiredElement<HTMLElement>('#name-field');
+const joinError = getRequiredElement<HTMLElement>('#join-error');
+const confirmPasswordField = getRequiredElement<HTMLElement>('#confirm-password-field');
+const passwordInput = getRequiredInput('password-input');
+const authHelp = getRequiredElement<HTMLElement>('#auth-help');
+const joinButton = getRequiredButton('join-btn');
+const nameInput = getRequiredInput('name-input');
+const usernameInput = getRequiredInput('username-input');
+const confirmPasswordInput = getRequiredInput('confirm-password-input');
+const dmPinInput = getRequiredInput('dm-pin-input');
+
+roleDmButton.onclick = () => setRole('dm');
+rolePlayerButton.onclick = () => setRole('player');
+authLoginButton.onclick = () => setAuthMode('login');
+authRegisterButton.onclick = () => setAuthMode('register');
 function setRole(role) {
   myRole = role;
-  document.getElementById('role-dm').classList.toggle('active', role === 'dm');
-  document.getElementById('role-player').classList.toggle('active', role === 'player');
-  document.getElementById('dm-pin-field').classList.toggle('hidden', role !== 'dm');
-  document.getElementById('player-auth-fields').classList.toggle('hidden', role !== 'player');
-  document.getElementById('name-field').classList.toggle('hidden', role === 'player' && authMode === 'login');
-  document.getElementById('join-error').textContent = '';
+  roleDmButton.classList.toggle('active', role === 'dm');
+  rolePlayerButton.classList.toggle('active', role === 'player');
+  roleDmButton.setAttribute('aria-pressed', String(role === 'dm'));
+  rolePlayerButton.setAttribute('aria-pressed', String(role === 'player'));
+  dmPinField.classList.toggle('hidden', role !== 'dm');
+  playerAuthFields.classList.toggle('hidden', role !== 'player');
+  nameField.classList.toggle('hidden', role === 'player' && authMode === 'login');
+  joinError.textContent = '';
 }
 
 function setAuthMode(mode) {
   authMode = mode;
-  document.getElementById('auth-login').classList.toggle('active', mode === 'login');
-  document.getElementById('auth-register').classList.toggle('active', mode === 'register');
-  document.getElementById('name-field').classList.toggle('hidden', myRole === 'player' && mode === 'login');
-  document.getElementById('confirm-password-field').classList.toggle('hidden', mode !== 'register');
-  document.getElementById('password-input').autocomplete = mode === 'register' ? 'new-password' : 'current-password';
-  document.getElementById('auth-help').textContent = mode === 'register'
+  authLoginButton.classList.toggle('active', mode === 'login');
+  authRegisterButton.classList.toggle('active', mode === 'register');
+  authLoginButton.setAttribute('aria-pressed', String(mode === 'login'));
+  authRegisterButton.setAttribute('aria-pressed', String(mode === 'register'));
+  nameField.classList.toggle('hidden', myRole === 'player' && mode === 'login');
+  confirmPasswordField.classList.toggle('hidden', mode !== 'register');
+  passwordInput.autocomplete = mode === 'register' ? 'new-password' : 'current-password';
+  authHelp.textContent = mode === 'register'
     ? 'Create one account, then use it anywhere you play. This device will stay signed in for 30 days.'
     : 'Sign in from any device. This device will stay signed in for 30 days; if you forget your password, ask the DM to reset it.';
-  document.getElementById('join-error').textContent = '';
+  joinError.textContent = '';
 }
 
-document.getElementById('join-btn').onclick = async () => {
-  const nameInput = document.getElementById('name-input');
-  myUsername = document.getElementById('username-input').value.trim();
-  const password = document.getElementById('password-input').value;
+joinButton.onclick = async () => {
+  myUsername = usernameInput.value.trim();
+  const password = passwordInput.value;
   myName = nameInput.value.trim() || (myRole === 'dm' ? 'The DM' : myUsername);
-  if (myRole === 'player' && authMode === 'register' && password !== document.getElementById('confirm-password-input').value) {
-    document.getElementById('join-error').textContent = 'Those passwords do not match.';
+  if (myRole === 'player' && authMode === 'register' && password !== confirmPasswordInput.value) {
+    joinError.textContent = 'Those passwords do not match.';
     return;
   }
-  const joinButton = document.getElementById('join-btn');
   joinButton.disabled = true;
   joinButton.textContent = 'Entering…';
-  document.getElementById('join-error').textContent = '';
+  joinError.textContent = '';
   try {
     const response = await fetch('/api/auth/session', {
       method: 'POST',
@@ -52,7 +71,7 @@ document.getElementById('join-btn').onclick = async () => {
         username: myUsername,
         password,
         authMode,
-        dmPin: document.getElementById('dm-pin-input').value
+        dmPin: dmPinInput.value
       })
     });
     const result = await response.json().catch(() => ({}));
@@ -64,26 +83,25 @@ document.getElementById('join-btn').onclick = async () => {
     awaitingSessionResume = false;
     joinButton.disabled = false;
     joinButton.textContent = 'Enter the Wood';
-    document.getElementById('join-error').textContent = error.message || 'Could not join the table.';
+    joinError.textContent = error.message || 'Could not join the table.';
   }
 };
 
-document.getElementById('dm-pin-input').addEventListener('keydown', event => {
-  if (event.key === 'Enter') document.getElementById('join-btn').click();
+dmPinInput.addEventListener('keydown', event => {
+  if (event.key === 'Enter') joinButton.click();
 });
-document.getElementById('password-input').addEventListener('keydown', event => {
-  if (event.key === 'Enter') document.getElementById('join-btn').click();
+passwordInput.addEventListener('keydown', event => {
+  if (event.key === 'Enter') joinButton.click();
 });
-document.getElementById('confirm-password-input').addEventListener('keydown', event => {
-  if (event.key === 'Enter') document.getElementById('join-btn').click();
+confirmPasswordInput.addEventListener('keydown', event => {
+  if (event.key === 'Enter') joinButton.click();
 });
 
 socket.on('identify:result', result => {
-  const joinButton = document.getElementById('join-btn');
   joinButton.disabled = false;
   joinButton.textContent = 'Enter the Wood';
   if (!result.ok) {
-    document.getElementById('join-error').textContent = result.message || 'Could not join the table.';
+    joinError.textContent = result.message || 'Could not join the table.';
     return;
   }
   awaitingSessionResume = false;
@@ -92,13 +110,13 @@ socket.on('identify:result', result => {
   myUsername = result.username || '';
   if (myRole === 'player') authMode = 'login';
   joined = true;
-  document.getElementById('password-input').value = '';
-  document.getElementById('confirm-password-input').value = '';
-  document.getElementById('dm-pin-input').value = '';
-  document.getElementById('join-screen').style.display = 'none';
-  document.getElementById('app').style.display = 'flex';
+  passwordInput.value = '';
+  confirmPasswordInput.value = '';
+  dmPinInput.value = '';
+  getRequiredElement<HTMLElement>('#join-screen').style.display = 'none';
+  getRequiredElement<HTMLElement>('#app').style.display = 'flex';
   document.body.setAttribute('data-role', myRole);
-  document.getElementById('my-role-pill').textContent = myRole === 'dm' ? 'Dungeon Master' : `Player · ${myName}`;
+  getRequiredElement<HTMLElement>('#my-role-pill').textContent = myRole === 'dm' ? 'Dungeon Master' : `Player · ${myName}`;
   if (myRole !== 'dm') {
     dmPrivateRollsEnabled = false;
     privateRollLog = [];
@@ -114,10 +132,9 @@ socket.on('connect', () => {
 socket.on('session:result', result => {
   if (result.ok || !awaitingSessionResume) return;
   awaitingSessionResume = false;
-  const joinButton = document.getElementById('join-btn');
   joinButton.disabled = false;
   joinButton.textContent = 'Enter the Wood';
-  document.getElementById('join-error').textContent = 'Your login succeeded, but the saved session could not be restored. Please try again.';
+  joinError.textContent = 'Your login succeeded, but the saved session could not be restored. Please try again.';
 });
 
 // ---------------- Frontend routes ----------------
@@ -135,9 +152,9 @@ const router = window.HumblewoodRouter.createRouter({
 
 window.HumblewoodAlmanac.mount(window.HumblewoodAlmanacData);
 
-document.getElementById('topbar-roll-btn').onclick = () => switchView('dice');
-document.getElementById('topbar-logout-btn').onclick = async () => {
-  const button = document.getElementById('topbar-logout-btn');
+getRequiredButton('topbar-roll-btn').onclick = () => switchView('dice');
+getRequiredButton('topbar-logout-btn').onclick = async () => {
+  const button = getRequiredButton('topbar-logout-btn');
   button.disabled = true;
   button.textContent = 'Logging out…';
   try {
@@ -302,8 +319,7 @@ socket.on('notifications:update', notifications => {
   if (hasNew) showToast('New private table notification.');
 });
 socket.on('safety:submitted', ({ cooldown }: any = {}) => {
-  const button = document.getElementById('player-safety-btn');
-  if (!button) return;
+  const button = getRequiredButton('player-safety-btn');
   button.disabled = true;
   button.textContent = cooldown ? 'Break request sent' : 'Break requested';
   clearTimeout(safetyButtonTimer);
@@ -315,13 +331,11 @@ socket.on('safety:submitted', ({ cooldown }: any = {}) => {
 });
 socket.on('question:submitted', () => {
   questionSubmitting = false;
-  const button = document.getElementById('player-question-submit');
-  if (button) {
-    button.disabled = false;
-    button.textContent = 'Send question';
-  }
-  document.getElementById('player-question-input').value = '';
-  document.getElementById('player-question-anonymous').checked = false;
+  const button = getRequiredButton('player-question-submit');
+  button.disabled = false;
+  button.textContent = 'Send question';
+  getRequiredElement<HTMLTextAreaElement>('#player-question-input').value = '';
+  getRequiredInput('player-question-anonymous').checked = false;
   closePlayerQuestion();
   showToast('Your question was sent privately to the DM.');
 });
@@ -386,12 +400,12 @@ socket.on('concentration:required', ({ name, damage, dc }) => {
 });
 socket.on('accounts:update', renderPlayerAccounts);
 socket.on('account:passwordReset', ({ username }) => {
-  document.getElementById('reset-account-password').value = '';
+  getRequiredInput('reset-account-password').value = '';
   showToast(`Password reset for ${username}.`);
 });
 
 function renderPlayerAccounts(accounts) {
-  const list = document.getElementById('account-list');
+  const list = getRequiredElement<HTMLElement>('#account-list');
   list.innerHTML = '';
   if (!accounts.length) {
     list.innerHTML = '<p class="empty-roll-options">No player accounts have been created yet.</p>';
@@ -401,15 +415,15 @@ function renderPlayerAccounts(accounts) {
     const row = document.createElement('div');
     row.className = 'account-list-item';
     row.innerHTML = `<strong>${escapeHtml(account.displayName)}</strong><span>@${escapeHtml(account.username)}</span>`;
-    row.onclick = () => { document.getElementById('reset-account-username').value = account.username; };
+    row.onclick = () => { getRequiredInput('reset-account-username').value = account.username; };
     list.appendChild(row);
   });
 }
 
-document.getElementById('refresh-accounts-btn').onclick = () => socket.emit('accounts:list');
-document.getElementById('reset-account-password-btn').onclick = () => {
-  const username = document.getElementById('reset-account-username').value.trim();
-  const password = document.getElementById('reset-account-password').value;
+getRequiredButton('refresh-accounts-btn').onclick = () => socket.emit('accounts:list');
+getRequiredButton('reset-account-password-btn').onclick = () => {
+  const username = getRequiredInput('reset-account-username').value.trim();
+  const password = getRequiredInput('reset-account-password').value;
   if (!username) return showToast('Choose a player account first.');
   if (password.length < 8) return showToast('The new password needs at least 8 characters.');
   socket.emit('account:resetPassword', { username, password });
@@ -421,7 +435,7 @@ socket.on('initiative:update', (initiative) => {
 });
 
 socket.on('presence', ({ role, name, connected }) => {
-  const el = document.getElementById('presence-list');
+  const el = getRequiredElement<HTMLElement>('#presence-list');
   // lightweight ephemeral presence note
   el.textContent = `${name} ${connected ? 'joined' : 'left'} the wood`;
   setTimeout(() => { if (el.textContent.includes(name)) el.textContent = ''; }, 4000);

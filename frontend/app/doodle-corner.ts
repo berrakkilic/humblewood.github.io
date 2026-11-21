@@ -30,13 +30,16 @@ function resetDoodleCornerPosition() {
   doodleCornerPanel.style.margin = '0';
 
   const anchor = mapStageWrap.getBoundingClientRect();
+  const toolbar = document.querySelector('#map-stage-wrap > .map-toolbar') as HTMLElement | null;
+  const toolbarRect = toolbar?.getBoundingClientRect();
   const panelRect = doodleCornerPanel.getBoundingClientRect();
   const gutter = 8;
   const maxLeft = Math.max(gutter, window.innerWidth - panelRect.width - gutter);
   const maxTop = Math.max(gutter, window.innerHeight - panelRect.height - gutter);
+  const minimumTop = toolbarRect ? toolbarRect.bottom + gutter : anchor.top + gutter;
 
   doodleCornerPanel.style.left = `${Math.min(Math.max(anchor.left + 10, gutter), maxLeft)}px`;
-  doodleCornerPanel.style.top = `${Math.min(Math.max(anchor.top + 10, gutter), maxTop)}px`;
+  doodleCornerPanel.style.top = `${Math.min(Math.max(minimumTop, gutter), maxTop)}px`;
 }
 
 function clampDoodleCornerPosition(left, top) {
@@ -44,9 +47,12 @@ function clampDoodleCornerPosition(left, top) {
   const gutter = 8;
   const maxLeft = Math.max(gutter, window.innerWidth - panelRect.width - gutter);
   const maxTop = Math.max(gutter, window.innerHeight - panelRect.height - gutter);
+  const toolbar = document.querySelector('#map-stage-wrap > .map-toolbar') as HTMLElement | null;
+  const toolbarRect = toolbar?.getBoundingClientRect();
+  const minimumTop = toolbarRect ? toolbarRect.bottom + gutter : gutter;
 
   doodleCornerPanel.style.left = `${Math.min(Math.max(left, gutter), maxLeft)}px`;
-  doodleCornerPanel.style.top = `${Math.min(Math.max(top, gutter), maxTop)}px`;
+  doodleCornerPanel.style.top = `${Math.min(Math.max(top, minimumTop), maxTop)}px`;
 }
 
 function setDoodleCornerTool(tool) {
@@ -161,6 +167,9 @@ doodleCornerDragHandle.onpointermove = event => {
 };
 doodleCornerDragHandle.onpointerup = () => { doodleCornerDrag = null; };
 doodleCornerDragHandle.onpointercancel = () => { doodleCornerDrag = null; };
+window.addEventListener('resize', () => {
+  if (doodleCornerOpen) resetDoodleCornerPosition();
+});
 
 socket.on('scene:doodleCorner:add', path => {
   if (!state) return;

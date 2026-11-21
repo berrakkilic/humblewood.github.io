@@ -25,7 +25,7 @@ small enough to navigate and review.
 | `dice.ts` | Dice roller, roll log, and generated roll controls |
 | `combat.ts` | Quick combat, long rests, and spell preparation |
 | `initiative.ts` | Initiative order and turn controls |
-| `shared.ts` | Shared UI helpers |
+| `shared.ts` | Shared UI helpers and typed required-element accessors |
 | `bootstrap.ts` | One-time initialization and socket connection |
 
 ## Commands
@@ -42,3 +42,18 @@ This is intentionally a staged migration rather than a framework rewrite. New
 features can introduce focused interfaces and modules as their data boundaries
 stabilize; a framework can be evaluated later if component/state reuse makes it
 worth the runtime and rewrite cost.
+
+Use the typed `getRequiredButton`, `getRequiredInput`, and `getRequiredSelect`
+helpers for controls that are required by the page shell. They fail explicitly
+when markup and feature code drift apart; optional elements should continue to
+use a null check.
+
+For interface decisions and visual implementation, follow
+[`../docs/UI_UX_BEST_PRACTICES.md`](../docs/UI_UX_BEST_PRACTICES.md).
+
+For network, bundle, DOM, canvas, asset, and rendering performance, follow
+[`../docs/FRONTEND_PERFORMANCE_BEST_PRACTICES.md`](../docs/FRONTEND_PERFORMANCE_BEST_PRACTICES.md).
+
+For CSS structure, responsive layout, JavaScript style, state boundaries,
+event handling, and dynamic HTML safety, follow
+[`../docs/FRONTEND_CODING_BEST_PRACTICES.md`](../docs/FRONTEND_CODING_BEST_PRACTICES.md).

@@ -1,17 +1,19 @@
 /** Initiative tracker controls, ordering, and quick-add list. */
 
 // ================= INITIATIVE (MAP PANEL) =================
-document.getElementById('init-add-btn').onclick = () => {
-  const name = document.getElementById('init-name').value.trim();
-  const value = Number(document.getElementById('init-value').value);
+getRequiredButton('init-add-btn').onclick = () => {
+  const nameInput = getRequiredInput('init-name');
+  const valueInput = getRequiredInput('init-value');
+  const name = nameInput.value.trim();
+  const value = Number(valueInput.value);
   if (!name || !Number.isFinite(value)) return showToast('Add a name and initiative value.');
   const token = state.tokens.find(entry => entry.label.toLowerCase() === name.toLowerCase());
   socket.emit('initiative:add', { name, value, tokenId: token?.id || null });
-  document.getElementById('init-name').value = '';
-  document.getElementById('init-value').value = '';
+  nameInput.value = '';
+  valueInput.value = '';
 };
-document.getElementById('init-next-btn').onclick = () => socket.emit('initiative:next');
-document.getElementById('init-reset-btn').onclick = () => {
+getRequiredButton('init-next-btn').onclick = () => socket.emit('initiative:next');
+getRequiredButton('init-reset-btn').onclick = () => {
   if (confirm('Clear the turn order and return to round 1?')) socket.emit('initiative:reset');
 };
 
@@ -24,9 +26,9 @@ function currentInitiativeEntry() {
 function renderInitiative() {
   if (!state) return;
   const initiative = state.initiative || { entries: [], round: 1, currentIndex: -1 };
-  document.getElementById('init-round').textContent = initiative.round || 1;
-  document.getElementById('initiative-count').textContent = initiative.entries.length;
-  const list = document.getElementById('initiative-list');
+  getRequiredElement<HTMLElement>('#init-round').textContent = String(initiative.round || 1);
+  getRequiredElement<HTMLElement>('#initiative-count').textContent = String(initiative.entries.length);
+  const list = getRequiredElement<HTMLElement>('#initiative-list');
   list.innerHTML = '';
   if (!initiative.entries.length) {
     const empty = document.createElement('p');
@@ -121,7 +123,7 @@ function renderInitiative() {
 }
 
 function renderInitiativeQuickAdd() {
-  const container = document.getElementById('init-quick-add');
+  const container = getRequiredElement<HTMLElement>('#init-quick-add');
   container.innerHTML = '';
   if (myRole !== 'dm') return;
   const label = document.createElement('span');
@@ -144,8 +146,8 @@ function renderInitiativeQuickAdd() {
     button.onclick = () => {
       if (token.kind === 'npc') rollNpcInitiative(token, 'normal');
       else {
-        document.getElementById('init-name').value = token.label;
-        document.getElementById('init-value').focus();
+        getRequiredInput('init-name').value = token.label;
+        getRequiredInput('init-value').focus();
       }
     };
     container.appendChild(button);

@@ -291,7 +291,7 @@ function renderCharacters() {
     const charClass = c.charClass || c.className || '';
     card.innerHTML = `
       <div class="card-top">
-        <div class="card-portrait">${c.portraitUrl ? `<img src="${escapeAttr(c.portraitUrl)}" alt="">` : '🍃'}</div>
+        <div class="card-portrait">${safeImageUrl(c.portraitUrl) ? `<img src="${escapeAttr(safeImageUrl(c.portraitUrl))}" alt="">` : '🍃'}</div>
         <div><h3>${escapeHtml(c.name)}</h3><div class="meta">${escapeHtml([c.pronouns, species, charClass, `Level ${Number(c.level) || 1}`].filter(Boolean).join(' · '))}</div></div>
         ${canEdit ? '' : '<span class="locked-badge">View only</span>'}
       </div>
@@ -346,7 +346,7 @@ function renderCharacters() {
     card.className = 'char-card npc-sheet-card';
     card.innerHTML = `
       <div class="card-top">
-        <div class="card-portrait">${npc.imageUrl ? `<img src="${escapeAttr(npc.imageUrl)}" alt="">` : '🦊'}</div>
+        <div class="card-portrait">${safeImageUrl(npc.imageUrl) ? `<img src="${escapeAttr(safeImageUrl(npc.imageUrl))}" alt="">` : '🦊'}</div>
         <div><h3>${escapeHtml(npc.name)}</h3><div class="meta">${escapeHtml([npc.pronouns, details.race !== 'Unspecified' ? details.race : '', details.className !== 'Unspecified' ? details.className : '', descriptor].filter(Boolean).join(' · '))}${escapeHtml(challenge)}</div></div>
         <span class="npc-sheet-badge">NPC</span>
       </div>
@@ -511,7 +511,9 @@ function openSheetEditor(c, options: any = {}) {
   refreshCharacterCalculations(!c, !c && !isNpc);
   setSheetEditable(editingCanEdit, !!c);
   window.requestAnimationFrame(alignBasicStatsPanels);
-  document.getElementById('view-characters').scrollIntoView({ behavior: 'smooth' });
+  window.requestAnimationFrame(() => {
+    document.getElementById('sheet-editor').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
 }
 
 function legacyCharacterFields(c) {

@@ -192,11 +192,21 @@ function renderJukebox() {
   document.getElementById('now-playing').textContent = current ? current.title : 'Nothing playing';
   document.getElementById('now-playing-sub').textContent = current ? 'from the Humblewood jukebox' : 'add a track below to begin';
   document.getElementById('jukebox-art').classList.toggle('spinning', j.isPlaying);
-  document.getElementById('jb-playpause').textContent = j.isPlaying ? '⏸' : '▶';
+  const playPauseButton = document.getElementById('jb-playpause');
+  playPauseButton.setAttribute('aria-label', j.isPlaying ? 'Pause' : 'Play');
+  playPauseButton.innerHTML = j.isPlaying
+    ? '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="4" width="4" height="16" rx="1"></rect><rect x="14" y="4" width="4" height="16" rx="1"></rect></svg>'
+    : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4 20 12 7 20Z"></path></svg>';
 
   if (current) {
     if (audioEl.src !== location.origin + current.url && audioEl.src !== current.url) {
-      audioEl.src = current.url;
+      const safeTrackUrl = safeAssetUrl(current.url, ['music', 'uploads']);
+      if (!safeTrackUrl) {
+        audioEl.pause();
+        audioEl.removeAttribute('src');
+        return;
+      }
+      audioEl.src = safeTrackUrl;
     }
     const elapsed = j.isPlaying ? (Date.now() - j.startedAt) / 1000 : j.seek;
     if (Math.abs((audioEl.currentTime || 0) - elapsed) > 1.5) {

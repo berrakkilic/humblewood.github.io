@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>The Humblewood Table</title>
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="style.css">
 <link rel="stylesheet" href="sheet-editor.css">
 </head>
@@ -22,9 +24,9 @@
 
     <div class="field">
       <label>I am the...</label>
-      <div class="role-toggle">
-        <button id="role-dm" class="active" data-role="dm">Dungeon Master</button>
-        <button id="role-player" data-role="player">Player</button>
+      <div class="role-toggle" role="group" aria-label="Choose your table role">
+        <button id="role-dm" class="active" data-role="dm" type="button" aria-pressed="true">Dungeon Master</button>
+        <button id="role-player" data-role="player" type="button" aria-pressed="false">Player</button>
       </div>
     </div>
 
@@ -35,8 +37,8 @@
 
     <div id="player-auth-fields" class="hidden">
       <div class="auth-toggle" aria-label="Player account action">
-        <button id="auth-login" class="active" type="button">Sign in</button>
-        <button id="auth-register" type="button">Create account</button>
+        <button id="auth-login" class="active" type="button" aria-pressed="true">Sign in</button>
+        <button id="auth-register" type="button" aria-pressed="false">Create account</button>
       </div>
       <div class="field">
         <label for="username-input">Username</label>
@@ -145,11 +147,11 @@
           <details class="sidebar-accordion" id="accordion-scene">
             <summary><h3>Set the scene</h3></summary>
             <div class="sidebar-accordion-body">
-              <input type="file" id="map-upload" accept="image/*" style="margin-bottom:6px;">
+              <input type="file" id="map-upload" accept="image/*" aria-label="Upload map image" style="margin-bottom:6px;">
               <button class="btn-ghost" id="clear-doodles-btn" style="width:100%;">Clear doodles</button>
 
               <div class="scene-library">
-                <input type="text" id="scene-name-input" maxlength="80" placeholder="Scene name, e.g. HumbleBar">
+                <input type="text" id="scene-name-input" maxlength="80" aria-label="Scene name" placeholder="Scene name, e.g. HumbleBar">
                 <button class="btn-primary" id="save-scene-btn" type="button">Save current scene</button>
                 <select id="saved-scene-select" aria-label="Saved scenes">
                   <option value="">Choose a saved scene…</option>
@@ -178,24 +180,24 @@
             <summary><h3>Create a token</h3></summary>
             <div class="sidebar-accordion-body">
               <div class="token-create-form">
-              <input type="text" id="token-name" placeholder="Token name">
-              <select id="token-kind">
+              <input type="text" id="token-name" aria-label="Token name" placeholder="Token name">
+              <select id="token-kind" aria-label="Token type">
                 <option value="npc">NPC</option>
                 <option value="item">Item</option>
                 <option value="pc">Player character</option>
               </select>
-              <input type="text" id="token-pronouns" maxlength="60" placeholder="Pronouns, e.g. she/her">
+              <input type="text" id="token-pronouns" maxlength="60" aria-label="Token pronouns" placeholder="Pronouns, e.g. she/her">
               <div class="npc-create-fields" id="npc-create-fields">
                 <div class="npc-stat-inputs">
                   <label>HP <input type="number" id="npc-hp" min="1" value="10"></label>
                   <label>AC <input type="number" id="npc-ac" min="0" value="10"></label>
                   <label>Init <input type="number" id="npc-initiative" value="0"></label>
                 </div>
-                <textarea id="npc-attacks" rows="3" placeholder="Attacks: Name | +4 | 1d6+2"></textarea>
-                <textarea id="npc-notes" rows="2" placeholder="Battle notes or abilities (optional)"></textarea>
+                <textarea id="npc-attacks" rows="3" aria-label="NPC attacks" placeholder="Attacks: Name | +4 | 1d6+2"></textarea>
+                <textarea id="npc-notes" rows="2" aria-label="NPC battle notes and abilities" placeholder="Battle notes or abilities (optional)"></textarea>
                 <p class="sidebar-help">One attack per line: Name | hit bonus | damage dice</p>
               </div>
-              <input type="file" id="token-image" accept="image/*">
+              <input type="file" id="token-image" accept="image/*" aria-label="Token image">
               <button class="btn-rose" id="add-token-btn">Create NPC & place</button>
               <button class="btn-ghost hidden" id="cancel-npc-edit-btn" type="button">Cancel edit</button>
               </div>
@@ -277,9 +279,9 @@
           <strong id="map-time-label">Morning</strong>
         </div>
         <div class="map-toolbar map-toolbar-bottom">
-          <button id="zoom-out">−</button>
+          <button id="zoom-out" type="button" aria-label="Zoom out">−</button>
           <span id="zoom-level">100%</span>
-          <button id="zoom-in">+</button>
+          <button id="zoom-in" type="button" aria-label="Zoom in">+</button>
           <button id="zoom-reset">Reset view</button>
           <button id="zoom-fit">Fit map</button>
           <button id="toggle-initiative-btn" aria-controls="map-initiative-panel" aria-expanded="false">⚔ Initiative <span id="initiative-count">0</span></button>
@@ -347,7 +349,7 @@
       <div class="character-view-heading">
         <div>
           <h2>Characters & NPC sheets</h2>
-          <p>Player characters and full DM-controlled stat blocks live together here.</p>
+          <p>Everything you could want for your character and more</p>
         </div>
         <div class="character-create-actions">
           <button class="btn-primary" id="new-sheet-btn">+ New character</button>
@@ -359,7 +361,7 @@
       <div class="dm-only npc-sheet-list-section">
         <div class="character-list-heading-row">
           <h3 class="character-list-heading">NPC stat blocks</h3>
-          <p>These stay DM-owned even though they use the complete sheet editor.</p>
+          <p>Lotsa NPCs to choose from</p>
         </div>
         <div class="npc-filter-tools" id="npc-directory-filter-tools">
           <label class="npc-search-field">
@@ -636,7 +638,6 @@
           <details class="sheet-section section-attacks" open data-sheet-tab="combat">
             <summary>Attacks & Actions</summary>
             <div class="attack-list-heading">
-              <p class="sidebar-help">Add as many attacks as the stat block needs. Presets calculate the attack and damage modifiers from the current ability scores.</p>
               <button type="button" class="btn-ghost" id="attack-add-btn">+ Add attack</button>
             </div>
             <div class="attack-add-form hidden" id="attack-add-form">
@@ -1019,9 +1020,15 @@
         <div class="now-playing" id="now-playing">Nothing playing</div>
         <div class="sub" id="now-playing-sub"></div>
         <div class="transport">
-          <button id="jb-prev">⏮</button>
-          <button class="play-pause" id="jb-playpause">▶</button>
-          <button id="jb-next">⏭</button>
+          <button id="jb-prev" type="button" aria-label="Previous track">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="3" height="12" rx=".5"></rect><path d="M18 5 8 12l10 7Z"></path></svg>
+          </button>
+          <button class="play-pause" id="jb-playpause" type="button" aria-label="Play">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4 20 12 7 20Z"></path></svg>
+          </button>
+          <button id="jb-next" type="button" aria-label="Next track">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="18" y="6" width="3" height="12" rx=".5"></rect><path d="M6 5 16 12 6 19Z"></path></svg>
+          </button>
         </div>
 
         <div class="jukebox-volume-control">
@@ -1134,7 +1141,7 @@
                   <button class="dice-roll-mode-btn" type="button" data-mode="advantage" aria-pressed="false">Advantage</button>
                   <button class="dice-roll-mode-btn" type="button" data-mode="disadvantage" aria-pressed="false">Disadvantage</button>
                 </div>
-                <span class="dice-roll-mode-hint" id="dice-roll-mode-hint" aria-live="polite">Choose one for your next roll.</span>
+                <span class="dice-roll-mode-hint" id="dice-roll-mode-hint" aria-live="polite"></span>
               </div>
             </div>
           </div>
@@ -1154,11 +1161,11 @@
         </div>
 
         <div class="dice-custom-row">
-          <label>Count</label>
+          <label for="dice-count">Count</label>
           <input type="number" id="dice-count" value="1" min="1" max="20">
-          <label>Sides</label>
+          <label for="dice-sides">Sides</label>
           <input type="number" id="dice-sides" value="20" min="2" max="1000">
-          <label>Modifier</label>
+          <label for="dice-mod">Modifier</label>
           <input type="number" id="dice-mod" value="0">
           <button class="btn-rose" id="roll-custom-btn">Roll</button>
         </div>
@@ -1377,9 +1384,9 @@
         <div class="condition-chips" id="combat-conditions"></div>
         <div class="combat-counter-row">
           <span>Exhaustion</span>
-          <button class="counter-btn" data-combat-action="exhaustion-down" type="button">−</button>
+          <button class="counter-btn" data-combat-action="exhaustion-down" type="button" aria-label="Decrease exhaustion">−</button>
           <strong id="combat-exhaustion">0</strong>
-          <button class="counter-btn" data-combat-action="exhaustion-up" type="button">+</button>
+          <button class="counter-btn" data-combat-action="exhaustion-up" type="button" aria-label="Increase exhaustion">+</button>
         </div>
       </section>
 
@@ -1387,15 +1394,15 @@
         <h3>Death saves</h3>
         <div class="combat-counter-row death-success-row">
           <span>Successes</span>
-          <button class="counter-btn" data-combat-action="success-down" type="button">−</button>
+          <button class="counter-btn" data-combat-action="success-down" type="button" aria-label="Decrease death save successes">−</button>
           <strong id="combat-death-successes">0 / 3</strong>
-          <button class="counter-btn" data-combat-action="success-up" type="button">+</button>
+          <button class="counter-btn" data-combat-action="success-up" type="button" aria-label="Increase death save successes">+</button>
         </div>
         <div class="combat-counter-row death-failure-row">
           <span>Failures</span>
-          <button class="counter-btn" data-combat-action="failure-down" type="button">−</button>
+          <button class="counter-btn" data-combat-action="failure-down" type="button" aria-label="Decrease death save failures">−</button>
           <strong id="combat-death-failures">0 / 3</strong>
-          <button class="counter-btn" data-combat-action="failure-up" type="button">+</button>
+          <button class="counter-btn" data-combat-action="failure-up" type="button" aria-label="Increase death save failures">+</button>
         </div>
         <button class="btn-ghost concentration-roll-btn hidden" id="combat-concentration-roll" type="button"></button>
       </section>

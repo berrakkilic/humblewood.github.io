@@ -7,11 +7,11 @@ function savedSceneList() {
 
 function renderSavedScenes() {
   if (!state) return;
-  document.getElementById('current-scene-name').textContent = state.activeSceneName || 'Unsaved scene';
-  const dirtyIndicator = document.getElementById('scene-dirty-indicator');
+  getRequiredElement<HTMLElement>('#current-scene-name').textContent = state.activeSceneName || 'Unsaved scene';
+  const dirtyIndicator = getRequiredElement<HTMLElement>('#scene-dirty-indicator');
   dirtyIndicator.classList.toggle('hidden', !state.sceneDirty);
   dirtyIndicator.textContent = state.activeSceneName ? 'Unsaved changes' : 'Not saved yet';
-  const select = document.getElementById('saved-scene-select');
+  const select = getRequiredSelect('saved-scene-select');
   const previous = select.value;
   select.innerHTML = '<option value="">Choose a saved scene…</option>';
   savedSceneList().forEach(scene => {
@@ -25,8 +25,8 @@ function renderSavedScenes() {
 }
 
 function updateSelectedSceneSummary() {
-  const selected = savedSceneList().find(scene => scene.name === document.getElementById('saved-scene-select').value);
-  const summary = document.getElementById('scene-summary');
+  const selected = savedSceneList().find(scene => scene.name === getRequiredSelect('saved-scene-select').value);
+  const summary = getRequiredElement<HTMLElement>('#scene-summary');
   if (!selected) {
     summary.textContent = 'Maps, drawings, tokens and initiative are saved together.';
     return;
@@ -34,25 +34,25 @@ function updateSelectedSceneSummary() {
   summary.textContent = `${selected.mapName} · ${selected.tokenCount} token${selected.tokenCount === 1 ? '' : 's'} · saved ${new Date(selected.savedAt).toLocaleString()}`;
 }
 
-document.getElementById('saved-scene-select').onchange = () => {
-  const selected = document.getElementById('saved-scene-select').value;
-  if (selected) document.getElementById('scene-name-input').value = selected;
+getRequiredSelect('saved-scene-select').onchange = () => {
+  const selected = getRequiredSelect('saved-scene-select').value;
+  if (selected) getRequiredInput('scene-name-input').value = selected;
   updateSelectedSceneSummary();
 };
-document.getElementById('save-scene-btn').onclick = () => {
-  const name = document.getElementById('scene-name-input').value.trim();
+getRequiredButton('save-scene-btn').onclick = () => {
+  const name = getRequiredInput('scene-name-input').value.trim();
   if (!name) return showToast('Give the scene a name first.');
   const exists = savedSceneList().some(scene => scene.name.toLowerCase() === name.toLowerCase());
   if (exists && !confirm(`Overwrite the saved scene “${name}” with the current setup?`)) return;
   socket.emit('scene:save', { name });
 };
-document.getElementById('load-scene-btn').onclick = () => {
-  const name = document.getElementById('saved-scene-select').value;
+getRequiredButton('load-scene-btn').onclick = () => {
+  const name = getRequiredSelect('saved-scene-select').value;
   if (!name) return showToast('Choose a saved scene first.');
   if (confirm(`Load “${name}”? Unsaved changes to the current scene will be replaced.`)) socket.emit('scene:load', { name });
 };
-document.getElementById('delete-scene-btn').onclick = () => {
-  const name = document.getElementById('saved-scene-select').value;
+getRequiredButton('delete-scene-btn').onclick = () => {
+  const name = getRequiredSelect('saved-scene-select').value;
   if (!name) return showToast('Choose a saved scene first.');
   if (confirm(`Delete the saved scene “${name}”?`)) socket.emit('scene:delete', { name });
 };
@@ -110,8 +110,8 @@ function renderLibrary() {
     libraryCurrentFolderId = 'all';
   }
 
-  const folderList = document.getElementById('library-folder-list');
-  const folderCount = document.getElementById('library-folder-count');
+  const folderList = getRequiredElement<HTMLElement>('#library-folder-list');
+  const folderCount = getRequiredElement<HTMLElement>('#library-folder-count');
   folderList.innerHTML = '';
   folderCount.textContent = `${library.folders.length} folder${library.folders.length === 1 ? '' : 's'}`;
 
@@ -171,10 +171,10 @@ function renderLibrary() {
   const currentFolderLabel = libraryCurrentFolderId === 'all'
     ? 'All files'
     : libraryCurrentFolderId === 'unfiled' ? 'Unfiled' : currentFolder?.name || 'All files';
-  document.getElementById('library-current-folder').textContent = currentFolderLabel;
-  document.getElementById('library-file-summary').textContent = `${files.length} file${files.length === 1 ? '' : 's'} here`;
+  getRequiredElement<HTMLElement>('#library-current-folder').textContent = currentFolderLabel;
+  getRequiredElement<HTMLElement>('#library-file-summary').textContent = `${files.length} file${files.length === 1 ? '' : 's'} here`;
 
-  const fileList = document.getElementById('library-file-list');
+  const fileList = getRequiredElement<HTMLElement>('#library-file-list');
   fileList.innerHTML = '';
   if (!files.length) {
     fileList.innerHTML = '<div class="library-empty"><span>🍂</span><strong>No files here yet</strong><p>Upload a handout, clue, map or puzzle file to begin.</p></div>';
@@ -214,7 +214,7 @@ function renderLibrary() {
       folderSelect.value = file.folderId || '';
       folderSelect.onchange = () => socket.emit('library:file:move', { id: file.id, folderId: folderSelect.value });
       card.querySelector('.library-share-btn').onclick = () => {
-        const duration = Number(document.getElementById('library-broadcast-duration').value) || 0;
+        const duration = Number(getRequiredInput('library-broadcast-duration').value) || 0;
         socket.emit('library:broadcast', { fileId: file.id, duration });
       };
       card.querySelector('.library-rename-btn').onclick = () => {
@@ -235,11 +235,10 @@ function notificationTimestamp(createdAt) {
 }
 
 function renderDmNotifications() {
-  const panel = document.getElementById('dm-notifications-panel');
-  const list = document.getElementById('dm-notifications-list');
-  const count = document.getElementById('dm-notification-count');
-  const toggle = document.getElementById('dm-notifications-btn');
-  if (!panel || !list || !count || !toggle) return;
+  const panel = getRequiredElement<HTMLElement>('#dm-notifications-panel');
+  const list = getRequiredElement<HTMLElement>('#dm-notifications-list');
+  const count = getRequiredElement<HTMLElement>('#dm-notification-count');
+  const toggle = getRequiredButton('dm-notifications-btn');
   const notifications = myRole === 'dm' && Array.isArray(state?.notifications) ? state.notifications : [];
   const unreadCount = notifications.filter(notification => !notification.read).length;
   count.textContent = unreadCount > 99 ? '99+' : String(unreadCount);
@@ -291,48 +290,45 @@ function renderDmNotifications() {
       list.appendChild(item);
     });
   }
-  const markAll = document.getElementById('dm-notifications-mark-all');
-  const clearAll = document.getElementById('dm-notifications-clear-all');
-  if (markAll) markAll.disabled = unreadCount === 0;
-  if (clearAll) clearAll.disabled = notifications.length === 0;
+  getRequiredButton('dm-notifications-mark-all').disabled = unreadCount === 0;
+  getRequiredButton('dm-notifications-clear-all').disabled = notifications.length === 0;
 }
 
 function closePlayerQuestion() {
-  const overlay = document.getElementById('player-question-overlay');
-  if (!overlay) return;
+  const overlay = getRequiredElement<HTMLElement>('#player-question-overlay');
   overlay.classList.add('hidden');
   overlay.setAttribute('aria-hidden', 'true');
 }
 
-document.getElementById('player-safety-btn').onclick = () => {
+getRequiredButton('player-safety-btn').onclick = () => {
   if (myRole !== 'player') return;
   socket.emit('safety:request');
 };
-document.getElementById('player-question-btn').onclick = () => {
+getRequiredButton('player-question-btn').onclick = () => {
   if (myRole !== 'player') return;
-  const overlay = document.getElementById('player-question-overlay');
+  const overlay = getRequiredElement<HTMLElement>('#player-question-overlay');
   overlay.classList.remove('hidden');
   overlay.setAttribute('aria-hidden', 'false');
-  document.getElementById('player-question-input').focus();
+  getRequiredElement<HTMLTextAreaElement>('#player-question-input').focus();
 };
-document.getElementById('player-question-close').onclick = closePlayerQuestion;
-document.getElementById('player-question-cancel').onclick = closePlayerQuestion;
-document.getElementById('player-question-overlay').onclick = event => {
-  if (event.target.id === 'player-question-overlay') closePlayerQuestion();
+getRequiredButton('player-question-close').onclick = closePlayerQuestion;
+getRequiredButton('player-question-cancel').onclick = closePlayerQuestion;
+getRequiredElement<HTMLElement>('#player-question-overlay').onclick = event => {
+  if (event.target instanceof HTMLElement && event.target.id === 'player-question-overlay') closePlayerQuestion();
 };
-document.getElementById('player-question-form').onsubmit = event => {
+getRequiredElement<HTMLFormElement>('#player-question-form').onsubmit = event => {
   event.preventDefault();
   if (questionSubmitting) return;
-  const input = document.getElementById('player-question-input');
+  const input = getRequiredElement<HTMLTextAreaElement>('#player-question-input');
   const question = input.value.trim();
   if (!question) return showToast('Write a question before sending it.');
   questionSubmitting = true;
-  const button = document.getElementById('player-question-submit');
+  const button = getRequiredButton('player-question-submit');
   button.disabled = true;
   button.textContent = 'Sending…';
   socket.emit('question:submit', {
     question,
-    anonymous: document.getElementById('player-question-anonymous').checked
+    anonymous: getRequiredInput('player-question-anonymous').checked
   });
   window.setTimeout(() => {
     if (!questionSubmitting) return;
@@ -342,24 +338,24 @@ document.getElementById('player-question-form').onsubmit = event => {
   }, 5000);
 };
 
-document.getElementById('dm-notifications-btn').onclick = event => {
+getRequiredButton('dm-notifications-btn').onclick = event => {
   event.stopPropagation();
   if (myRole !== 'dm') return;
   dmNotificationsOpen = !dmNotificationsOpen;
   renderDmNotifications();
 };
-document.getElementById('dm-notifications-close').onclick = () => {
+getRequiredButton('dm-notifications-close').onclick = () => {
   dmNotificationsOpen = false;
   renderDmNotifications();
 };
-document.getElementById('dm-notifications-mark-all').onclick = () => socket.emit('notifications:markAllRead');
-document.getElementById('dm-notifications-clear-all').onclick = () => {
+getRequiredButton('dm-notifications-mark-all').onclick = () => socket.emit('notifications:markAllRead');
+getRequiredButton('dm-notifications-clear-all').onclick = () => {
   if (state?.notifications?.length && confirm('Clear all DM notifications?')) socket.emit('notifications:clearAll');
 };
 document.addEventListener('click', event => {
-  const panel = document.getElementById('dm-notifications-panel');
-  const toggle = document.getElementById('dm-notifications-btn');
-  if (dmNotificationsOpen && panel && !panel.contains(event.target) && !toggle.contains(event.target)) {
+  const panel = getRequiredElement<HTMLElement>('#dm-notifications-panel');
+  const toggle = getRequiredButton('dm-notifications-btn');
+  if (dmNotificationsOpen && event.target instanceof Node && !panel.contains(event.target) && !toggle.contains(event.target)) {
     dmNotificationsOpen = false;
     renderDmNotifications();
   }
@@ -481,7 +477,7 @@ function formatSharedHandoutTimer(expiresAt) {
   return `${minutes}m${remainder ? ` ${remainder}s` : ''} remaining`;
 }
 
-const sharedHandoutDialog = createDialogController(document.getElementById('shared-handout-overlay'), {
+const sharedHandoutDialog = createDialogController(getRequiredElement<HTMLElement>('#shared-handout-overlay'), {
   onDismiss: reason => {
     const broadcast = state?.library?.broadcast;
     const stillActive = broadcast && (!broadcast.expiresAt || Number(broadcast.expiresAt) > Date.now());
@@ -496,36 +492,41 @@ const sharedHandoutDialog = createDialogController(document.getElementById('shar
 });
 
 function setSharedHandoutReopenVisible(visible, broadcast: any = null) {
-  const button = document.getElementById('shared-handout-reopen-btn');
+  const button = getRequiredButton('shared-handout-reopen-btn');
   button.classList.toggle('hidden', !visible);
   button.setAttribute('aria-hidden', String(!visible));
   if (visible) {
     const name = String(broadcast?.name || 'shared handout').trim() || 'shared handout';
-    document.getElementById('shared-handout-reopen-label').textContent = `Open ${name}`;
+    getRequiredElement<HTMLElement>('#shared-handout-reopen-label').textContent = `Open ${name}`;
     button.setAttribute('aria-label', `Open ${name}`);
   }
 }
 
 function renderSharedHandoutContent(broadcast) {
-  const content = document.getElementById('shared-handout-content');
+  const content = getRequiredElement<HTMLElement>('#shared-handout-content');
   content.innerHTML = '';
+  const safeBroadcastUrl = safeAssetUrl(broadcast.url, ['uploads', 'handouts']);
+  if (!safeBroadcastUrl) {
+    content.textContent = 'This handout is unavailable.';
+    return;
+  }
   if (broadcast.kind === 'image') {
     const image = document.createElement('img');
-    image.src = broadcast.url;
+    image.src = safeBroadcastUrl;
     image.alt = broadcast.name;
     content.appendChild(image);
     return;
   }
   if (broadcast.kind === 'pdf') {
     const frame = document.createElement('iframe');
-    frame.src = broadcast.url;
+    frame.src = safeBroadcastUrl;
     frame.title = broadcast.name;
     content.appendChild(frame);
     return;
   }
   if (broadcast.kind === 'html') {
     const frame = document.createElement('iframe');
-    frame.src = broadcast.url;
+    frame.src = safeBroadcastUrl;
     frame.title = broadcast.name;
     frame.dataset.shopHandout = 'true';
     frame.dataset.puzzleHandout = 'true';
@@ -586,7 +587,7 @@ function updateSharedHandoutTimer() {
     sharedHandoutTimer = null;
     return;
   }
-  document.getElementById('shared-handout-timer').textContent = broadcast.expiresAt
+  getRequiredElement<HTMLElement>('#shared-handout-timer').textContent = broadcast.expiresAt
     ? formatSharedHandoutTimer(broadcast.expiresAt)
     : 'Shown until stopped';
 }
@@ -611,7 +612,7 @@ function renderSharedHandout() {
   }
   if (dismissedSharedHandoutKey) dismissedSharedHandoutKey = '';
   setSharedHandoutReopenVisible(false);
-  document.getElementById('shared-handout-title').textContent = broadcast.name || 'Shared handout';
+  getRequiredElement<HTMLElement>('#shared-handout-title').textContent = broadcast.name || 'Shared handout';
   if (sharedHandoutRenderKey !== renderKey) {
     sharedHandoutRenderKey = renderKey;
     renderSharedHandoutContent(broadcast);
@@ -621,20 +622,20 @@ function renderSharedHandout() {
   if (broadcast.expiresAt) sharedHandoutTimer = setInterval(updateSharedHandoutTimer, 250);
 }
 
-document.getElementById('shared-handout-reopen-btn').onclick = () => {
+getRequiredButton('shared-handout-reopen-btn').onclick = () => {
   dismissedSharedHandoutKey = '';
   setSharedHandoutReopenVisible(false);
   renderSharedHandout();
 };
 
-document.getElementById('library-new-folder-btn').onclick = () => {
+getRequiredButton('library-new-folder-btn').onclick = () => {
   const name = prompt('Folder name');
   if (name?.trim()) {
     const parentId = libraryCurrentFolderId !== 'all' && libraryCurrentFolderId !== 'unfiled' ? libraryCurrentFolderId : null;
     socket.emit('library:folder:create', { name: name.trim(), parentId });
   }
 };
-document.getElementById('library-add-session0-btn').onclick = () => {
+getRequiredButton('library-add-session0-btn').onclick = () => {
   const library = libraryData();
   if (library.files.some(file => file.url === '/handouts/session-0.html')) {
     return showToast('The Session 0 handout is already in your library.');
@@ -648,13 +649,14 @@ document.getElementById('library-add-session0-btn').onclick = () => {
     folderId
   });
 };
-document.getElementById('library-upload-btn').onclick = () => document.getElementById('library-file-input').click();
-document.getElementById('library-file-input').onchange = async event => {
-  const file = event.target.files[0];
+getRequiredButton('library-upload-btn').onclick = () => getRequiredInput('library-file-input').click();
+getRequiredInput('library-file-input').onchange = async event => {
+  if (!(event.target instanceof HTMLInputElement)) return;
+  const file = event.target.files?.[0];
   event.target.value = '';
   if (!file) return;
   const folderId = libraryCurrentFolderId !== 'all' && libraryCurrentFolderId !== 'unfiled' ? libraryCurrentFolderId : null;
-  const button = document.getElementById('library-upload-btn');
+  const button = getRequiredButton('library-upload-btn');
   button.disabled = true;
   try {
     const uploaded = await uploadLibraryFile(file);
@@ -671,4 +673,4 @@ document.getElementById('library-file-input').onchange = async event => {
     button.disabled = false;
   }
 };
-document.getElementById('shared-handout-stop-btn').onclick = () => socket.emit('library:broadcast:clear');
+getRequiredButton('shared-handout-stop-btn').onclick = () => socket.emit('library:broadcast:clear');

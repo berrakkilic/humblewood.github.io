@@ -81,7 +81,8 @@ function renderCombatManager() {
   document.getElementById('combat-title').textContent = name;
   const portrait = document.getElementById('combat-portrait');
   const portraitUrl = isNpc ? entity.imageUrl : entity.portraitUrl;
-  portrait.innerHTML = portraitUrl ? `<img src="${escapeAttr(portraitUrl)}" alt="">` : (isNpc ? '🦊' : '🍃');
+  const safePortraitUrl = safeImageUrl(portraitUrl);
+  portrait.innerHTML = safePortraitUrl ? `<img src="${escapeAttr(safePortraitUrl)}" alt="">` : (isNpc ? '🦊' : '🍃');
   document.getElementById('combat-hp').textContent = `${Number(entity.hp) || 0} / ${Number(entity.maxHp) || 0}`;
   document.getElementById('combat-temp-hp').textContent = Number(entity.tempHp) || 0;
   document.getElementById('combat-ac').textContent = Number(entity.ac) || 0;

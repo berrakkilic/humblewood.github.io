@@ -64,6 +64,40 @@ function escapeAttr(value) {
   return escapeHtml(value);
 }
 
+function getRequiredElement<T extends Element>(selector: string, root: ParentNode = document): T {
+  const element = root.querySelector<T>(selector);
+  if (!element) throw new Error(`Required element not found: ${selector}`);
+  return element;
+}
+
+function getOptionalElement<T extends Element>(selector: string, root: ParentNode = document): T | null {
+  return root.querySelector<T>(selector);
+}
+
+function getRequiredButton(id: string): HTMLButtonElement {
+  return getRequiredElement<HTMLButtonElement>(`#${CSS.escape(id)}`);
+}
+
+function getRequiredInput(id: string): HTMLInputElement {
+  return getRequiredElement<HTMLInputElement>(`#${CSS.escape(id)}`);
+}
+
+function getRequiredSelect(id: string): HTMLSelectElement {
+  return getRequiredElement<HTMLSelectElement>(`#${CSS.escape(id)}`);
+}
+
+function safeAssetUrl(value, prefixes = ['uploads', 'images']) {
+  const url = String(value ?? '').trim();
+  const prefixPattern = prefixes.map(prefix => String(prefix).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+  return new RegExp(`^/(?:${prefixPattern})/[A-Za-z0-9._~%()+-]+$`).test(url) ? url : '';
+}
+
+function safeImageUrl(value) {
+  const url = String(value ?? '').trim();
+  if (/^data:image\/(?:gif|jpe?g|png|webp);base64,[A-Za-z0-9+/]+=*$/.test(url)) return url;
+  return safeAssetUrl(url, ['uploads', 'images']);
+}
+
 function applyPresetSearch(selectId: string, searchId: string) {
   const select = document.getElementById(selectId) as HTMLSelectElement;
   const search = document.getElementById(searchId) as HTMLInputElement;

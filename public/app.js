@@ -164,6 +164,12 @@
         fallbackOpen = true;
         dialog.setAttribute("open", "");
       }
+      queueMicrotask(() => {
+        const firstFocusable = dialog.querySelector(
+          '[autofocus], button, input, select, textarea, [tabindex]:not([tabindex="-1"])'
+        );
+        if (firstFocusable?.focus) firstFocusable.focus({ preventScroll: true });
+      });
       if (typeof options.onOpen === "function") options.onOpen();
     }
     function close(reason = "dismiss") {
@@ -185,6 +191,22 @@
     dialog.addEventListener("cancel", (event) => {
       if (options.closeOnEscape === false) event.preventDefault();
       else dialog.returnValue = "escape";
+    });
+    dialog.addEventListener("keydown", (event) => {
+      if (event.key !== "Tab" || !fallbackOpen) return;
+      const focusable = Array.from(dialog.querySelectorAll(
+        'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])'
+      )).filter((element) => !element.hidden);
+      if (!focusable.length) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
     });
     dialog.addEventListener("close", () => finalizeClose(dialog.returnValue || "dismiss"));
     return {
@@ -247,42 +269,60 @@
     createDialogController,
     createPopoverController
   };
-  document.getElementById("role-dm").onclick = () => setRole("dm");
-  document.getElementById("role-player").onclick = () => setRole("player");
-  document.getElementById("auth-login").onclick = () => setAuthMode("login");
-  document.getElementById("auth-register").onclick = () => setAuthMode("register");
+  const roleDmButton = getRequiredButton("role-dm");
+  const rolePlayerButton = getRequiredButton("role-player");
+  const authLoginButton = getRequiredButton("auth-login");
+  const authRegisterButton = getRequiredButton("auth-register");
+  const dmPinField = getRequiredElement("#dm-pin-field");
+  const playerAuthFields = getRequiredElement("#player-auth-fields");
+  const nameField = getRequiredElement("#name-field");
+  const joinError = getRequiredElement("#join-error");
+  const confirmPasswordField = getRequiredElement("#confirm-password-field");
+  const passwordInput = getRequiredInput("password-input");
+  const authHelp = getRequiredElement("#auth-help");
+  const joinButton = getRequiredButton("join-btn");
+  const nameInput = getRequiredInput("name-input");
+  const usernameInput = getRequiredInput("username-input");
+  const confirmPasswordInput = getRequiredInput("confirm-password-input");
+  const dmPinInput = getRequiredInput("dm-pin-input");
+  roleDmButton.onclick = () => setRole("dm");
+  rolePlayerButton.onclick = () => setRole("player");
+  authLoginButton.onclick = () => setAuthMode("login");
+  authRegisterButton.onclick = () => setAuthMode("register");
   function setRole(role) {
     myRole = role;
-    document.getElementById("role-dm").classList.toggle("active", role === "dm");
-    document.getElementById("role-player").classList.toggle("active", role === "player");
-    document.getElementById("dm-pin-field").classList.toggle("hidden", role !== "dm");
-    document.getElementById("player-auth-fields").classList.toggle("hidden", role !== "player");
-    document.getElementById("name-field").classList.toggle("hidden", role === "player" && authMode === "login");
-    document.getElementById("join-error").textContent = "";
+    roleDmButton.classList.toggle("active", role === "dm");
+    rolePlayerButton.classList.toggle("active", role === "player");
+    roleDmButton.setAttribute("aria-pressed", String(role === "dm"));
+    rolePlayerButton.setAttribute("aria-pressed", String(role === "player"));
+    dmPinField.classList.toggle("hidden", role !== "dm");
+    playerAuthFields.classList.toggle("hidden", role !== "player");
+    nameField.classList.toggle("hidden", role === "player" && authMode === "login");
+    joinError.textContent = "";
   }
   function setAuthMode(mode) {
     authMode = mode;
-    document.getElementById("auth-login").classList.toggle("active", mode === "login");
-    document.getElementById("auth-register").classList.toggle("active", mode === "register");
-    document.getElementById("name-field").classList.toggle("hidden", myRole === "player" && mode === "login");
-    document.getElementById("confirm-password-field").classList.toggle("hidden", mode !== "register");
-    document.getElementById("password-input").autocomplete = mode === "register" ? "new-password" : "current-password";
-    document.getElementById("auth-help").textContent = mode === "register" ? "Create one account, then use it anywhere you play. This device will stay signed in for 30 days." : "Sign in from any device. This device will stay signed in for 30 days; if you forget your password, ask the DM to reset it.";
-    document.getElementById("join-error").textContent = "";
+    authLoginButton.classList.toggle("active", mode === "login");
+    authRegisterButton.classList.toggle("active", mode === "register");
+    authLoginButton.setAttribute("aria-pressed", String(mode === "login"));
+    authRegisterButton.setAttribute("aria-pressed", String(mode === "register"));
+    nameField.classList.toggle("hidden", myRole === "player" && mode === "login");
+    confirmPasswordField.classList.toggle("hidden", mode !== "register");
+    passwordInput.autocomplete = mode === "register" ? "new-password" : "current-password";
+    authHelp.textContent = mode === "register" ? "Create one account, then use it anywhere you play. This device will stay signed in for 30 days." : "Sign in from any device. This device will stay signed in for 30 days; if you forget your password, ask the DM to reset it.";
+    joinError.textContent = "";
   }
-  document.getElementById("join-btn").onclick = async () => {
-    const nameInput = document.getElementById("name-input");
-    myUsername = document.getElementById("username-input").value.trim();
-    const password = document.getElementById("password-input").value;
+  joinButton.onclick = async () => {
+    myUsername = usernameInput.value.trim();
+    const password = passwordInput.value;
     myName = nameInput.value.trim() || (myRole === "dm" ? "The DM" : myUsername);
-    if (myRole === "player" && authMode === "register" && password !== document.getElementById("confirm-password-input").value) {
-      document.getElementById("join-error").textContent = "Those passwords do not match.";
+    if (myRole === "player" && authMode === "register" && password !== confirmPasswordInput.value) {
+      joinError.textContent = "Those passwords do not match.";
       return;
     }
-    const joinButton = document.getElementById("join-btn");
     joinButton.disabled = true;
     joinButton.textContent = "Entering\u2026";
-    document.getElementById("join-error").textContent = "";
+    joinError.textContent = "";
     try {
       const response = await fetch("/api/auth/session", {
         method: "POST",
@@ -294,7 +334,7 @@
           username: myUsername,
           password,
           authMode,
-          dmPin: document.getElementById("dm-pin-input").value
+          dmPin: dmPinInput.value
         })
       });
       const result = await response.json().catch(() => ({}));
@@ -306,24 +346,23 @@
       awaitingSessionResume = false;
       joinButton.disabled = false;
       joinButton.textContent = "Enter the Wood";
-      document.getElementById("join-error").textContent = error.message || "Could not join the table.";
+      joinError.textContent = error.message || "Could not join the table.";
     }
   };
-  document.getElementById("dm-pin-input").addEventListener("keydown", (event) => {
-    if (event.key === "Enter") document.getElementById("join-btn").click();
+  dmPinInput.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") joinButton.click();
   });
-  document.getElementById("password-input").addEventListener("keydown", (event) => {
-    if (event.key === "Enter") document.getElementById("join-btn").click();
+  passwordInput.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") joinButton.click();
   });
-  document.getElementById("confirm-password-input").addEventListener("keydown", (event) => {
-    if (event.key === "Enter") document.getElementById("join-btn").click();
+  confirmPasswordInput.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") joinButton.click();
   });
   socket.on("identify:result", (result) => {
-    const joinButton = document.getElementById("join-btn");
     joinButton.disabled = false;
     joinButton.textContent = "Enter the Wood";
     if (!result.ok) {
-      document.getElementById("join-error").textContent = result.message || "Could not join the table.";
+      joinError.textContent = result.message || "Could not join the table.";
       return;
     }
     awaitingSessionResume = false;
@@ -332,13 +371,13 @@
     myUsername = result.username || "";
     if (myRole === "player") authMode = "login";
     joined = true;
-    document.getElementById("password-input").value = "";
-    document.getElementById("confirm-password-input").value = "";
-    document.getElementById("dm-pin-input").value = "";
-    document.getElementById("join-screen").style.display = "none";
-    document.getElementById("app").style.display = "flex";
+    passwordInput.value = "";
+    confirmPasswordInput.value = "";
+    dmPinInput.value = "";
+    getRequiredElement("#join-screen").style.display = "none";
+    getRequiredElement("#app").style.display = "flex";
     document.body.setAttribute("data-role", myRole);
-    document.getElementById("my-role-pill").textContent = myRole === "dm" ? "Dungeon Master" : `Player \xB7 ${myName}`;
+    getRequiredElement("#my-role-pill").textContent = myRole === "dm" ? "Dungeon Master" : `Player \xB7 ${myName}`;
     if (myRole !== "dm") {
       dmPrivateRollsEnabled = false;
       privateRollLog = [];
@@ -353,10 +392,9 @@
   socket.on("session:result", (result) => {
     if (result.ok || !awaitingSessionResume) return;
     awaitingSessionResume = false;
-    const joinButton = document.getElementById("join-btn");
     joinButton.disabled = false;
     joinButton.textContent = "Enter the Wood";
-    document.getElementById("join-error").textContent = "Your login succeeded, but the saved session could not be restored. Please try again.";
+    joinError.textContent = "Your login succeeded, but the saved session could not be restored. Please try again.";
   });
   const router = window.HumblewoodRouter.createRouter({
     routes: {
@@ -370,9 +408,9 @@
     onRoute: renderRoute
   });
   window.HumblewoodAlmanac.mount(window.HumblewoodAlmanacData);
-  document.getElementById("topbar-roll-btn").onclick = () => switchView("dice");
-  document.getElementById("topbar-logout-btn").onclick = async () => {
-    const button = document.getElementById("topbar-logout-btn");
+  getRequiredButton("topbar-roll-btn").onclick = () => switchView("dice");
+  getRequiredButton("topbar-logout-btn").onclick = async () => {
+    const button = getRequiredButton("topbar-logout-btn");
     button.disabled = true;
     button.textContent = "Logging out\u2026";
     try {
@@ -550,8 +588,7 @@
     if (hasNew) showToast("New private table notification.");
   });
   socket.on("safety:submitted", ({ cooldown } = {}) => {
-    const button = document.getElementById("player-safety-btn");
-    if (!button) return;
+    const button = getRequiredButton("player-safety-btn");
     button.disabled = true;
     button.textContent = cooldown ? "Break request sent" : "Break requested";
     clearTimeout(safetyButtonTimer);
@@ -563,13 +600,11 @@
   });
   socket.on("question:submitted", () => {
     questionSubmitting = false;
-    const button = document.getElementById("player-question-submit");
-    if (button) {
-      button.disabled = false;
-      button.textContent = "Send question";
-    }
-    document.getElementById("player-question-input").value = "";
-    document.getElementById("player-question-anonymous").checked = false;
+    const button = getRequiredButton("player-question-submit");
+    button.disabled = false;
+    button.textContent = "Send question";
+    getRequiredElement("#player-question-input").value = "";
+    getRequiredInput("player-question-anonymous").checked = false;
     closePlayerQuestion();
     showToast("Your question was sent privately to the DM.");
   });
@@ -643,11 +678,11 @@
   });
   socket.on("accounts:update", renderPlayerAccounts);
   socket.on("account:passwordReset", ({ username }) => {
-    document.getElementById("reset-account-password").value = "";
+    getRequiredInput("reset-account-password").value = "";
     showToast(`Password reset for ${username}.`);
   });
   function renderPlayerAccounts(accounts) {
-    const list = document.getElementById("account-list");
+    const list = getRequiredElement("#account-list");
     list.innerHTML = "";
     if (!accounts.length) {
       list.innerHTML = '<p class="empty-roll-options">No player accounts have been created yet.</p>';
@@ -658,15 +693,15 @@
       row.className = "account-list-item";
       row.innerHTML = `<strong>${escapeHtml(account.displayName)}</strong><span>@${escapeHtml(account.username)}</span>`;
       row.onclick = () => {
-        document.getElementById("reset-account-username").value = account.username;
+        getRequiredInput("reset-account-username").value = account.username;
       };
       list.appendChild(row);
     });
   }
-  document.getElementById("refresh-accounts-btn").onclick = () => socket.emit("accounts:list");
-  document.getElementById("reset-account-password-btn").onclick = () => {
-    const username = document.getElementById("reset-account-username").value.trim();
-    const password = document.getElementById("reset-account-password").value;
+  getRequiredButton("refresh-accounts-btn").onclick = () => socket.emit("accounts:list");
+  getRequiredButton("reset-account-password-btn").onclick = () => {
+    const username = getRequiredInput("reset-account-username").value.trim();
+    const password = getRequiredInput("reset-account-password").value;
     if (!username) return showToast("Choose a player account first.");
     if (password.length < 8) return showToast("The new password needs at least 8 characters.");
     socket.emit("account:resetPassword", { username, password });
@@ -677,7 +712,7 @@
     renderMapTokens();
   });
   socket.on("presence", ({ role, name, connected }) => {
-    const el = document.getElementById("presence-list");
+    const el = getRequiredElement("#presence-list");
     el.textContent = `${name} ${connected ? "joined" : "left"} the wood`;
     setTimeout(() => {
       if (el.textContent.includes(name)) el.textContent = "";
@@ -691,18 +726,18 @@
   socket.on("pointer:hide", ({ id }) => removeSharedPointer(id));
   socket.on("pointer:ping", renderSharedPing);
   let mapRenderReady = false;
-  const mapUpload = document.getElementById("map-upload");
+  const mapUpload = getRequiredInput("map-upload");
   mapUpload.onchange = async () => {
-    const file = mapUpload.files[0];
+    const file = mapUpload.files?.[0];
     if (!file) return;
     const url = await uploadFile(file);
     socket.emit("scene:setMap", { mapUrl: url, mapName: file.name });
   };
   function renderMap() {
-    const img = document.getElementById("map-image");
-    const stage = document.getElementById("map-stage");
-    const empty = document.getElementById("empty-map");
-    const grid = document.getElementById("grid-overlay");
+    const img = getRequiredElement("#map-image");
+    const stage = getRequiredElement("#map-stage");
+    const empty = getRequiredElement("#empty-map");
+    const grid = getRequiredElement("#grid-overlay");
     const gridSize = Math.max(10, Number(state.scene.gridSize) || 50);
     const gridOffsetX = Number(state.scene.gridOffsetX) || 0;
     const gridOffsetY = Number(state.scene.gridOffsetY) || 0;
@@ -711,24 +746,23 @@
     grid.style.backgroundPosition = `${gridOffsetX}px ${gridOffsetY}px`;
     grid.style.setProperty("--grid-color", gridColor);
     grid.classList.toggle("visible", !!state.scene.gridVisible);
-    document.getElementById("grid-toggle").checked = !!state.scene.gridVisible;
-    document.getElementById("grid-size").value = gridSize;
-    document.getElementById("grid-color").value = gridColor;
-    document.getElementById("snap-toggle").checked = state.scene.snapToGrid !== false;
-    document.getElementById("fit-token-toggle").checked = state.scene.fitTokensToGrid !== false;
+    getRequiredInput("grid-toggle").checked = !!state.scene.gridVisible;
+    getRequiredInput("grid-size").value = String(gridSize);
+    getRequiredInput("grid-color").value = gridColor;
+    getRequiredInput("snap-toggle").checked = state.scene.snapToGrid !== false;
+    getRequiredInput("fit-token-toggle").checked = state.scene.fitTokensToGrid !== false;
     const timeOfDay = ["morning", "afternoon", "night"].includes(state.scene.timeOfDay) ? state.scene.timeOfDay : "morning";
-    const timeOfDaySelect = document.getElementById("time-of-day-select");
-    if (timeOfDaySelect) timeOfDaySelect.value = timeOfDay;
+    getRequiredSelect("time-of-day-select").value = timeOfDay;
     const timeDetails = {
       morning: { label: "Morning", icon: "\u2600\uFE0F" },
       afternoon: { label: "Afternoon", icon: "\u{1F324}\uFE0F" },
       night: { label: "Night", icon: "\u{1F319}" }
     }[timeOfDay];
-    const timeIndicator = document.getElementById("map-time-indicator");
+    const timeIndicator = getRequiredElement("#map-time-indicator");
     timeIndicator.dataset.timeOfDay = timeOfDay;
     timeIndicator.setAttribute("aria-label", timeDetails.label);
-    document.getElementById("map-time-icon").textContent = timeDetails.icon;
-    document.getElementById("map-time-label").textContent = timeDetails.label;
+    getRequiredElement("#map-time-icon").textContent = timeDetails.icon;
+    getRequiredElement("#map-time-label").textContent = timeDetails.label;
     if (!Array.isArray(state.scene.doodlePaths)) state.scene.doodlePaths = [];
     if (!Array.isArray(state.scene.fogShapes)) state.scene.fogShapes = [];
     updateMapPermissionControls();
@@ -736,20 +770,21 @@
     mapRenderReady = false;
     img.style.display = "none";
     img.style.visibility = "hidden";
-    stage.classList.toggle("map-loading", myRole === "player" && !!state.scene.mapUrl && !!state.scene.fogEnabled);
+    const safeMapUrl = safeImageUrl(state.scene.mapUrl);
+    stage.classList.toggle("map-loading", myRole === "player" && !!safeMapUrl && !!state.scene.fogEnabled);
     renderMapTokens();
-    if (state.scene.mapUrl) {
+    if (safeMapUrl) {
       const sizeMapStage = () => {
-        if (state?.scene?.mapUrl !== requestedMapUrl) return;
-        const stage2 = document.getElementById("map-stage");
+        if (safeImageUrl(state?.scene?.mapUrl) !== requestedMapUrl) return;
+        const stage2 = getRequiredElement("#map-stage");
         stage2.style.width = img.naturalWidth + "px";
         stage2.style.height = img.naturalHeight + "px";
         img.style.width = img.naturalWidth + "px";
         img.style.height = img.naturalHeight + "px";
-        const canvas = document.getElementById("doodle-canvas");
+        const canvas = getRequiredElement("#doodle-canvas");
         canvas.width = img.naturalWidth;
         canvas.height = img.naturalHeight;
-        const fogCanvas = document.getElementById("fog-canvas");
+        const fogCanvas = getRequiredElement("#fog-canvas");
         fogCanvas.width = img.naturalWidth;
         fogCanvas.height = img.naturalHeight;
         redrawAllDoodles();
@@ -759,15 +794,15 @@
         img.style.visibility = "visible";
         stage2.classList.remove("map-loading");
         renderMapTokens();
-        if (lastFittedMapUrl !== state.scene.mapUrl) {
-          lastFittedMapUrl = state.scene.mapUrl;
+        if (lastFittedMapUrl !== requestedMapUrl) {
+          lastFittedMapUrl = requestedMapUrl;
           fitMapToViewport();
         }
       };
-      const requestedMapUrl = state.scene.mapUrl;
+      const requestedMapUrl = safeMapUrl;
       img.onload = sizeMapStage;
       img.onerror = () => {
-        if (state?.scene?.mapUrl !== requestedMapUrl) return;
+        if (safeImageUrl(state?.scene?.mapUrl) !== requestedMapUrl) return;
         mapRenderReady = false;
         stage.classList.remove("map-loading");
         img.style.display = "none";
@@ -775,7 +810,7 @@
         empty.style.display = "flex";
         renderMapTokens();
       };
-      img.src = state.scene.mapUrl;
+      img.src = safeMapUrl;
       empty.style.display = "none";
       if (img.complete && img.naturalWidth) sizeMapStage();
     } else {
@@ -790,7 +825,7 @@
   }
   function renderMapTokens() {
     document.querySelectorAll(".token-on-map").forEach((el) => el.remove());
-    const stage = document.getElementById("map-stage");
+    const stage = getRequiredElement("#map-stage");
     if (!mapRenderReady) return;
     const current = currentInitiativeEntry();
     state.tokens.forEach((t) => {
@@ -824,7 +859,7 @@
       ].join("");
       el.innerHTML = `
       ${displayLabel ? `<div class="label">${escapeHtml(displayLabel)}</div>` : ""}
-      ${t.imageUrl ? `<img src="${escapeAttr(t.imageUrl)}" alt="">` : emojiFor(t.kind)}
+      ${safeImageUrl(t.imageUrl) ? `<img src="${escapeAttr(safeImageUrl(t.imageUrl))}" alt="">` : emojiFor(t.kind)}
       ${t.maxHp ? `<div class="hp-bar"><div class="hp-fill" style="width:${Math.max(0, t.hp / t.maxHp * 100)}%"></div></div>` : ""}
       ${renderTokenConditionBadges(t, linkedCharacter)}
       ${controls ? `<div class="token-controls">${controls}</div>` : ""}
@@ -942,7 +977,7 @@
   }
   function moveDraggedToken(clientX, clientY) {
     if (!draggingToken) return;
-    const stage = document.getElementById("map-stage");
+    const stage = getRequiredElement("#map-stage");
     const rect = stage.getBoundingClientRect();
     const x = (clientX - rect.left) / mapScale - dragOffset.x;
     const y = (clientY - rect.top) / mapScale - dragOffset.y;
@@ -958,7 +993,7 @@
     if (el) {
       let x = parseFloat(el.style.left);
       let y = parseFloat(el.style.top);
-      if (document.getElementById("snap-toggle").checked) {
+      if (getRequiredInput("snap-toggle").checked) {
         const size = Math.max(10, Number(state.scene.gridSize) || 50);
         x = snapCoordinateToCell(x, size, state.scene.gridOffsetX);
         y = snapCoordinateToCell(y, size, state.scene.gridOffsetY);
@@ -1004,15 +1039,15 @@
     const cancelled = Array.from(event.changedTouches).some((entry) => entry.identifier === draggingTokenTouchId);
     if (cancelled) cancelDraggedToken();
   }, { passive: false });
-  document.getElementById("tool-move").onclick = () => setTool("move");
-  document.getElementById("tool-pan").onclick = () => setTool("pan");
-  document.getElementById("tool-grid-move").onclick = () => setTool("grid-move");
-  document.getElementById("tool-ruler").onclick = () => setTool("ruler");
-  document.getElementById("tool-ping").onclick = () => setTool("ping");
-  document.getElementById("tool-doodle").onclick = () => setTool("doodle");
-  document.getElementById("tool-eraser").onclick = () => setTool("eraser");
-  document.getElementById("tool-fog-reveal").onclick = () => setTool("fog-reveal");
-  document.getElementById("tool-fog-hide").onclick = () => setTool("fog-hide");
+  getRequiredButton("tool-move").onclick = () => setTool("move");
+  getRequiredButton("tool-pan").onclick = () => setTool("pan");
+  getRequiredButton("tool-grid-move").onclick = () => setTool("grid-move");
+  getRequiredButton("tool-ruler").onclick = () => setTool("ruler");
+  getRequiredButton("tool-ping").onclick = () => setTool("ping");
+  getRequiredButton("tool-doodle").onclick = () => setTool("doodle");
+  getRequiredButton("tool-eraser").onclick = () => setTool("eraser");
+  getRequiredButton("tool-fog-reveal").onclick = () => setTool("fog-reveal");
+  getRequiredButton("tool-fog-hide").onclick = () => setTool("fog-hide");
   function setTool(tool) {
     if ((tool === "doodle" || tool === "eraser") && !canDoodle()) return showToast("Player doodling is not enabled for this scene.");
     if (tool.startsWith("fog-") && (myRole !== "dm" || !state.scene.fogEnabled)) return showToast("Enable fog of war first.");
@@ -1023,7 +1058,7 @@
     ["move", "pan", "grid-move", "ruler", "ping", "doodle", "eraser", "fog-reveal", "fog-hide"].forEach((name) => {
       document.getElementById(`tool-${name}`)?.classList.toggle("active", tool === name);
     });
-    const stage = document.getElementById("map-stage");
+    const stage = getRequiredElement("#map-stage");
     stage.classList.toggle("doodling", tool === "doodle" || tool === "eraser");
     stage.classList.toggle("erasing", tool === "eraser");
     stage.classList.toggle("panning", tool === "pan");
@@ -1041,24 +1076,24 @@
   }
   function updateMapPermissionControls() {
     if (!state) return;
-    document.getElementById("player-doodling-toggle").checked = !!state.scene.playerDoodlingEnabled;
-    document.getElementById("token-labels-toggle").checked = state.scene.showTokenLabelsToPlayers !== false;
-    document.getElementById("fog-enabled-toggle").checked = !!state.scene.fogEnabled;
+    getRequiredInput("player-doodling-toggle").checked = !!state.scene.playerDoodlingEnabled;
+    getRequiredInput("token-labels-toggle").checked = state.scene.showTokenLabelsToPlayers !== false;
+    getRequiredInput("fog-enabled-toggle").checked = !!state.scene.fogEnabled;
     document.querySelectorAll(".doodle-control").forEach((element) => element.classList.toggle("hidden", !canDoodle()));
     document.querySelectorAll(".fog-tool").forEach((element) => element.classList.toggle("hidden", myRole !== "dm" || !state.scene.fogEnabled));
     if ((selectedTool === "doodle" || selectedTool === "eraser") && !canDoodle()) setTool("move");
     if (selectedTool.startsWith("fog-") && !state.scene.fogEnabled) setTool("move");
   }
-  document.getElementById("clear-doodles-btn").onclick = () => socket.emit("scene:doodle:clear");
-  document.getElementById("undo-doodle-btn").onclick = () => socket.emit("scene:doodle:undo");
-  document.getElementById("player-doodling-toggle").onchange = (event) => socket.emit("scene:setPlayerDoodling", { enabled: event.target.checked });
-  document.getElementById("token-labels-toggle").onchange = (event) => socket.emit("scene:setTokenLabels", { visible: event.target.checked });
-  document.getElementById("fog-enabled-toggle").onchange = (event) => socket.emit("scene:setFog", { enabled: event.target.checked });
-  document.getElementById("undo-fog-btn").onclick = () => socket.emit("scene:fog:undo");
-  document.getElementById("reset-fog-btn").onclick = () => {
+  getRequiredButton("clear-doodles-btn").onclick = () => socket.emit("scene:doodle:clear");
+  getRequiredButton("undo-doodle-btn").onclick = () => socket.emit("scene:doodle:undo");
+  getRequiredInput("player-doodling-toggle").onchange = () => socket.emit("scene:setPlayerDoodling", { enabled: getRequiredInput("player-doodling-toggle").checked });
+  getRequiredInput("token-labels-toggle").onchange = () => socket.emit("scene:setTokenLabels", { visible: getRequiredInput("token-labels-toggle").checked });
+  getRequiredInput("fog-enabled-toggle").onchange = () => socket.emit("scene:setFog", { enabled: getRequiredInput("fog-enabled-toggle").checked });
+  getRequiredButton("undo-fog-btn").onclick = () => socket.emit("scene:fog:undo");
+  getRequiredButton("reset-fog-btn").onclick = () => {
     if (confirm("Reset fog to fully covered?")) socket.emit("scene:fog:reset");
   };
-  const mapStageWrap = document.getElementById("map-stage-wrap");
+  const mapStageWrap = getRequiredElement("#map-stage-wrap");
   mapStageWrap.addEventListener("mousedown", (e) => {
     const canStartPan = selectedTool === "pan" && e.button === 0 || e.button === 1 || spacePanPressed && e.button === 0;
     if (selectedTool === "grid-move" && e.button === 0 && myRole === "dm" && isMapGestureTarget(e.target)) {
@@ -1078,7 +1113,7 @@
   });
   document.addEventListener("mousemove", (e) => {
     if (gridMoveStart) {
-      const grid = document.getElementById("grid-overlay");
+      const grid = getRequiredElement("#grid-overlay");
       const gridSize = Math.max(10, Number(state.scene.gridSize) || 50);
       const dx = (e.clientX - gridMoveStart.clientX) / mapScale;
       const dy = (e.clientY - gridMoveStart.clientY) / mapScale;
@@ -1098,11 +1133,11 @@
     if (gridMoveStart) {
       if (gridMoveStart.currentX !== void 0) {
         socket.emit("scene:setGrid", {
-          gridSize: Number(document.getElementById("grid-size").value) || 50,
-          gridVisible: document.getElementById("grid-toggle").checked,
-          gridColor: document.getElementById("grid-color").value,
-          snapToGrid: document.getElementById("snap-toggle").checked,
-          fitTokensToGrid: document.getElementById("fit-token-toggle").checked,
+          gridSize: Number(getRequiredInput("grid-size").value) || 50,
+          gridVisible: getRequiredInput("grid-toggle").checked,
+          gridColor: getRequiredInput("grid-color").value,
+          snapToGrid: getRequiredInput("snap-toggle").checked,
+          fitTokensToGrid: getRequiredInput("fit-token-toggle").checked,
           gridOffsetX: gridMoveStart.currentX,
           gridOffsetY: gridMoveStart.currentY
         });
@@ -1117,7 +1152,7 @@
     if (event.code !== "Space" || typing) return;
     spacePanPressed = true;
     mapStageWrap.classList.add("space-pan-ready");
-    if (document.getElementById("view-map").classList.contains("active")) event.preventDefault();
+    if (getRequiredElement("#view-map").classList.contains("active")) event.preventDefault();
   });
   document.addEventListener("keyup", (event) => {
     if (event.code !== "Space") return;
@@ -1273,7 +1308,7 @@
       }
     };
   }
-  const mapStage = document.getElementById("map-stage");
+  const mapStage = getRequiredElement("#map-stage");
   mapStage.addEventListener("mousedown", (event) => {
     if (event.button !== 0) return;
     const point = getCanvasPos(event);
@@ -1328,11 +1363,11 @@
     }
   });
   function updateRuler(start, end) {
-    const overlay = document.getElementById("ruler-overlay");
-    const line = document.getElementById("ruler-line");
-    const startDot = document.getElementById("ruler-start");
-    const endDot = document.getElementById("ruler-end");
-    const label = document.getElementById("ruler-label");
+    const overlay = getRequiredElement("#ruler-overlay");
+    const line = getRequiredElement("#ruler-line");
+    const startDot = getRequiredElement("#ruler-start");
+    const endDot = getRequiredElement("#ruler-end");
+    const label = getRequiredElement("#ruler-label");
     const gridSize = Math.max(10, Number(state.scene.gridSize) || 50);
     const measurement = gridMeasurement(
       start,
@@ -1342,26 +1377,26 @@
       state.scene.gridOffsetY
     );
     overlay.classList.add("visible");
-    line.setAttribute("x1", measurement.start.x);
-    line.setAttribute("y1", measurement.start.y);
-    line.setAttribute("x2", measurement.end.x);
-    line.setAttribute("y2", measurement.end.y);
-    startDot.setAttribute("cx", measurement.start.x);
-    startDot.setAttribute("cy", measurement.start.y);
-    endDot.setAttribute("cx", measurement.end.x);
-    endDot.setAttribute("cy", measurement.end.y);
-    label.setAttribute("x", (measurement.start.x + measurement.end.x) / 2);
-    label.setAttribute("y", (measurement.start.y + measurement.end.y) / 2 - 10);
+    line.setAttribute("x1", String(measurement.start.x));
+    line.setAttribute("y1", String(measurement.start.y));
+    line.setAttribute("x2", String(measurement.end.x));
+    line.setAttribute("y2", String(measurement.end.y));
+    startDot.setAttribute("cx", String(measurement.start.x));
+    startDot.setAttribute("cy", String(measurement.start.y));
+    endDot.setAttribute("cx", String(measurement.end.x));
+    endDot.setAttribute("cy", String(measurement.end.y));
+    label.setAttribute("x", String((measurement.start.x + measurement.end.x) / 2));
+    label.setAttribute("y", String((measurement.start.y + measurement.end.y) / 2 - 10));
     const squareLabel = measurement.squares === 1 ? "square" : "squares";
     label.textContent = `${measurement.squares} ${squareLabel} \xB7 ${measurement.feet} ft`;
   }
   function clearRuler() {
     rulerStartPoint = null;
     rulerAnchorPoint = null;
-    document.getElementById("ruler-overlay").classList.remove("visible");
+    getRequiredElement("#ruler-overlay").classList.remove("visible");
   }
   function updateMapAreaSelection(drag) {
-    const selection = document.getElementById("map-area-selection");
+    const selection = getRequiredElement("#map-area-selection");
     const x = Math.min(drag.start.x, drag.current.x);
     const y = Math.min(drag.start.y, drag.current.y);
     selection.style.left = `${x}px`;
@@ -1372,85 +1407,85 @@
   }
   function clearMapAreaSelection() {
     mapAreaDrag = null;
-    const selection = document.getElementById("map-area-selection");
+    const selection = getRequiredElement("#map-area-selection");
     selection.className = "";
     selection.style.width = "0";
     selection.style.height = "0";
   }
-  document.getElementById("grid-toggle").onchange = () => {
+  getRequiredInput("grid-toggle").onchange = () => {
     socket.emit("scene:setGrid", {
-      gridSize: Number(document.getElementById("grid-size").value) || 50,
-      gridVisible: document.getElementById("grid-toggle").checked,
-      gridColor: document.getElementById("grid-color").value,
-      snapToGrid: document.getElementById("snap-toggle").checked,
-      fitTokensToGrid: document.getElementById("fit-token-toggle").checked
+      gridSize: Number(getRequiredInput("grid-size").value) || 50,
+      gridVisible: getRequiredInput("grid-toggle").checked,
+      gridColor: getRequiredInput("grid-color").value,
+      snapToGrid: getRequiredInput("snap-toggle").checked,
+      fitTokensToGrid: getRequiredInput("fit-token-toggle").checked
     });
   };
-  document.getElementById("grid-size").onchange = () => {
+  getRequiredInput("grid-size").onchange = () => {
     socket.emit("scene:setGrid", {
-      gridSize: Number(document.getElementById("grid-size").value) || 50,
-      gridVisible: document.getElementById("grid-toggle").checked,
-      gridColor: document.getElementById("grid-color").value,
-      snapToGrid: document.getElementById("snap-toggle").checked,
-      fitTokensToGrid: document.getElementById("fit-token-toggle").checked
+      gridSize: Number(getRequiredInput("grid-size").value) || 50,
+      gridVisible: getRequiredInput("grid-toggle").checked,
+      gridColor: getRequiredInput("grid-color").value,
+      snapToGrid: getRequiredInput("snap-toggle").checked,
+      fitTokensToGrid: getRequiredInput("fit-token-toggle").checked
     });
   };
-  document.getElementById("grid-color").oninput = (event) => {
-    document.getElementById("grid-overlay").style.setProperty("--grid-color", event.target.value);
+  getRequiredInput("grid-color").oninput = () => {
+    getRequiredElement("#grid-overlay").style.setProperty("--grid-color", getRequiredInput("grid-color").value);
   };
-  document.getElementById("grid-color").onchange = () => {
+  getRequiredInput("grid-color").onchange = () => {
     socket.emit("scene:setGrid", {
-      gridSize: Number(document.getElementById("grid-size").value) || 50,
-      gridVisible: document.getElementById("grid-toggle").checked,
-      gridColor: document.getElementById("grid-color").value,
-      snapToGrid: document.getElementById("snap-toggle").checked,
-      fitTokensToGrid: document.getElementById("fit-token-toggle").checked
+      gridSize: Number(getRequiredInput("grid-size").value) || 50,
+      gridVisible: getRequiredInput("grid-toggle").checked,
+      gridColor: getRequiredInput("grid-color").value,
+      snapToGrid: getRequiredInput("snap-toggle").checked,
+      fitTokensToGrid: getRequiredInput("fit-token-toggle").checked
     });
   };
-  document.getElementById("snap-toggle").onchange = () => {
+  getRequiredInput("snap-toggle").onchange = () => {
     socket.emit("scene:setGrid", {
-      gridSize: Number(document.getElementById("grid-size").value) || 50,
-      gridVisible: document.getElementById("grid-toggle").checked,
-      gridColor: document.getElementById("grid-color").value,
-      snapToGrid: document.getElementById("snap-toggle").checked,
-      fitTokensToGrid: document.getElementById("fit-token-toggle").checked
+      gridSize: Number(getRequiredInput("grid-size").value) || 50,
+      gridVisible: getRequiredInput("grid-toggle").checked,
+      gridColor: getRequiredInput("grid-color").value,
+      snapToGrid: getRequiredInput("snap-toggle").checked,
+      fitTokensToGrid: getRequiredInput("fit-token-toggle").checked
     });
   };
-  document.getElementById("fit-token-toggle").onchange = () => {
+  getRequiredInput("fit-token-toggle").onchange = () => {
     socket.emit("scene:setGrid", {
-      gridSize: Number(document.getElementById("grid-size").value) || 50,
-      gridVisible: document.getElementById("grid-toggle").checked,
-      gridColor: document.getElementById("grid-color").value,
-      snapToGrid: document.getElementById("snap-toggle").checked,
-      fitTokensToGrid: document.getElementById("fit-token-toggle").checked
+      gridSize: Number(getRequiredInput("grid-size").value) || 50,
+      gridVisible: getRequiredInput("grid-toggle").checked,
+      gridColor: getRequiredInput("grid-color").value,
+      snapToGrid: getRequiredInput("snap-toggle").checked,
+      fitTokensToGrid: getRequiredInput("fit-token-toggle").checked
     });
   };
-  document.getElementById("time-of-day-select").onchange = (event) => {
-    socket.emit("scene:setTimeOfDay", { timeOfDay: event.target.value });
+  getRequiredSelect("time-of-day-select").onchange = () => {
+    socket.emit("scene:setTimeOfDay", { timeOfDay: getRequiredSelect("time-of-day-select").value });
   };
-  document.getElementById("grid-offset-reset").onclick = () => {
+  getRequiredButton("grid-offset-reset").onclick = () => {
     socket.emit("scene:setGrid", {
-      gridSize: Number(document.getElementById("grid-size").value) || 50,
-      gridVisible: document.getElementById("grid-toggle").checked,
-      gridColor: document.getElementById("grid-color").value,
-      snapToGrid: document.getElementById("snap-toggle").checked,
-      fitTokensToGrid: document.getElementById("fit-token-toggle").checked,
+      gridSize: Number(getRequiredInput("grid-size").value) || 50,
+      gridVisible: getRequiredInput("grid-toggle").checked,
+      gridColor: getRequiredInput("grid-color").value,
+      snapToGrid: getRequiredInput("snap-toggle").checked,
+      fitTokensToGrid: getRequiredInput("fit-token-toggle").checked,
       gridOffsetX: 0,
       gridOffsetY: 0
     });
   };
-  document.getElementById("zoom-in").onclick = () => setMapZoom(mapScale * 1.2, viewportCenter());
-  document.getElementById("zoom-out").onclick = () => setMapZoom(mapScale / 1.2, viewportCenter());
-  document.getElementById("zoom-reset").onclick = () => {
+  getRequiredButton("zoom-in").onclick = () => setMapZoom(mapScale * 1.2, viewportCenter());
+  getRequiredButton("zoom-out").onclick = () => setMapZoom(mapScale / 1.2, viewportCenter());
+  getRequiredButton("zoom-reset").onclick = () => {
     mapScale = 1;
     mapPan = { x: 0, y: 0 };
     applyMapTransform();
   };
-  document.getElementById("zoom-fit").onclick = fitMapToViewport;
-  document.getElementById("toggle-initiative-btn").onclick = () => {
-    const mapView = document.getElementById("view-map");
+  getRequiredButton("zoom-fit").onclick = fitMapToViewport;
+  getRequiredButton("toggle-initiative-btn").onclick = () => {
+    const mapView = getRequiredElement("#view-map");
     const collapsed = mapView.classList.toggle("initiative-collapsed");
-    document.getElementById("toggle-initiative-btn").setAttribute("aria-expanded", String(!collapsed));
+    getRequiredButton("toggle-initiative-btn").setAttribute("aria-expanded", String(!collapsed));
   };
   function setMapZoom(value, clientPoint = viewportCenter()) {
     const wrapperRect = mapStageWrap.getBoundingClientRect();
@@ -1473,7 +1508,7 @@
     return { clientX: rect.left + rect.width / 2, clientY: rect.top + rect.height / 2 };
   }
   function fitMapToViewport() {
-    const stage = document.getElementById("map-stage");
+    const stage = getRequiredElement("#map-stage");
     const stageWidth = stage.offsetWidth;
     const stageHeight = stage.offsetHeight;
     if (!stageWidth || !stageHeight) return;
@@ -1489,14 +1524,13 @@
     applyMapTransform();
   }
   function applyMapTransform() {
-    const stage = document.getElementById("map-stage");
-    if (!stage) return;
+    const stage = getRequiredElement("#map-stage");
     stage.style.transform = `translate(${mapPan.x}px, ${mapPan.y}px) scale(${mapScale})`;
-    document.getElementById("zoom-level").textContent = Math.round(mapScale * 100) + "%";
+    getRequiredElement("#zoom-level").textContent = Math.round(mapScale * 100) + "%";
   }
   function renderFog() {
-    const canvas = document.getElementById("fog-canvas");
-    if (!canvas || !state) return;
+    const canvas = getRequiredElement("#fog-canvas");
+    if (!state) return;
     const ctx = canvas.getContext("2d");
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     canvas.classList.toggle("active", !!state.scene.fogEnabled);
@@ -1529,7 +1563,7 @@
       const label = document.createElement("span");
       label.className = "shared-pointer-label";
       pointer.append(dot, label);
-      document.getElementById("map-stage").appendChild(pointer);
+      getRequiredElement("#map-stage").appendChild(pointer);
     }
     pointer.style.left = `${Number(x)}px`;
     pointer.style.top = `${Number(y)}px`;
@@ -1559,7 +1593,7 @@
     const label = document.createElement("span");
     label.textContent = name || "Player";
     ping.appendChild(label);
-    document.getElementById("map-stage").appendChild(ping);
+    getRequiredElement("#map-stage").appendChild(ping);
     setTimeout(() => ping.remove(), 1500);
   }
   let isDrawing = false;
@@ -1711,20 +1745,26 @@
     doodleCornerPanel.style.position = "fixed";
     doodleCornerPanel.style.margin = "0";
     const anchor = mapStageWrap2.getBoundingClientRect();
+    const toolbar = document.querySelector("#map-stage-wrap > .map-toolbar");
+    const toolbarRect = toolbar?.getBoundingClientRect();
     const panelRect = doodleCornerPanel.getBoundingClientRect();
     const gutter = 8;
     const maxLeft = Math.max(gutter, window.innerWidth - panelRect.width - gutter);
     const maxTop = Math.max(gutter, window.innerHeight - panelRect.height - gutter);
+    const minimumTop = toolbarRect ? toolbarRect.bottom + gutter : anchor.top + gutter;
     doodleCornerPanel.style.left = `${Math.min(Math.max(anchor.left + 10, gutter), maxLeft)}px`;
-    doodleCornerPanel.style.top = `${Math.min(Math.max(anchor.top + 10, gutter), maxTop)}px`;
+    doodleCornerPanel.style.top = `${Math.min(Math.max(minimumTop, gutter), maxTop)}px`;
   }
   function clampDoodleCornerPosition(left, top) {
     const panelRect = doodleCornerPanel.getBoundingClientRect();
     const gutter = 8;
     const maxLeft = Math.max(gutter, window.innerWidth - panelRect.width - gutter);
     const maxTop = Math.max(gutter, window.innerHeight - panelRect.height - gutter);
+    const toolbar = document.querySelector("#map-stage-wrap > .map-toolbar");
+    const toolbarRect = toolbar?.getBoundingClientRect();
+    const minimumTop = toolbarRect ? toolbarRect.bottom + gutter : gutter;
     doodleCornerPanel.style.left = `${Math.min(Math.max(left, gutter), maxLeft)}px`;
-    doodleCornerPanel.style.top = `${Math.min(Math.max(top, gutter), maxTop)}px`;
+    doodleCornerPanel.style.top = `${Math.min(Math.max(top, minimumTop), maxTop)}px`;
   }
   function setDoodleCornerTool(tool) {
     doodleCornerTool = tool === "eraser" ? "eraser" : "draw";
@@ -1834,6 +1874,9 @@
   doodleCornerDragHandle.onpointercancel = () => {
     doodleCornerDrag = null;
   };
+  window.addEventListener("resize", () => {
+    if (doodleCornerOpen) resetDoodleCornerPosition();
+  });
   socket.on("scene:doodleCorner:add", (path) => {
     if (!state) return;
     state.scene.doodleCornerPaths.push(path);
@@ -1854,11 +1897,11 @@
   }
   function renderSavedScenes() {
     if (!state) return;
-    document.getElementById("current-scene-name").textContent = state.activeSceneName || "Unsaved scene";
-    const dirtyIndicator = document.getElementById("scene-dirty-indicator");
+    getRequiredElement("#current-scene-name").textContent = state.activeSceneName || "Unsaved scene";
+    const dirtyIndicator = getRequiredElement("#scene-dirty-indicator");
     dirtyIndicator.classList.toggle("hidden", !state.sceneDirty);
     dirtyIndicator.textContent = state.activeSceneName ? "Unsaved changes" : "Not saved yet";
-    const select = document.getElementById("saved-scene-select");
+    const select = getRequiredSelect("saved-scene-select");
     const previous = select.value;
     select.innerHTML = '<option value="">Choose a saved scene\u2026</option>';
     savedSceneList().forEach((scene) => {
@@ -1871,33 +1914,33 @@
     updateSelectedSceneSummary();
   }
   function updateSelectedSceneSummary() {
-    const selected = savedSceneList().find((scene) => scene.name === document.getElementById("saved-scene-select").value);
-    const summary = document.getElementById("scene-summary");
+    const selected = savedSceneList().find((scene) => scene.name === getRequiredSelect("saved-scene-select").value);
+    const summary = getRequiredElement("#scene-summary");
     if (!selected) {
       summary.textContent = "Maps, drawings, tokens and initiative are saved together.";
       return;
     }
     summary.textContent = `${selected.mapName} \xB7 ${selected.tokenCount} token${selected.tokenCount === 1 ? "" : "s"} \xB7 saved ${new Date(selected.savedAt).toLocaleString()}`;
   }
-  document.getElementById("saved-scene-select").onchange = () => {
-    const selected = document.getElementById("saved-scene-select").value;
-    if (selected) document.getElementById("scene-name-input").value = selected;
+  getRequiredSelect("saved-scene-select").onchange = () => {
+    const selected = getRequiredSelect("saved-scene-select").value;
+    if (selected) getRequiredInput("scene-name-input").value = selected;
     updateSelectedSceneSummary();
   };
-  document.getElementById("save-scene-btn").onclick = () => {
-    const name = document.getElementById("scene-name-input").value.trim();
+  getRequiredButton("save-scene-btn").onclick = () => {
+    const name = getRequiredInput("scene-name-input").value.trim();
     if (!name) return showToast("Give the scene a name first.");
     const exists = savedSceneList().some((scene) => scene.name.toLowerCase() === name.toLowerCase());
     if (exists && !confirm(`Overwrite the saved scene \u201C${name}\u201D with the current setup?`)) return;
     socket.emit("scene:save", { name });
   };
-  document.getElementById("load-scene-btn").onclick = () => {
-    const name = document.getElementById("saved-scene-select").value;
+  getRequiredButton("load-scene-btn").onclick = () => {
+    const name = getRequiredSelect("saved-scene-select").value;
     if (!name) return showToast("Choose a saved scene first.");
     if (confirm(`Load \u201C${name}\u201D? Unsaved changes to the current scene will be replaced.`)) socket.emit("scene:load", { name });
   };
-  document.getElementById("delete-scene-btn").onclick = () => {
-    const name = document.getElementById("saved-scene-select").value;
+  getRequiredButton("delete-scene-btn").onclick = () => {
+    const name = getRequiredSelect("saved-scene-select").value;
     if (!name) return showToast("Choose a saved scene first.");
     if (confirm(`Delete the saved scene \u201C${name}\u201D?`)) socket.emit("scene:delete", { name });
   };
@@ -1942,8 +1985,8 @@
     if (libraryCurrentFolderId !== "all" && libraryCurrentFolderId !== "unfiled" && !currentFolder) {
       libraryCurrentFolderId = "all";
     }
-    const folderList = document.getElementById("library-folder-list");
-    const folderCount = document.getElementById("library-folder-count");
+    const folderList = getRequiredElement("#library-folder-list");
+    const folderCount = getRequiredElement("#library-folder-count");
     folderList.innerHTML = "";
     folderCount.textContent = `${library.folders.length} folder${library.folders.length === 1 ? "" : "s"}`;
     const appendFolderButton = (label, id, depth = 0, icon = "") => {
@@ -1994,9 +2037,9 @@
     orderedLibraryFolders(library.folders).forEach(({ folder, depth }) => appendFolderButton(folder.name, folder.id, depth + 1, "\u{1F4C1}"));
     const files = libraryCurrentFolderId === "all" ? library.files : library.files.filter((file) => libraryCurrentFolderId === "unfiled" ? !file.folderId : file.folderId === libraryCurrentFolderId);
     const currentFolderLabel = libraryCurrentFolderId === "all" ? "All files" : libraryCurrentFolderId === "unfiled" ? "Unfiled" : currentFolder?.name || "All files";
-    document.getElementById("library-current-folder").textContent = currentFolderLabel;
-    document.getElementById("library-file-summary").textContent = `${files.length} file${files.length === 1 ? "" : "s"} here`;
-    const fileList = document.getElementById("library-file-list");
+    getRequiredElement("#library-current-folder").textContent = currentFolderLabel;
+    getRequiredElement("#library-file-summary").textContent = `${files.length} file${files.length === 1 ? "" : "s"} here`;
+    const fileList = getRequiredElement("#library-file-list");
     fileList.innerHTML = "";
     if (!files.length) {
       fileList.innerHTML = '<div class="library-empty"><span>\u{1F342}</span><strong>No files here yet</strong><p>Upload a handout, clue, map or puzzle file to begin.</p></div>';
@@ -2032,7 +2075,7 @@
       folderSelect.value = file.folderId || "";
       folderSelect.onchange = () => socket.emit("library:file:move", { id: file.id, folderId: folderSelect.value });
       card.querySelector(".library-share-btn").onclick = () => {
-        const duration = Number(document.getElementById("library-broadcast-duration").value) || 0;
+        const duration = Number(getRequiredInput("library-broadcast-duration").value) || 0;
         socket.emit("library:broadcast", { fileId: file.id, duration });
       };
       card.querySelector(".library-rename-btn").onclick = () => {
@@ -2051,11 +2094,10 @@
     return new Intl.DateTimeFormat(void 0, { dateStyle: "short", timeStyle: "short" }).format(new Date(time));
   }
   function renderDmNotifications() {
-    const panel = document.getElementById("dm-notifications-panel");
-    const list = document.getElementById("dm-notifications-list");
-    const count = document.getElementById("dm-notification-count");
-    const toggle = document.getElementById("dm-notifications-btn");
-    if (!panel || !list || !count || !toggle) return;
+    const panel = getRequiredElement("#dm-notifications-panel");
+    const list = getRequiredElement("#dm-notifications-list");
+    const count = getRequiredElement("#dm-notification-count");
+    const toggle = getRequiredButton("dm-notifications-btn");
     const notifications = myRole === "dm" && Array.isArray(state?.notifications) ? state.notifications : [];
     const unreadCount = notifications.filter((notification) => !notification.read).length;
     count.textContent = unreadCount > 99 ? "99+" : String(unreadCount);
@@ -2102,46 +2144,43 @@
         list.appendChild(item);
       });
     }
-    const markAll = document.getElementById("dm-notifications-mark-all");
-    const clearAll = document.getElementById("dm-notifications-clear-all");
-    if (markAll) markAll.disabled = unreadCount === 0;
-    if (clearAll) clearAll.disabled = notifications.length === 0;
+    getRequiredButton("dm-notifications-mark-all").disabled = unreadCount === 0;
+    getRequiredButton("dm-notifications-clear-all").disabled = notifications.length === 0;
   }
   function closePlayerQuestion() {
-    const overlay = document.getElementById("player-question-overlay");
-    if (!overlay) return;
+    const overlay = getRequiredElement("#player-question-overlay");
     overlay.classList.add("hidden");
     overlay.setAttribute("aria-hidden", "true");
   }
-  document.getElementById("player-safety-btn").onclick = () => {
+  getRequiredButton("player-safety-btn").onclick = () => {
     if (myRole !== "player") return;
     socket.emit("safety:request");
   };
-  document.getElementById("player-question-btn").onclick = () => {
+  getRequiredButton("player-question-btn").onclick = () => {
     if (myRole !== "player") return;
-    const overlay = document.getElementById("player-question-overlay");
+    const overlay = getRequiredElement("#player-question-overlay");
     overlay.classList.remove("hidden");
     overlay.setAttribute("aria-hidden", "false");
-    document.getElementById("player-question-input").focus();
+    getRequiredElement("#player-question-input").focus();
   };
-  document.getElementById("player-question-close").onclick = closePlayerQuestion;
-  document.getElementById("player-question-cancel").onclick = closePlayerQuestion;
-  document.getElementById("player-question-overlay").onclick = (event) => {
-    if (event.target.id === "player-question-overlay") closePlayerQuestion();
+  getRequiredButton("player-question-close").onclick = closePlayerQuestion;
+  getRequiredButton("player-question-cancel").onclick = closePlayerQuestion;
+  getRequiredElement("#player-question-overlay").onclick = (event) => {
+    if (event.target instanceof HTMLElement && event.target.id === "player-question-overlay") closePlayerQuestion();
   };
-  document.getElementById("player-question-form").onsubmit = (event) => {
+  getRequiredElement("#player-question-form").onsubmit = (event) => {
     event.preventDefault();
     if (questionSubmitting) return;
-    const input = document.getElementById("player-question-input");
+    const input = getRequiredElement("#player-question-input");
     const question = input.value.trim();
     if (!question) return showToast("Write a question before sending it.");
     questionSubmitting = true;
-    const button = document.getElementById("player-question-submit");
+    const button = getRequiredButton("player-question-submit");
     button.disabled = true;
     button.textContent = "Sending\u2026";
     socket.emit("question:submit", {
       question,
-      anonymous: document.getElementById("player-question-anonymous").checked
+      anonymous: getRequiredInput("player-question-anonymous").checked
     });
     window.setTimeout(() => {
       if (!questionSubmitting) return;
@@ -2150,24 +2189,24 @@
       button.textContent = "Send question";
     }, 5e3);
   };
-  document.getElementById("dm-notifications-btn").onclick = (event) => {
+  getRequiredButton("dm-notifications-btn").onclick = (event) => {
     event.stopPropagation();
     if (myRole !== "dm") return;
     dmNotificationsOpen = !dmNotificationsOpen;
     renderDmNotifications();
   };
-  document.getElementById("dm-notifications-close").onclick = () => {
+  getRequiredButton("dm-notifications-close").onclick = () => {
     dmNotificationsOpen = false;
     renderDmNotifications();
   };
-  document.getElementById("dm-notifications-mark-all").onclick = () => socket.emit("notifications:markAllRead");
-  document.getElementById("dm-notifications-clear-all").onclick = () => {
+  getRequiredButton("dm-notifications-mark-all").onclick = () => socket.emit("notifications:markAllRead");
+  getRequiredButton("dm-notifications-clear-all").onclick = () => {
     if (state?.notifications?.length && confirm("Clear all DM notifications?")) socket.emit("notifications:clearAll");
   };
   document.addEventListener("click", (event) => {
-    const panel = document.getElementById("dm-notifications-panel");
-    const toggle = document.getElementById("dm-notifications-btn");
-    if (dmNotificationsOpen && panel && !panel.contains(event.target) && !toggle.contains(event.target)) {
+    const panel = getRequiredElement("#dm-notifications-panel");
+    const toggle = getRequiredButton("dm-notifications-btn");
+    if (dmNotificationsOpen && event.target instanceof Node && !panel.contains(event.target) && !toggle.contains(event.target)) {
       dmNotificationsOpen = false;
       renderDmNotifications();
     }
@@ -2277,7 +2316,7 @@ ${choices}`,
     const remainder = seconds % 60;
     return `${minutes}m${remainder ? ` ${remainder}s` : ""} remaining`;
   }
-  const sharedHandoutDialog = createDialogController(document.getElementById("shared-handout-overlay"), {
+  const sharedHandoutDialog = createDialogController(getRequiredElement("#shared-handout-overlay"), {
     onDismiss: (reason) => {
       const broadcast = state?.library?.broadcast;
       const stillActive = broadcast && (!broadcast.expiresAt || Number(broadcast.expiresAt) > Date.now());
@@ -2291,35 +2330,40 @@ ${choices}`,
     }
   });
   function setSharedHandoutReopenVisible(visible, broadcast = null) {
-    const button = document.getElementById("shared-handout-reopen-btn");
+    const button = getRequiredButton("shared-handout-reopen-btn");
     button.classList.toggle("hidden", !visible);
     button.setAttribute("aria-hidden", String(!visible));
     if (visible) {
       const name = String(broadcast?.name || "shared handout").trim() || "shared handout";
-      document.getElementById("shared-handout-reopen-label").textContent = `Open ${name}`;
+      getRequiredElement("#shared-handout-reopen-label").textContent = `Open ${name}`;
       button.setAttribute("aria-label", `Open ${name}`);
     }
   }
   function renderSharedHandoutContent(broadcast) {
-    const content = document.getElementById("shared-handout-content");
+    const content = getRequiredElement("#shared-handout-content");
     content.innerHTML = "";
+    const safeBroadcastUrl = safeAssetUrl(broadcast.url, ["uploads", "handouts"]);
+    if (!safeBroadcastUrl) {
+      content.textContent = "This handout is unavailable.";
+      return;
+    }
     if (broadcast.kind === "image") {
       const image = document.createElement("img");
-      image.src = broadcast.url;
+      image.src = safeBroadcastUrl;
       image.alt = broadcast.name;
       content.appendChild(image);
       return;
     }
     if (broadcast.kind === "pdf") {
       const frame = document.createElement("iframe");
-      frame.src = broadcast.url;
+      frame.src = safeBroadcastUrl;
       frame.title = broadcast.name;
       content.appendChild(frame);
       return;
     }
     if (broadcast.kind === "html") {
       const frame = document.createElement("iframe");
-      frame.src = broadcast.url;
+      frame.src = safeBroadcastUrl;
       frame.title = broadcast.name;
       frame.dataset.shopHandout = "true";
       frame.dataset.puzzleHandout = "true";
@@ -2376,7 +2420,7 @@ ${choices}`,
       sharedHandoutTimer = null;
       return;
     }
-    document.getElementById("shared-handout-timer").textContent = broadcast.expiresAt ? formatSharedHandoutTimer(broadcast.expiresAt) : "Shown until stopped";
+    getRequiredElement("#shared-handout-timer").textContent = broadcast.expiresAt ? formatSharedHandoutTimer(broadcast.expiresAt) : "Shown until stopped";
   }
   function renderSharedHandout() {
     const broadcast = state?.library?.broadcast;
@@ -2398,7 +2442,7 @@ ${choices}`,
     }
     if (dismissedSharedHandoutKey) dismissedSharedHandoutKey = "";
     setSharedHandoutReopenVisible(false);
-    document.getElementById("shared-handout-title").textContent = broadcast.name || "Shared handout";
+    getRequiredElement("#shared-handout-title").textContent = broadcast.name || "Shared handout";
     if (sharedHandoutRenderKey !== renderKey) {
       sharedHandoutRenderKey = renderKey;
       renderSharedHandoutContent(broadcast);
@@ -2407,19 +2451,19 @@ ${choices}`,
     sharedHandoutDialog.open();
     if (broadcast.expiresAt) sharedHandoutTimer = setInterval(updateSharedHandoutTimer, 250);
   }
-  document.getElementById("shared-handout-reopen-btn").onclick = () => {
+  getRequiredButton("shared-handout-reopen-btn").onclick = () => {
     dismissedSharedHandoutKey = "";
     setSharedHandoutReopenVisible(false);
     renderSharedHandout();
   };
-  document.getElementById("library-new-folder-btn").onclick = () => {
+  getRequiredButton("library-new-folder-btn").onclick = () => {
     const name = prompt("Folder name");
     if (name?.trim()) {
       const parentId = libraryCurrentFolderId !== "all" && libraryCurrentFolderId !== "unfiled" ? libraryCurrentFolderId : null;
       socket.emit("library:folder:create", { name: name.trim(), parentId });
     }
   };
-  document.getElementById("library-add-session0-btn").onclick = () => {
+  getRequiredButton("library-add-session0-btn").onclick = () => {
     const library = libraryData();
     if (library.files.some((file) => file.url === "/handouts/session-0.html")) {
       return showToast("The Session 0 handout is already in your library.");
@@ -2433,13 +2477,14 @@ ${choices}`,
       folderId
     });
   };
-  document.getElementById("library-upload-btn").onclick = () => document.getElementById("library-file-input").click();
-  document.getElementById("library-file-input").onchange = async (event) => {
-    const file = event.target.files[0];
+  getRequiredButton("library-upload-btn").onclick = () => getRequiredInput("library-file-input").click();
+  getRequiredInput("library-file-input").onchange = async (event) => {
+    if (!(event.target instanceof HTMLInputElement)) return;
+    const file = event.target.files?.[0];
     event.target.value = "";
     if (!file) return;
     const folderId = libraryCurrentFolderId !== "all" && libraryCurrentFolderId !== "unfiled" ? libraryCurrentFolderId : null;
-    const button = document.getElementById("library-upload-btn");
+    const button = getRequiredButton("library-upload-btn");
     button.disabled = true;
     try {
       const uploaded = await uploadLibraryFile(file);
@@ -2456,14 +2501,14 @@ ${choices}`,
       button.disabled = false;
     }
   };
-  document.getElementById("shared-handout-stop-btn").onclick = () => socket.emit("library:broadcast:clear");
-  document.getElementById("token-kind").onchange = updateTokenCreateForm;
-  document.getElementById("cancel-npc-edit-btn").onclick = resetNpcEditor;
+  getRequiredButton("shared-handout-stop-btn").onclick = () => socket.emit("library:broadcast:clear");
+  getRequiredSelect("token-kind").onchange = updateTokenCreateForm;
+  getRequiredButton("cancel-npc-edit-btn").onclick = resetNpcEditor;
   function updateTokenCreateForm() {
-    const kind = document.getElementById("token-kind").value;
-    document.getElementById("npc-create-fields").classList.toggle("hidden", kind !== "npc");
-    document.getElementById("token-pronouns").classList.toggle("hidden", kind === "item");
-    if (!editingNpcId) document.getElementById("add-token-btn").textContent = kind === "npc" ? "Create NPC & place" : "Add to map";
+    const kind = getRequiredSelect("token-kind").value;
+    getRequiredElement("#npc-create-fields").classList.toggle("hidden", kind !== "npc");
+    getRequiredElement("#token-pronouns").classList.toggle("hidden", kind === "item");
+    if (!editingNpcId) getRequiredButton("add-token-btn").textContent = kind === "npc" ? "Create NPC & place" : "Add to map";
   }
   function parseNpcAttacks(text) {
     return String(text || "").split("\n").map((line) => line.trim()).filter(Boolean).map((line) => {
@@ -2474,11 +2519,11 @@ ${choices}`,
   function npcAttacksText(attacks) {
     return (attacks || []).map((attack) => [attack.name, attack.bonus, attack.damage].join(" | ")).join("\n");
   }
-  document.getElementById("add-token-btn").onclick = async () => {
-    const name = document.getElementById("token-name").value.trim();
+  getRequiredButton("add-token-btn").onclick = async () => {
+    const name = getRequiredInput("token-name").value.trim();
     if (!name) return showToast("Give the token a name first.");
-    const kind = document.getElementById("token-kind").value;
-    const file = document.getElementById("token-image").files[0];
+    const kind = getRequiredSelect("token-kind").value;
+    const file = getRequiredInput("token-image").files?.[0];
     let imageUrl;
     if (file) imageUrl = await uploadFile(file);
     if (editingNpcId) {
@@ -2486,13 +2531,13 @@ ${choices}`,
         id: editingNpcId,
         name,
         ...imageUrl !== void 0 ? { imageUrl } : {},
-        hp: Number(document.getElementById("npc-hp").value) || 1,
-        maxHp: Number(document.getElementById("npc-hp").value) || 1,
-        ac: Number(document.getElementById("npc-ac").value) || 0,
-        initiativeModifier: Number(document.getElementById("npc-initiative").value) || 0,
-        pronouns: document.getElementById("token-pronouns").value.trim(),
-        attacks: parseNpcAttacks(document.getElementById("npc-attacks").value),
-        notes: document.getElementById("npc-notes").value.trim()
+        hp: Number(getRequiredInput("npc-hp").value) || 1,
+        maxHp: Number(getRequiredInput("npc-hp").value) || 1,
+        ac: Number(getRequiredInput("npc-ac").value) || 0,
+        initiativeModifier: Number(getRequiredInput("npc-initiative").value) || 0,
+        pronouns: getRequiredInput("token-pronouns").value.trim(),
+        attacks: parseNpcAttacks(getRequiredInput("npc-attacks").value),
+        notes: getRequiredInput("npc-notes").value.trim()
       });
       return;
     }
@@ -2500,13 +2545,13 @@ ${choices}`,
       label: name,
       kind,
       imageUrl: imageUrl || null,
-      hp: kind === "npc" ? Number(document.getElementById("npc-hp").value) || 1 : void 0,
-      maxHp: kind === "npc" ? Number(document.getElementById("npc-hp").value) || 1 : void 0,
-      ac: Number(document.getElementById("npc-ac").value) || 0,
-      initiativeModifier: Number(document.getElementById("npc-initiative").value) || 0,
-      pronouns: kind === "item" ? "" : document.getElementById("token-pronouns").value.trim(),
-      attacks: parseNpcAttacks(document.getElementById("npc-attacks").value),
-      notes: document.getElementById("npc-notes").value.trim()
+      hp: kind === "npc" ? Number(getRequiredInput("npc-hp").value) || 1 : void 0,
+      maxHp: kind === "npc" ? Number(getRequiredInput("npc-hp").value) || 1 : void 0,
+      ac: Number(getRequiredInput("npc-ac").value) || 0,
+      initiativeModifier: Number(getRequiredInput("npc-initiative").value) || 0,
+      pronouns: kind === "item" ? "" : getRequiredInput("token-pronouns").value.trim(),
+      attacks: parseNpcAttacks(getRequiredInput("npc-attacks").value),
+      notes: getRequiredInput("npc-notes").value.trim()
     });
     resetNpcEditor();
   };
@@ -2514,36 +2559,36 @@ ${choices}`,
     const npc = state.npcs?.[npcId];
     if (!npc) return;
     editingNpcId = npcId;
-    document.getElementById("token-kind").value = "npc";
-    document.getElementById("token-kind").disabled = true;
-    document.getElementById("token-name").value = npc.name;
-    document.getElementById("npc-hp").value = Number(npc.maxHp) || 1;
-    document.getElementById("npc-ac").value = Number(npc.ac) || 0;
-    document.getElementById("npc-initiative").value = Number(npc.initiativeModifier) || 0;
-    document.getElementById("token-pronouns").value = npc.pronouns || npc.sheet?.pronouns || npc.sheet?.fields?.pronouns || "";
-    document.getElementById("npc-attacks").value = npcAttacksText(npc.attacks);
-    document.getElementById("npc-notes").value = npc.notes || "";
-    document.getElementById("add-token-btn").textContent = "Save NPC changes";
-    document.getElementById("cancel-npc-edit-btn").classList.remove("hidden");
+    getRequiredSelect("token-kind").value = "npc";
+    getRequiredSelect("token-kind").disabled = true;
+    getRequiredInput("token-name").value = npc.name;
+    getRequiredInput("npc-hp").value = String(Number(npc.maxHp) || 1);
+    getRequiredInput("npc-ac").value = String(Number(npc.ac) || 0);
+    getRequiredInput("npc-initiative").value = String(Number(npc.initiativeModifier) || 0);
+    getRequiredInput("token-pronouns").value = npc.pronouns || npc.sheet?.pronouns || npc.sheet?.fields?.pronouns || "";
+    getRequiredInput("npc-attacks").value = npcAttacksText(npc.attacks);
+    getRequiredInput("npc-notes").value = npc.notes || "";
+    getRequiredButton("add-token-btn").textContent = "Save NPC changes";
+    getRequiredButton("cancel-npc-edit-btn").classList.remove("hidden");
     updateTokenCreateForm();
-    document.getElementById("token-name").focus();
+    getRequiredInput("token-name").focus();
   }
   function resetNpcEditor() {
     editingNpcId = null;
-    document.getElementById("token-kind").disabled = false;
-    document.getElementById("token-name").value = "";
-    document.getElementById("token-image").value = "";
-    document.getElementById("npc-hp").value = 10;
-    document.getElementById("npc-ac").value = 10;
-    document.getElementById("npc-initiative").value = 0;
-    document.getElementById("token-pronouns").value = "";
-    document.getElementById("npc-attacks").value = "";
-    document.getElementById("npc-notes").value = "";
-    document.getElementById("cancel-npc-edit-btn").classList.add("hidden");
+    getRequiredSelect("token-kind").disabled = false;
+    getRequiredInput("token-name").value = "";
+    getRequiredInput("token-image").value = "";
+    getRequiredInput("npc-hp").value = "10";
+    getRequiredInput("npc-ac").value = "10";
+    getRequiredInput("npc-initiative").value = "0";
+    getRequiredInput("token-pronouns").value = "";
+    getRequiredInput("npc-attacks").value = "";
+    getRequiredInput("npc-notes").value = "";
+    getRequiredButton("cancel-npc-edit-btn").classList.add("hidden");
     updateTokenCreateForm();
   }
   function renderTokenTray() {
-    const list = document.getElementById("token-list");
+    const list = getRequiredElement("#token-list");
     list.innerHTML = "";
     state.tokens.forEach((t) => {
       if (myRole === "player" && t.visibleToPlayers === false) return;
@@ -2558,8 +2603,9 @@ ${choices}`,
       chip.title = [hoverLabel, controlHint].filter(Boolean).join(" \xB7 ");
       chip.setAttribute("aria-label", hoverLabel);
       if (t.visibleToPlayers === false) chip.classList.add("hidden-token");
-      chip.innerHTML = (t.imageUrl ? `<img src="${escapeAttr(t.imageUrl)}" alt="${escapeAttr(displayLabel)}">` : emojiFor(t.kind)) + (t.canControl ? '<span class="del" title="Remove from map">\xD7</span>' : "");
-      const remove = chip.querySelector(".del");
+      const imageUrl = safeImageUrl(t.imageUrl);
+      chip.innerHTML = (imageUrl ? `<img src="${escapeAttr(imageUrl)}" alt="${escapeAttr(displayLabel)}">` : emojiFor(t.kind)) + (t.canControl ? '<span class="del" title="Remove from map">\xD7</span>' : "");
+      const remove = getOptionalElement(".del", chip);
       if (remove) remove.onclick = (e) => {
         e.stopPropagation();
         socket.emit("token:remove", { id: t.id });
@@ -2581,25 +2627,25 @@ ${choices}`,
         <button class="btn-danger-soft token-remove" type="button">Remove</button>
       </div>
     `;
-      const sizeInput = details.querySelector('input[type="range"]');
-      const sizeOutput = details.querySelector("output");
+      const sizeInput = getRequiredElement('input[type="range"]', details);
+      const sizeOutput = getRequiredElement("output", details);
       sizeInput.oninput = () => {
         sizeOutput.textContent = `${sizeInput.value}%`;
       };
       sizeInput.onchange = () => socket.emit("token:update", { id: t.id, sizeScale: Number(sizeInput.value) / 100 });
-      details.querySelector(".token-reset-size").onclick = () => socket.emit("token:update", { id: t.id, sizeScale: 1 });
-      details.querySelector(".token-visibility").onclick = () => socket.emit("token:update", { id: t.id, visibleToPlayers: t.visibleToPlayers === false });
-      details.querySelector(".token-duplicate").onclick = () => socket.emit("token:duplicate", { id: t.id });
-      details.querySelector(".token-remove").onclick = () => socket.emit("token:remove", { id: t.id });
+      getRequiredElement(".token-reset-size", details).onclick = () => socket.emit("token:update", { id: t.id, sizeScale: 1 });
+      getRequiredElement(".token-visibility", details).onclick = () => socket.emit("token:update", { id: t.id, visibleToPlayers: t.visibleToPlayers === false });
+      getRequiredElement(".token-duplicate", details).onclick = () => socket.emit("token:duplicate", { id: t.id });
+      getRequiredElement(".token-remove", details).onclick = () => socket.emit("token:remove", { id: t.id });
       entry.append(chip, details);
       list.appendChild(entry);
     });
     renderDmSidebarSummary();
   }
-  document.getElementById("toggle-dm-sidebar-btn").onclick = () => {
-    const sidebar = document.getElementById("map-sidebar");
+  getRequiredButton("toggle-dm-sidebar-btn").onclick = () => {
+    const sidebar = getRequiredElement("#map-sidebar");
     const expanded = sidebar.classList.toggle("dm-detailed");
-    const button = document.getElementById("toggle-dm-sidebar-btn");
+    const button = getRequiredButton("toggle-dm-sidebar-btn");
     button.textContent = expanded ? "Compact" : "Details";
     button.setAttribute("aria-expanded", String(expanded));
   };
@@ -2612,8 +2658,8 @@ ${choices}`,
     });
   });
   function renderDmSidebarSummary() {
-    const summary = document.getElementById("dm-sidebar-summary");
-    if (!summary || !state) return;
+    const summary = getRequiredElement("#dm-sidebar-summary");
+    if (!state) return;
     const tokens = state.tokens || [];
     const counts = { pc: 0, npc: 0, item: 0 };
     tokens.forEach((token) => {
@@ -2680,7 +2726,7 @@ ${choices}`,
     renderNpcRoster();
     renderCharacters();
     if (!focusedId) return;
-    const focused = document.getElementById(focusedId);
+    const focused = getOptionalElement(`#${CSS.escape(focusedId)}`);
     if (!focused) return;
     focused.focus();
     if (selectionStart !== null && typeof focused.setSelectionRange === "function") {
@@ -2699,17 +2745,17 @@ ${choices}`,
       { prefix: "npc-roster", summaryId: null },
       { prefix: "npc-directory", summaryId: "npc-directory-filter-summary" }
     ].forEach(({ prefix, summaryId }) => {
-      const tools = document.getElementById(`${prefix}-filter-tools`);
+      const tools = getOptionalElement(`#${prefix}-filter-tools`);
       if (!tools) return;
-      const search = document.getElementById(`${prefix}-search`);
-      const raceFilters = document.getElementById(`${prefix}-race-filters`);
-      const classFilter = document.getElementById(`${prefix}-class-filter`);
-      const clear = document.getElementById(`${prefix}-clear-filters`);
+      const search = getOptionalElement(`#${prefix}-search`);
+      const raceFilters = getOptionalElement(`#${prefix}-race-filters`);
+      const classFilter = getOptionalElement(`#${prefix}-class-filter`);
+      const clear = getOptionalElement(`#${prefix}-clear-filters`);
       if (!search || !raceFilters || !classFilter || !clear) return;
       search.value = npcSearchQuery;
-      search.oninput = (event) => {
-        npcSearchQuery = event.target.value;
-        refreshNpcViewsAfterFilter(event);
+      search.oninput = () => {
+        npcSearchQuery = search.value;
+        refreshNpcViewsAfterFilter({ target: search });
       };
       raceFilters.innerHTML = "";
       const raceOptions = [{ key: "all", label: "All races" }, ...races];
@@ -2720,9 +2766,9 @@ ${choices}`,
         button.dataset.value = optionValue.key;
         button.textContent = optionValue.label;
         button.setAttribute("aria-pressed", String(npcRaceFilter === optionValue.key));
-        button.onclick = (event) => {
+        button.onclick = () => {
           npcRaceFilter = optionValue.key;
-          refreshNpcViewsAfterFilter(event);
+          refreshNpcViewsAfterFilter({ target: button });
         };
         raceFilters.appendChild(button);
       });
@@ -2738,28 +2784,28 @@ ${choices}`,
         classFilter.appendChild(option);
       });
       classFilter.value = npcClassFilter;
-      classFilter.onchange = (event) => {
-        npcClassFilter = event.target.value;
-        refreshNpcViewsAfterFilter(event);
+      classFilter.onchange = () => {
+        npcClassFilter = classFilter.value;
+        refreshNpcViewsAfterFilter({ target: classFilter });
       };
       const hasFilters = !!npcSearchQuery.trim() || npcRaceFilter !== "all" || npcClassFilter !== "all";
       clear.disabled = !hasFilters;
-      clear.onclick = (event) => {
+      clear.onclick = () => {
         npcSearchQuery = "";
         npcRaceFilter = "all";
         npcClassFilter = "all";
-        refreshNpcViewsAfterFilter(event);
+        refreshNpcViewsAfterFilter({ target: clear });
       };
       if (summaryId) {
-        const summary = document.getElementById(summaryId);
+        const summary = getOptionalElement(`#${summaryId}`);
         const visibleCount = filteredNpcDirectory(allNpcs).length;
         if (summary) summary.textContent = hasFilters ? `Showing ${visibleCount} of ${allNpcs.length} NPCs` : `${allNpcs.length} NPC${allNpcs.length === 1 ? "" : "s"}`;
       }
     });
   }
   function renderNpcRoster() {
-    const roster = document.getElementById("npc-roster");
-    if (!roster || !state) return;
+    const roster = getRequiredElement("#npc-roster");
+    if (!state) return;
     renderNpcFilterControls();
     roster.innerHTML = "";
     const allNpcs = Object.values(state.npcs || {});
@@ -2800,11 +2846,11 @@ ${choices}`,
     });
   }
   function renderOnlineUsers() {
-    const list = document.getElementById("dm-online-list");
-    const count = document.getElementById("dm-online-count");
-    if (!list || myRole !== "dm") return;
+    const list = getRequiredElement("#dm-online-list");
+    const count = getRequiredElement("#dm-online-count");
+    if (myRole !== "dm") return;
     const users = Array.isArray(onlineUsers) ? onlineUsers : [];
-    if (count) count.textContent = String(users.length);
+    count.textContent = String(users.length);
     list.innerHTML = "";
     if (!users.length) {
       list.innerHTML = '<p class="player-sidebar-empty">No one is currently connected.</p>';
@@ -2823,8 +2869,8 @@ ${choices}`,
     });
   }
   function renderPlayerSidebar() {
-    const container = document.getElementById("player-character-summary");
-    if (!container || !state) return;
+    const container = getRequiredElement("#player-character-summary");
+    if (!state) return;
     container.innerHTML = "";
     const characters = Object.values(state.characters || {}).filter((character) => character.canManage);
     if (!characters.length) {
@@ -3068,8 +3114,8 @@ ${choices}`,
     const addButton = document.getElementById("feature-use-add");
     if (!addButton) return;
     addButton.addEventListener("click", () => {
-      const nameInput = document.getElementById("feature-use-name");
-      const name = String(nameInput.value || "").trim();
+      const nameInput2 = document.getElementById("feature-use-name");
+      const name = String(nameInput2.value || "").trim();
       if (!name) return showToast("Give the feature charge a name first.");
       const max = Math.max(0, Math.min(999, Math.floor(Number(document.getElementById("feature-use-max").value) || 0)));
       if (max <= 0) return showToast("Feature charges need a maximum of at least 1.");
@@ -3080,7 +3126,7 @@ ${choices}`,
         remaining: max,
         reset: document.getElementById("feature-use-reset").value
       });
-      nameInput.value = "";
+      nameInput2.value = "";
       document.getElementById("feature-use-max").value = "1";
       renderFeatureUsageEditor();
     });
@@ -3144,7 +3190,7 @@ ${choices}`,
       const charClass = c.charClass || c.className || "";
       card.innerHTML = `
       <div class="card-top">
-        <div class="card-portrait">${c.portraitUrl ? `<img src="${escapeAttr(c.portraitUrl)}" alt="">` : "\u{1F343}"}</div>
+        <div class="card-portrait">${safeImageUrl(c.portraitUrl) ? `<img src="${escapeAttr(safeImageUrl(c.portraitUrl))}" alt="">` : "\u{1F343}"}</div>
         <div><h3>${escapeHtml(c.name)}</h3><div class="meta">${escapeHtml([c.pronouns, species, charClass, `Level ${Number(c.level) || 1}`].filter(Boolean).join(" \xB7 "))}</div></div>
         ${canEdit ? "" : '<span class="locked-badge">View only</span>'}
       </div>
@@ -3198,7 +3244,7 @@ ${choices}`,
       card.className = "char-card npc-sheet-card";
       card.innerHTML = `
       <div class="card-top">
-        <div class="card-portrait">${npc.imageUrl ? `<img src="${escapeAttr(npc.imageUrl)}" alt="">` : "\u{1F98A}"}</div>
+        <div class="card-portrait">${safeImageUrl(npc.imageUrl) ? `<img src="${escapeAttr(safeImageUrl(npc.imageUrl))}" alt="">` : "\u{1F98A}"}</div>
         <div><h3>${escapeHtml(npc.name)}</h3><div class="meta">${escapeHtml([npc.pronouns, details.race !== "Unspecified" ? details.race : "", details.className !== "Unspecified" ? details.className : "", descriptor].filter(Boolean).join(" \xB7 "))}${escapeHtml(challenge)}</div></div>
         <span class="npc-sheet-badge">NPC</span>
       </div>
@@ -3353,7 +3399,9 @@ ${choices}`,
     refreshCharacterCalculations(!c, !c && !isNpc);
     setSheetEditable(editingCanEdit, !!c);
     window.requestAnimationFrame(alignBasicStatsPanels);
-    document.getElementById("view-characters").scrollIntoView({ behavior: "smooth" });
+    window.requestAnimationFrame(() => {
+      document.getElementById("sheet-editor").scrollIntoView({ behavior: "smooth", block: "start" });
+    });
   }
   function legacyCharacterFields(c) {
     if (!c) return {};
@@ -3661,14 +3709,14 @@ ${choices}`,
     const usage = inventoryUsage(item);
     const form = document.createElement("div");
     form.className = "inventory-item-edit-form";
-    const nameField = document.createElement("label");
-    nameField.className = "inventory-edit-name";
-    nameField.textContent = "Item name";
-    const nameInput = document.createElement("input");
-    nameInput.type = "text";
-    nameInput.value = item.name;
-    nameInput.maxLength = 200;
-    nameField.appendChild(nameInput);
+    const nameField2 = document.createElement("label");
+    nameField2.className = "inventory-edit-name";
+    nameField2.textContent = "Item name";
+    const nameInput2 = document.createElement("input");
+    nameInput2.type = "text";
+    nameInput2.value = item.name;
+    nameInput2.maxLength = 200;
+    nameField2.appendChild(nameInput2);
     const descriptionField = document.createElement("label");
     descriptionField.className = "inventory-edit-description";
     descriptionField.textContent = "Description";
@@ -3718,7 +3766,7 @@ ${choices}`,
     save.className = "btn-primary";
     save.textContent = "Save item";
     save.onclick = () => {
-      const name = nameInput.value.trim();
+      const name = nameInput2.value.trim();
       if (!name) return showToast("Give the item a name first.");
       const max = Math.max(0, Math.min(999, Math.floor(Number(maxInput.value) || 0)));
       const remaining = Math.max(0, Math.min(max, Math.floor(Number(remainingInput.value) || 0)));
@@ -3738,7 +3786,7 @@ ${choices}`,
       renderInventoryEditor();
     };
     actions.append(save, cancel);
-    form.append(nameField, descriptionField, maxField, remainingField, resetField, actions);
+    form.append(nameField2, descriptionField, maxField, remainingField, resetField, actions);
     if (children.length) {
       const note = document.createElement("small");
       note.className = "inventory-edit-note";
@@ -3959,7 +4007,7 @@ ${choices}`,
     });
   }
   document.getElementById("inv-add-btn").onclick = () => {
-    const nameInput = document.getElementById("inv-item-name");
+    const nameInput2 = document.getElementById("inv-item-name");
     const qtyInput = document.getElementById("inv-item-qty");
     const locationInput = document.getElementById("inv-item-location");
     const containerInput = document.getElementById("inv-item-container");
@@ -3967,7 +4015,7 @@ ${choices}`,
     const descriptionInput = document.getElementById("inv-item-description");
     const usageMaxInput = document.getElementById("inv-item-usage-max");
     const usageResetInput = document.getElementById("inv-item-usage-reset");
-    const name = nameInput.value.trim();
+    const name = nameInput2.value.trim();
     if (!name) return;
     const parent = editingInventory.find((item2) => item2.id === containerInput.value && item2.isContainer);
     const quantity = Number(qtyInput.value);
@@ -3985,7 +4033,7 @@ ${choices}`,
     };
     editingInventory.push(item);
     if (parent) inventoryExpandedContainers.add(parent.id);
-    nameInput.value = "";
+    nameInput2.value = "";
     qtyInput.value = 1;
     containerInput.value = "";
     containerFlag.checked = false;
@@ -5968,10 +6016,18 @@ ${line}` : line;
     document.getElementById("now-playing").textContent = current ? current.title : "Nothing playing";
     document.getElementById("now-playing-sub").textContent = current ? "from the Humblewood jukebox" : "add a track below to begin";
     document.getElementById("jukebox-art").classList.toggle("spinning", j.isPlaying);
-    document.getElementById("jb-playpause").textContent = j.isPlaying ? "\u23F8" : "\u25B6";
+    const playPauseButton = document.getElementById("jb-playpause");
+    playPauseButton.setAttribute("aria-label", j.isPlaying ? "Pause" : "Play");
+    playPauseButton.innerHTML = j.isPlaying ? '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="4" width="4" height="16" rx="1"></rect><rect x="14" y="4" width="4" height="16" rx="1"></rect></svg>' : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4 20 12 7 20Z"></path></svg>';
     if (current) {
       if (audioEl.src !== location.origin + current.url && audioEl.src !== current.url) {
-        audioEl.src = current.url;
+        const safeTrackUrl = safeAssetUrl(current.url, ["music", "uploads"]);
+        if (!safeTrackUrl) {
+          audioEl.pause();
+          audioEl.removeAttribute("src");
+          return;
+        }
+        audioEl.src = safeTrackUrl;
       }
       const elapsed = j.isPlaying ? (Date.now() - j.startedAt) / 1e3 : j.seek;
       if (Math.abs((audioEl.currentTime || 0) - elapsed) > 1.5) {
@@ -5992,7 +6048,7 @@ ${line}` : line;
       socket.emit("jukebox:pause");
     }
   };
-  document.getElementById("dm-private-roll-toggle").onclick = () => {
+  getRequiredButton("dm-private-roll-toggle").onclick = () => {
     if (myRole !== "dm") return;
     dmPrivateRollsEnabled = !dmPrivateRollsEnabled;
     renderDmPrivateRollMode();
@@ -6023,7 +6079,7 @@ ${line}` : line;
     });
     const hint = document.getElementById("dice-roll-mode-hint");
     if (hint) {
-      hint.textContent = pendingDiceRollMode === "normal" ? "Choose one for your next roll." : `${pendingDiceRollMode === "advantage" ? "Advantage" : "Disadvantage"} is on for one roll.`;
+      hint.textContent = pendingDiceRollMode === "normal" ? "" : `${pendingDiceRollMode === "advantage" ? "Advantage" : "Disadvantage"} is on for one roll.`;
     }
   }
   function consumePendingDiceRollMode() {
@@ -6046,11 +6102,11 @@ ${line}` : line;
   document.querySelectorAll(".die-btn").forEach((btn) => {
     btn.onclick = () => rollDiceFromDiceScreen(1, Number(btn.dataset.sides), 0, { label: `Quick d${btn.dataset.sides}` });
   });
-  document.getElementById("roll-custom-btn").onclick = () => {
+  getRequiredButton("roll-custom-btn").onclick = () => {
     rollDiceFromDiceScreen(
-      Number(document.getElementById("dice-count").value) || 1,
-      Number(document.getElementById("dice-sides").value) || 20,
-      Number(document.getElementById("dice-mod").value) || 0,
+      Number(getRequiredInput("dice-count").value) || 1,
+      Number(getRequiredInput("dice-sides").value) || 20,
+      Number(getRequiredInput("dice-mod").value) || 0,
       { label: "Custom roll" }
     );
   };
@@ -6081,6 +6137,7 @@ ${line}` : line;
   socket.on("roll:made", (entry) => {
     if (!state.rollLog) state.rollLog = [];
     state.rollLog.unshift(entry);
+    state.rollLog = state.rollLog.slice(0, 15);
     if (entry.characterName && entry.targetDc) pendingConcentrationChecks.delete(entry.characterName);
     renderRollLog();
     showToast(rollPopupText(entry));
@@ -6088,7 +6145,7 @@ ${line}` : line;
   socket.on("roll:private", (entry) => {
     if (myRole !== "dm") return;
     privateRollLog.unshift({ ...entry, private: true });
-    privateRollLog = privateRollLog.slice(0, 50);
+    privateRollLog = privateRollLog.slice(0, 15);
     renderRollLog();
     showToast(rollPopupText(entry, true));
   });
@@ -6110,7 +6167,7 @@ ${line}` : line;
     const entries = [
       ...state && state.rollLog || [],
       ...myRole === "dm" ? privateRollLog : []
-    ].sort((a, b) => Number(b.ts) - Number(a.ts));
+    ].sort((a, b) => Number(b.ts) - Number(a.ts)).slice(0, 15);
     entries.forEach((entry) => {
       const row = document.createElement("div");
       const rolls = Array.isArray(entry.rolls) ? entry.rolls : [];
@@ -6132,7 +6189,7 @@ ${line}` : line;
       log.appendChild(row);
     });
   }
-  document.getElementById("dice-character").onchange = renderCharacterRollOptions;
+  getRequiredSelect("dice-character").onchange = renderCharacterRollOptions;
   function rollableCharacters() {
     const all = Object.values(state?.characters || {}).sort((a, b) => a.name.localeCompare(b.name));
     if (myRole === "dm") return all;
@@ -6476,7 +6533,8 @@ ${line}` : line;
     document.getElementById("combat-title").textContent = name;
     const portrait = document.getElementById("combat-portrait");
     const portraitUrl = isNpc ? entity.imageUrl : entity.portraitUrl;
-    portrait.innerHTML = portraitUrl ? `<img src="${escapeAttr(portraitUrl)}" alt="">` : isNpc ? "\u{1F98A}" : "\u{1F343}";
+    const safePortraitUrl = safeImageUrl(portraitUrl);
+    portrait.innerHTML = safePortraitUrl ? `<img src="${escapeAttr(safePortraitUrl)}" alt="">` : isNpc ? "\u{1F98A}" : "\u{1F343}";
     document.getElementById("combat-hp").textContent = `${Number(entity.hp) || 0} / ${Number(entity.maxHp) || 0}`;
     document.getElementById("combat-temp-hp").textContent = Number(entity.tempHp) || 0;
     document.getElementById("combat-ac").textContent = Number(entity.ac) || 0;
@@ -7075,17 +7133,19 @@ ${line}` : line;
       mode: "normal"
     });
   };
-  document.getElementById("init-add-btn").onclick = () => {
-    const name = document.getElementById("init-name").value.trim();
-    const value = Number(document.getElementById("init-value").value);
+  getRequiredButton("init-add-btn").onclick = () => {
+    const nameInput2 = getRequiredInput("init-name");
+    const valueInput = getRequiredInput("init-value");
+    const name = nameInput2.value.trim();
+    const value = Number(valueInput.value);
     if (!name || !Number.isFinite(value)) return showToast("Add a name and initiative value.");
     const token = state.tokens.find((entry) => entry.label.toLowerCase() === name.toLowerCase());
     socket.emit("initiative:add", { name, value, tokenId: token?.id || null });
-    document.getElementById("init-name").value = "";
-    document.getElementById("init-value").value = "";
+    nameInput2.value = "";
+    valueInput.value = "";
   };
-  document.getElementById("init-next-btn").onclick = () => socket.emit("initiative:next");
-  document.getElementById("init-reset-btn").onclick = () => {
+  getRequiredButton("init-next-btn").onclick = () => socket.emit("initiative:next");
+  getRequiredButton("init-reset-btn").onclick = () => {
     if (confirm("Clear the turn order and return to round 1?")) socket.emit("initiative:reset");
   };
   function currentInitiativeEntry() {
@@ -7096,9 +7156,9 @@ ${line}` : line;
   function renderInitiative() {
     if (!state) return;
     const initiative = state.initiative || { entries: [], round: 1, currentIndex: -1 };
-    document.getElementById("init-round").textContent = initiative.round || 1;
-    document.getElementById("initiative-count").textContent = initiative.entries.length;
-    const list = document.getElementById("initiative-list");
+    getRequiredElement("#init-round").textContent = String(initiative.round || 1);
+    getRequiredElement("#initiative-count").textContent = String(initiative.entries.length);
+    const list = getRequiredElement("#initiative-list");
     list.innerHTML = "";
     if (!initiative.entries.length) {
       const empty = document.createElement("p");
@@ -7192,7 +7252,7 @@ ${line}` : line;
     renderInitiativeQuickAdd();
   }
   function renderInitiativeQuickAdd() {
-    const container = document.getElementById("init-quick-add");
+    const container = getRequiredElement("#init-quick-add");
     container.innerHTML = "";
     if (myRole !== "dm") return;
     const label = document.createElement("span");
@@ -7215,8 +7275,8 @@ ${line}` : line;
       button.onclick = () => {
         if (token.kind === "npc") rollNpcInitiative(token, "normal");
         else {
-          document.getElementById("init-name").value = token.label;
-          document.getElementById("init-value").focus();
+          getRequiredInput("init-name").value = token.label;
+          getRequiredInput("init-value").focus();
         }
       };
       container.appendChild(button);
@@ -7279,6 +7339,33 @@ ${line}` : line;
   }
   function escapeAttr(value) {
     return escapeHtml(value);
+  }
+  function getRequiredElement(selector, root = document) {
+    const element = root.querySelector(selector);
+    if (!element) throw new Error(`Required element not found: ${selector}`);
+    return element;
+  }
+  function getOptionalElement(selector, root = document) {
+    return root.querySelector(selector);
+  }
+  function getRequiredButton(id) {
+    return getRequiredElement(`#${CSS.escape(id)}`);
+  }
+  function getRequiredInput(id) {
+    return getRequiredElement(`#${CSS.escape(id)}`);
+  }
+  function getRequiredSelect(id) {
+    return getRequiredElement(`#${CSS.escape(id)}`);
+  }
+  function safeAssetUrl(value, prefixes = ["uploads", "images"]) {
+    const url = String(value ?? "").trim();
+    const prefixPattern = prefixes.map((prefix) => String(prefix).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|");
+    return new RegExp(`^/(?:${prefixPattern})/[A-Za-z0-9._~%()+-]+$`).test(url) ? url : "";
+  }
+  function safeImageUrl(value) {
+    const url = String(value ?? "").trim();
+    if (/^data:image\/(?:gif|jpe?g|png|webp);base64,[A-Za-z0-9+/]+=*$/.test(url)) return url;
+    return safeAssetUrl(url, ["uploads", "images"]);
   }
   function applyPresetSearch(selectId, searchId) {
     const select = document.getElementById(selectId);

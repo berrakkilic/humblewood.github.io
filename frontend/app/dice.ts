@@ -1,7 +1,7 @@
 /** Shared/private dice rolls and character/NPC roll builders. */
 
 // ================= DICE =================
-document.getElementById('dm-private-roll-toggle').onclick = () => {
+getRequiredButton('dm-private-roll-toggle').onclick = () => {
   if (myRole !== 'dm') return;
   dmPrivateRollsEnabled = !dmPrivateRollsEnabled;
   renderDmPrivateRollMode();
@@ -39,7 +39,7 @@ function setPendingDiceRollMode(mode = 'normal') {
   const hint = document.getElementById('dice-roll-mode-hint');
   if (hint) {
     hint.textContent = pendingDiceRollMode === 'normal'
-      ? 'Choose one for your next roll.'
+      ? ''
       : `${pendingDiceRollMode === 'advantage' ? 'Advantage' : 'Disadvantage'} is on for one roll.`;
   }
 }
@@ -67,11 +67,11 @@ function rollDiceFromDiceScreen(count, sides, modifier, options: any = {}) {
 document.querySelectorAll('.die-btn').forEach(btn => {
   btn.onclick = () => rollDiceFromDiceScreen(1, Number(btn.dataset.sides), 0, { label: `Quick d${btn.dataset.sides}` });
 });
-document.getElementById('roll-custom-btn').onclick = () => {
+getRequiredButton('roll-custom-btn').onclick = () => {
   rollDiceFromDiceScreen(
-    Number(document.getElementById('dice-count').value) || 1,
-    Number(document.getElementById('dice-sides').value) || 20,
-    Number(document.getElementById('dice-mod').value) || 0,
+    Number(getRequiredInput('dice-count').value) || 1,
+    Number(getRequiredInput('dice-sides').value) || 20,
+    Number(getRequiredInput('dice-mod').value) || 0,
     { label: 'Custom roll' }
   );
 };
@@ -105,6 +105,7 @@ function rollPopupText(entry, privateRoll = false) {
 socket.on('roll:made', (entry) => {
   if (!state.rollLog) state.rollLog = [];
   state.rollLog.unshift(entry);
+  state.rollLog = state.rollLog.slice(0, 15);
   if (entry.characterName && entry.targetDc) pendingConcentrationChecks.delete(entry.characterName);
   renderRollLog();
   showToast(rollPopupText(entry));
@@ -113,7 +114,7 @@ socket.on('roll:made', (entry) => {
 socket.on('roll:private', (entry) => {
   if (myRole !== 'dm') return;
   privateRollLog.unshift({ ...entry, private: true });
-  privateRollLog = privateRollLog.slice(0, 50);
+  privateRollLog = privateRollLog.slice(0, 15);
   renderRollLog();
   showToast(rollPopupText(entry, true));
 });
@@ -141,7 +142,7 @@ function renderRollLog() {
   const entries = [
     ...((state && state.rollLog) || []),
     ...(myRole === 'dm' ? privateRollLog : [])
-  ].sort((a, b) => Number(b.ts) - Number(a.ts));
+  ].sort((a, b) => Number(b.ts) - Number(a.ts)).slice(0, 15);
   entries.forEach(entry => {
     const row = document.createElement('div');
     const rolls = Array.isArray(entry.rolls) ? entry.rolls : [];
@@ -167,7 +168,7 @@ function renderRollLog() {
   });
 }
 
-document.getElementById('dice-character').onchange = renderCharacterRollOptions;
+getRequiredSelect('dice-character').onchange = renderCharacterRollOptions;
 
 function rollableCharacters() {
   const all = Object.values(state?.characters || {}).sort((a, b) => a.name.localeCompare(b.name));

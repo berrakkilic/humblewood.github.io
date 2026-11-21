@@ -25,11 +25,13 @@ html {
   min-width: 0;
   height: 100%;
   overflow-x: hidden;
+  overflow-y: hidden;
 }
 
 body {
   margin: 0;
   width: 100%;
+  height: 100%;
   min-width: 0;
   font-family: 'Quicksand', sans-serif;
   color: var(--ink);
@@ -40,6 +42,8 @@ body {
   min-height: 100vh;
   min-height: 100dvh;
   overflow-x: hidden;
+  overflow-y: hidden;
+  overscroll-behavior: none;
 }
 
 h1, h2, h3, .display {
@@ -120,6 +124,10 @@ input[type=text], input[type=password], input[type=number], input[type=url], inp
   font-size: 15px;
 }
 input:focus, select:focus, textarea:focus { outline: 2px solid var(--gold); border-color: var(--gold); }
+button:focus-visible, a:focus-visible, summary:focus-visible, [role="button"]:focus-visible {
+  outline: 3px solid var(--gold);
+  outline-offset: 3px;
+}
 
 .role-toggle { display: flex; gap: 10px; }
 .role-toggle button {
@@ -279,8 +287,8 @@ nav.tabs .main-nav-indicator {
 }
 
 main { flex: 1; min-height: 0; min-width: 0; overflow: hidden; display: flex; }
-.view { display: none; flex: 1; min-width: 0; min-height: 0; overflow: auto; padding: 20px; }
-.view.active { display: flex; flex-direction: column; }
+.view { display: none; flex: 1; min-width: 0; min-height: 0; overflow: auto; overscroll-behavior: contain; padding: 20px; scrollbar-gutter: stable; }
+.view.active { display: flex; flex-direction: column; margin-top: 12px; }
 
 .panel {
   background: #fffdf8;
@@ -1015,9 +1023,18 @@ body[data-role="dm"] .token-tray.dm-detailed .token-list-details { display: flex
 .transport { display: flex; align-items: center; justify-content: center; gap: 14px; margin: 18px 0; }
 .transport button {
   width: 44px; height: 44px; border-radius: 50%; border: none; background: var(--forest);
-  color: #fff; font-size: 18px; cursor: pointer;
+  color: #fff; font-size: 18px; line-height: 1; padding: 0;
+  display: inline-grid; place-items: center;
+  cursor: pointer;
 }
-.transport button.play-pause { width: 56px; height: 56px; background: var(--rose); font-size: 22px; }
+.transport button svg {
+  display: block;
+  width: 20px;
+  height: 20px;
+  fill: currentColor;
+}
+.transport button.play-pause { width: 56px; height: 56px; background: var(--rose); }
+.transport button.play-pause svg { width: 22px; height: 22px; }
 
 .jukebox-volume-control { width: min(370px, 100%); margin: -2px auto 18px; padding: 11px 14px 12px; border: 1px solid rgba(58,46,37,.10); border-radius: 12px; background: rgba(236,223,192,.48); }
 .jukebox-volume-control label { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 7px; color: var(--forest-deep); font-size: 12px; font-weight: 700; }
@@ -1157,7 +1174,7 @@ body[data-role="player"] .dm-only { display: none !important; }
   font-size: 14px;
   font-weight: 700;
 }
-.character-roll-selectors select { display: block; min-width: 160px; margin-top: 4px; }
+.character-roll-selectors select { display: block; min-width: 160px; height: 44px; margin-top: 4px; }
 .dice-roll-mode-control { display: grid; gap: 4px; }
 .dice-roll-mode-label {
   color: var(--forest);
@@ -1170,6 +1187,7 @@ body[data-role="player"] .dm-only { display: none !important; }
   border-radius: 9px;
   background: #fffdf8;
   color: var(--forest-deep);
+  height: 44px;
   padding: 8px 11px;
   font-weight: 700;
   cursor: pointer;
@@ -1232,7 +1250,7 @@ body[data-role="player"] .dm-only { display: none !important; }
 .dice-custom-row input { width: 64px; }
 .dice-custom-row button { margin-left: auto; }
 
-.roll-log { max-height: 320px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+.roll-log { display: flex; flex-direction: column; gap: 8px; }
 .roll-entry {
   display: flex; align-items: center; justify-content: space-between;
   background: var(--parchment-dark); border-radius: 10px; padding: 10px 14px;
@@ -1728,9 +1746,21 @@ body[data-role="player"] .dm-only { display: none !important; }
 }
 
 ::-webkit-scrollbar { width: 10px; }
+::-webkit-scrollbar-track { margin: 12px 0; }
 ::-webkit-scrollbar-thumb { background: var(--moss-light); border-radius: 10px; }
 
 .combat-feature-uses { display: grid; gap: 8px; }
 .combat-feature-use { display: grid; grid-template-columns: minmax(140px, 1fr) auto auto; gap: 10px; align-items: center; }
 .combat-feature-use span { color: var(--ink-soft); font-size: 0.85rem; }
 .combat-feature-use div { display: flex; gap: 8px; align-items: center; }
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.001ms !important;
+  }
+}

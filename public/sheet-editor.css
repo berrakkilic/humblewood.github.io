@@ -213,12 +213,32 @@
   grid-template-columns: repeat(6, minmax(78px, 1fr));
   gap: 12px;
 }
-#sheet-editor .ability-grid-complete .ability-box { position: relative; padding-bottom: 28px; }
+#sheet-editor .ability-grid-complete .ability-box {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-bottom: 28px;
+  text-align: center;
+}
+#sheet-editor .ability-grid-complete .ability-box label {
+  width: 100%;
+  text-align: center;
+}
 #sheet-editor .ability-grid-complete .ability-box input {
   width: 100%;
   min-width: 0;
+  margin-left: auto;
+  margin-right: auto;
   text-align: center;
   font-weight: 700;
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+#sheet-editor .ability-grid-complete .ability-box input::-webkit-inner-spin-button,
+#sheet-editor .ability-grid-complete .ability-box input::-webkit-outer-spin-button {
+  margin: 0;
+  -webkit-appearance: none;
 }
 #sheet-editor .compact-grid input[type="number"],
 #sheet-editor .check-grid input[type="number"],
