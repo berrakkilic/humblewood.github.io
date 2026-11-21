@@ -23,9 +23,21 @@ const mapDoodlesSource = fs.readFileSync(path.join(projectRoot, 'frontend', 'app
 const roomSource = fs.readFileSync(path.join(projectRoot, 'src', 'server', 'room.js'), 'utf8');
 const sceneSocketSource = fs.readFileSync(path.join(projectRoot, 'src', 'server', 'socket', 'scenes.js'), 'utf8');
 const styleCss = fs.readFileSync(path.join(projectRoot, 'public', 'style.css'), 'utf8');
+const handoutsDir = path.join(projectRoot, 'public', 'handouts');
+const handoutSources = fs.readdirSync(handoutsDir)
+  .filter(file => file.endsWith('.html'))
+  .map(file => fs.readFileSync(path.join(handoutsDir, file), 'utf8'))
+  .join('\n');
+const shopSource = fs.readFileSync(path.join(projectRoot, 'public', 'shop-purchase.js'), 'utf8');
 
 assert.strictEqual(sourceFiles.length, 20, 'The frontend manifest should include every feature and bootstrap file.');
 assert.match(bundle, /^\/\/ GENERATED FILE/, 'public/app.js must be generated from the TypeScript sources.');
+assert.doesNotMatch(indexHtml, /fonts\.(?:googleapis|gstatic)\.com/, 'The frontend must not load Google Fonts automatically.');
+assert.doesNotMatch(styleCss, /@import\s+url\([^)]*https?:\/\//i, 'Styles must not import remote resources automatically.');
+assert.doesNotMatch(indexHtml, /external audio URL/i, 'The UI must not encourage third-party media loading.');
+assert.doesNotMatch(librarySource, /postMessage\([^;]*,\s*['"]\*['"]\)/s, 'Local handout messaging must not target every origin.');
+assert.doesNotMatch(handoutSources, /postMessage\([^;]*,\s*['"]\*['"]\)/s, 'Handout messaging must not target every origin.');
+assert.doesNotMatch(shopSource, /postMessage\([^;]*,\s*['"]\*['"]\)/s, 'Shop messaging must not target every origin.');
 assert.strictEqual((bootstrap.match(/socket\.connect\(\)/g) || []).length, 1, 'Bootstrap should connect its socket exactly once.');
 assert.ok(bundle.lastIndexOf('socket.connect()') > bundle.lastIndexOf('initializeAttackPresetControls()'), 'The initial socket connection must remain after feature initialization.');
 assert.ok(bundle.lastIndexOf('socket.connect()') > bundle.lastIndexOf('initializeReactionPresetControls()'), 'Reaction presets must initialize before the socket connects.');
@@ -74,6 +86,13 @@ assert.match(jukeboxSource, /safeAssetUrl\(current\.url, \['music', 'uploads'\]\
 assert.match(librarySource, /safeAssetUrl\(broadcast\.url, \['uploads', 'handouts'\]\)/, 'Shared handout URLs must be allowlisted before rendering.');
 assert.match(mapSource, /const safeMapUrl = safeImageUrl\(state\.scene\.mapUrl\)/, 'Map URLs must be allowlisted before image loading.');
 assert.match(frontendTypesSource, /type FrontendSocketEvents = \{/, 'Frontend socket events should have a shared contract.');
+assert.match(frontendTypesSource, /type FrontendSocketEmitEvents = \{/, 'Frontend socket emissions should have a shared contract.');
+assert.match(frontendTypesSource, /'scene:setGrid': \[SocketSceneGridUpdate\]/, 'Scene grid updates should use a typed socket payload.');
+assert.match(frontendTypesSource, /'token:update': \[SocketTokenUpdate\]/, 'Token updates should use a typed socket payload.');
+assert.match(frontendTypesSource, /'library:file:add': \[SocketLibraryFilePayload\]/, 'Library uploads should use a typed socket payload.');
+assert.match(frontendTypesSource, /'roll:make': \[SocketRollRequest\]/, 'Dice rolls should use a typed socket payload.');
+assert.doesNotMatch(frontendTypesSource, /on\(event: string, handler: .*any/, 'Socket listeners must use declared event names.');
+assert.doesNotMatch(frontendTypesSource, /emit\(event: string, \.\.\.args: any/, 'Socket emissions must use declared event names.');
 assert.match(frontendTypesSource, /'state:full': \[RoomState\]/, 'Full state snapshots should use the shared socket contract.');
 assert.match(frontendTypesSource, /'presence:list': \[OnlineUser\[\]\]/, 'Presence lists should use typed socket payloads.');
 assert.match(overlaysSource, /firstFocusable = dialog\.querySelector\(/, 'Dialogs should move focus into their content when opened.');
@@ -224,8 +243,7 @@ for (const reactionName of ['Opportunity Attack', 'Uncanny Dodge', 'Counterspell
   assert.match(reactionSource, new RegExp(`name: ['"]${reactionName}['"]`), `The reaction catalogue is missing ${reactionName}.`);
 }
 assert.match(indexHtml, /<link rel="icon" href="\/favicon\.svg" type="image\/svg\+xml">/, 'The page should link the Humblewood favicon.');
-assert.match(indexHtml, /<link rel="preconnect" href="https:\/\/fonts\.googleapis\.com">/, 'The page should preconnect to the font stylesheet origin.');
-assert.match(indexHtml, /<link rel="preconnect" href="https:\/\/fonts\.gstatic\.com" crossorigin>/, 'The page should preconnect to the font asset origin.');
+assert.doesNotMatch(indexHtml, /<link rel="preconnect"/, 'The page should not preconnect to third-party origins.');
 assert.match(favicon, /<svg[^>]+viewBox="0 0 64 64"/, 'The Humblewood favicon should remain a scalable SVG.');
 assert.match(bundle, /function createDialogController\(/, 'The generated app is missing the dialog utility.');
 assert.match(bundle, /function createPopoverController\(/, 'The generated app is missing the popover utility.');

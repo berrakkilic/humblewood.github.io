@@ -63,7 +63,7 @@
         itemId: product.itemId,
         itemName: product.itemName,
         priceLabel: product.priceLabel
-      }, '*');
+      }, window.location.origin);
     });
   });
 
@@ -108,5 +108,5 @@
     renderProduct(product);
   });
 
-  window.parent.postMessage({ type: 'humblewood:shop-ready' }, '*');
+  window.parent.postMessage({ type: 'humblewood:shop-ready' }, window.location.origin);
 })();

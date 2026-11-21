@@ -134,6 +134,26 @@ function createHttpApp(config, getRoom = () => null) {
   }
 
   app.set('trust proxy', config.proxyTrust);
+  app.use((req, res, next) => {
+    res.setHeader('Content-Security-Policy', [
+      "default-src 'self'",
+      "base-uri 'self'",
+      "connect-src 'self'",
+      "font-src 'self'",
+      "form-action 'self'",
+      "frame-ancestors 'self'",
+      "frame-src 'self'",
+      "img-src 'self' data:",
+      "media-src 'self'",
+      "object-src 'none'",
+      "script-src 'self'",
+      "style-src 'self' 'unsafe-inline'"
+    ].join('; '));
+    res.setHeader('Permissions-Policy', 'camera=(), geolocation=(), microphone=(), payment=()');
+    res.setHeader('Referrer-Policy', 'no-referrer');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    next();
+  });
   app.use(express.json());
   app.get('/healthz', (req, res) => {
     res.json({ ok: true, status: 'healthy' });

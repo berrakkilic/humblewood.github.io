@@ -100,6 +100,9 @@ async function run() {
   const healthResponse = await fetch(`http://127.0.0.1:${port}/healthz`);
   assert.equal(healthResponse.status, 200);
   assert.deepEqual(await healthResponse.json(), { ok: true, status: 'healthy' });
+  assert.match(healthResponse.headers.get('content-security-policy') || '', /default-src 'self'/);
+  assert.equal(healthResponse.headers.get('referrer-policy'), 'no-referrer');
+  assert.equal(healthResponse.headers.get('permissions-policy'), 'camera=\(\), geolocation=\(\), microphone=\(\), payment=\(\)');
   const readinessResponse = await fetch(`http://127.0.0.1:${port}/readyz`);
   assert.equal(readinessResponse.status, 200);
   assert.deepEqual(await readinessResponse.json(), { ok: true, status: 'ready' });

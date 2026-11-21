@@ -576,6 +576,64 @@ interface OnlineUser extends LegacyRecord {
   connections: number;
 }
 
+interface SocketPoint {
+  x: number;
+  y: number;
+}
+
+interface SocketDoodlePath {
+  points: SocketPoint[];
+  color?: string;
+  width?: number;
+}
+
+interface SocketTokenUpdate {
+  id: string;
+  hp?: number;
+  maxHp?: number;
+  visibleToPlayers?: boolean;
+  sizeScale?: number;
+  [key: string]: unknown;
+}
+
+interface SocketSceneGridUpdate {
+  gridSize?: number;
+  gridVisible?: boolean;
+  gridColor?: string;
+  snapToGrid?: boolean;
+  fitTokensToGrid?: boolean;
+  gridOffsetX?: number;
+  gridOffsetY?: number;
+}
+
+interface SocketLibraryFilePayload {
+  id?: string;
+  fileId?: string;
+  name?: string;
+  folderId?: string | null;
+  kind?: string;
+  url?: string;
+  size?: number;
+  duration?: number;
+  mimeType?: string;
+}
+
+interface SocketRollRequest {
+  count: number;
+  sides: number;
+  modifier: number;
+  label?: string;
+  characterName?: string;
+  name?: string;
+  npcId?: string | null;
+  initiativeName?: string | null;
+  tokenId?: string | null;
+  targetDc?: number | null;
+  concentrationFor?: string | null;
+  mode?: string;
+  private?: boolean;
+}
+
 type FrontendSocketEvents = {
   'state:full': [RoomState];
   'scene:update': [RoomScene];
@@ -604,15 +662,120 @@ type FrontendSocketEvents = {
   'library:broadcast:clear': [];
   'scene:doodleCorner:undo': [];
   'scene:doodleCorner:clear': [];
+  'identify:result': [{ ok: boolean; message?: string; role?: 'dm' | 'player'; name?: string; username?: string }];
+  'session:result': [{ ok: boolean; message?: string }];
+  'scene:dirty': [{ dirty: boolean }];
+  'scene:fog:update': [{ enabled: boolean; shapes: LegacyRecord[] }];
+  'scenes:update': [LegacyRecord[]];
+  'scene:active': [{ name?: string | null }];
+  'scene:saved': [{ name: string }];
+  'scene:loaded': [{ name: string }];
+  'scene:deleted': [{ name: string }];
+  'npcs:update': [Record<string, RoomNpc>];
+  'character:update': [RoomCharacter];
+  'character:remove': [{ name: string }];
+  'character:denied': [{ name?: string }];
+  'npc:saved': [{ id: string; name: string }];
+  'npc:deleted': [{ id: string; name: string }];
+  'token:exists': [RoomToken];
+  'concentration:required': [{ name: string; damage: number; dc: number }];
+  'shop:stock:update': [LegacyRecord];
+  'shop:purchase:result': [LegacyRecord];
+  'presence': [{ role: 'dm' | 'player'; name: string; connected: boolean }];
+  'pointer:move': [SocketPoint & { id: string; name?: string }];
+  'pointer:hide': [{ id: string }];
+  'pointer:ping': [SocketPoint & { id: string; name?: string }];
+  'safety:submitted': [{ cooldown?: boolean; breakMinutes?: number }];
+  'question:submitted': [];
+  'notifications:update': [LegacyRecord[]];
+  'account:passwordReset': [{ username: string }];
+  'puzzle:update': [LegacyRecord];
+  'scene:doodle:add': [SocketDoodlePath];
+  'scene:doodle:clear': [];
+  'scene:doodle:redrawAll': [SocketDoodlePath[]];
+  'scene:doodleCorner:add': [SocketDoodlePath];
+  'scene:doodleCorner:redrawAll': [SocketDoodlePath[]];
+};
+
+type FrontendSocketEmitEvents = {
+  'identify': [{ role: 'dm' | 'player'; name?: string; username?: string; password?: string; pin?: string }];
+  'session:resume': [];
+  'accounts:list': [];
+  'account:resetPassword': [{ username: string; password: string }];
+  'scene:setMap': [{ mapUrl: string | null; mapName: string }];
+  'scene:setGrid': [SocketSceneGridUpdate];
+  'scene:setTimeOfDay': [{ timeOfDay: string }];
+  'scene:save': [{ name: string }];
+  'scene:load': [{ name: string }];
+  'scene:delete': [{ name: string }];
+  'scene:setPlayerDoodling': [{ enabled: boolean }];
+  'scene:setTokenLabels': [{ visible: boolean }];
+  'scene:setFog': [{ enabled: boolean }];
+  'scene:fog:add': [{ mode: string; x: number; y: number; width: number; height: number }];
+  'scene:fog:undo': [];
+  'scene:fog:reset': [];
+  'scene:doodle:add': [SocketDoodlePath];
+  'scene:doodle:erase': [SocketPoint];
+  'scene:doodle:undo': [];
+  'scene:doodle:clear': [];
+  'scene:doodleCorner:add': [SocketDoodlePath];
+  'scene:doodleCorner:redrawAll': [SocketDoodlePath[]];
+  'scene:doodleCorner:erase': [SocketPoint];
+  'scene:doodleCorner:undo': [];
+  'scene:doodleCorner:clear': [];
+  'token:add': [Partial<RoomToken> & { characterName?: string; npcId?: string }];
+  'token:update': [SocketTokenUpdate];
+  'token:move': [{ id: string; x: number; y: number }];
+  'token:remove': [{ id: string }];
+  'token:duplicate': [{ id: string }];
+  'token:combat:update': [{ id: string; action: string; [key: string]: unknown }];
+  'npc:place': [{ id: string }];
+  'npc:delete': [{ id: string }];
+  'character:save': [LegacyRecord];
+  'character:remove': [{ name: string }];
+  'character:claim': [{ name: string }];
+  'character:ownership:release': [{ name: string }];
+  'character:combat:update': [{ name: string; action: string; [key: string]: unknown }];
+  'npc:create': [LegacyRecord];
+  'npc:update': [LegacyRecord];
+  'initiative:add': [{ name: string; value: number; tokenId: string | null }];
+  'initiative:edit': [{ id: string; value: number }];
+  'initiative:remove': [{ id: string }];
+  'initiative:reorder': [{ orderedIds: string[] }];
+  'initiative:next': [];
+  'initiative:reset': [];
+  'jukebox:setPlaylist': [JukeboxTrack[]];
+  'jukebox:play': [{ index: number }];
+  'jukebox:pause': [];
+  'jukebox:resume': [];
+  'library:folder:create': [{ name: string; parentId: string | null }];
+  'library:folder:rename': [{ id: string; name: string }];
+  'library:folder:delete': [{ id: string }];
+  'library:file:add': [SocketLibraryFilePayload];
+  'library:file:rename': [{ id: string; name: string }];
+  'library:file:move': [{ id: string; folderId: string | null }];
+  'library:file:delete': [{ id: string }];
+  'library:broadcast': [{ fileId: string; duration: number }];
+  'library:broadcast:clear': [];
+  'notifications:markRead': [{ id: string }];
+  'notifications:markAllRead': [];
+  'notifications:clear': [{ id: string }];
+  'notifications:clearAll': [];
+  'safety:request': [];
+  'question:submit': [{ question: string; anonymous: boolean }];
+  'puzzle:request': [];
+  'puzzle:update': [{ fileId: string; state: LegacyRecord }];
+  'shop:purchase': [LegacyRecord];
+  'pointer:move': [SocketPoint];
+  'pointer:ping': [SocketPoint];
+  'pointer:hide': [];
+  'roll:make': [SocketRollRequest];
 };
 
 interface SocketLike {
   on<K extends keyof FrontendSocketEvents>(event: K, handler: (...args: FrontendSocketEvents[K]) => void): this;
-  on(event: string, handler: (...args: any[]) => void): this;
   off<K extends keyof FrontendSocketEvents>(event: K, handler?: (...args: FrontendSocketEvents[K]) => void): this;
-  off(event: string, handler?: (...args: any[]) => void): this;
-  emit<K extends keyof FrontendSocketEvents>(event: K, ...args: FrontendSocketEvents[K]): this;
-  emit(event: string, ...args: any[]): this;
+  emit<K extends keyof FrontendSocketEmitEvents>(event: K, ...args: FrontendSocketEmitEvents[K]): this;
   connect(): this;
   disconnect(): this;
 }

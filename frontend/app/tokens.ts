@@ -5,7 +5,10 @@ getRequiredSelect('token-kind').onchange = updateTokenCreateForm;
 getRequiredButton('cancel-npc-edit-btn').onclick = resetNpcEditor;
 
 function updateTokenCreateForm() {
-  const kind = getRequiredSelect('token-kind').value;
+  const selectedKind = getRequiredSelect('token-kind').value;
+  const kind: RoomToken['kind'] = selectedKind === 'pc' || selectedKind === 'npc' || selectedKind === 'item'
+    ? selectedKind
+    : 'item';
   getRequiredElement<HTMLElement>('#npc-create-fields').classList.toggle('hidden', kind !== 'npc');
   getRequiredElement<HTMLElement>('#token-pronouns').classList.toggle('hidden', kind === 'item');
   if (!editingNpcId) getRequiredButton('add-token-btn').textContent = kind === 'npc' ? 'Create NPC & place' : 'Add to map';
@@ -25,7 +28,10 @@ function npcAttacksText(attacks) {
 getRequiredButton('add-token-btn').onclick = async () => {
   const name = getRequiredInput('token-name').value.trim();
   if (!name) return showToast('Give the token a name first.');
-  const kind = getRequiredSelect('token-kind').value;
+  const selectedKind = getRequiredSelect('token-kind').value;
+  const kind: RoomToken['kind'] = selectedKind === 'pc' || selectedKind === 'npc' || selectedKind === 'item'
+    ? selectedKind
+    : 'item';
   const file = getRequiredInput('token-image').files?.[0];
   let imageUrl;
   if (file) imageUrl = await uploadFile(file);

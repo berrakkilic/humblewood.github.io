@@ -9,6 +9,7 @@ When creating or changing UI code, read and follow:
 - [`docs/BACKEND_CODING_BEST_PRACTICES.md`](../docs/BACKEND_CODING_BEST_PRACTICES.md)
 - [`docs/NODEJS_BEST_PRACTICES.md`](../docs/NODEJS_BEST_PRACTICES.md)
 - [`docs/REPOSITORY_STRUCTURE_BEST_PRACTICES.md`](../docs/REPOSITORY_STRUCTURE_BEST_PRACTICES.md)
+- [`docs/PRIVACY_BEST_PRACTICES.md`](../docs/PRIVACY_BEST_PRACTICES.md)
 
 Additional repository rules:
 
@@ -25,5 +26,9 @@ Additional repository rules:
 - Keep fixed, floating, and scrollable surfaces clear of toolbars, tabs, and
   system UI.
 - Limit long lists and persisted logs to a small, explicit retention count.
+- Use privacy-protective defaults: no third-party resources, analytics, or
+  remote media without an explicit user action and clear purpose.
+- Minimize collected data and keep each field limited to its documented
+  purpose, access scope, retention, and deletion behavior.
 - Verify changes in the running app at desktop and mobile widths.
 - Run `npm test` after frontend changes.

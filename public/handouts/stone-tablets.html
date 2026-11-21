@@ -383,7 +383,7 @@
           type: 'humblewood:puzzle-state',
           puzzleId: 'stone-tablets',
           state: puzzleState()
-        }, '*');
+        }, window.location.origin);
       }
 
       window.addEventListener('message', event => {
@@ -511,7 +511,7 @@
         status.textContent = 'The final seam vanishes. The white markings join into a great moth, its wings aglow!';
         svg.classList.add('puzzle-complete');
         svg.classList.add('completion-flare');
-        window.parent.postMessage({ type: 'humblewood:puzzle-complete', puzzleId: 'stone-tablets', name: 'Stone Tablets' }, '*');
+        window.parent.postMessage({ type: 'humblewood:puzzle-complete', puzzleId: 'stone-tablets', name: 'Stone Tablets' }, window.location.origin);
       }
 
       function addPiece(piece) {
@@ -648,7 +648,7 @@
           fullscreenButton.textContent = document.fullscreenElement ? 'Exit full screen' : 'Full screen';
         });
       }
-      window.parent.postMessage({ type: 'humblewood:puzzle-ready', puzzleId: 'stone-tablets' }, '*');
+      window.parent.postMessage({ type: 'humblewood:puzzle-ready', puzzleId: 'stone-tablets' }, window.location.origin);
       document.getElementById('reveal-hint').addEventListener('click', event => {
         hintCount = Math.min(3, hintCount + 1);
         document.getElementById(`hint-${hintCount}`).hidden = false;

@@ -370,7 +370,7 @@ function activePuzzleFrame() {
 }
 
 function postShopMessage(message, frame = activeShopFrame()) {
-  if (frame?.contentWindow) frame.contentWindow.postMessage(message, '*');
+  if (frame?.contentWindow) frame.contentWindow.postMessage(message, location.origin);
 }
 
 function postShopContext(frame = activeShopFrame()) {
@@ -418,7 +418,7 @@ socket.on('puzzle:update', (payload: any) => {
     fileId: payload.fileId,
     state: payload.state || null,
     updatedAt: payload.updatedAt || 0
-  }, '*');
+  }, location.origin);
 });
 
 window.addEventListener('message', event => {
@@ -538,7 +538,7 @@ function renderSharedHandoutContent(broadcast) {
       frame.contentWindow?.postMessage({
         type: 'humblewood:puzzle-ready',
         fileId: broadcast.fileId
-      }, '*');
+      }, location.origin);
       socket.emit('puzzle:request');
     });
     content.appendChild(frame);
