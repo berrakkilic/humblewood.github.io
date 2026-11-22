@@ -11,6 +11,10 @@ const LIBRARY_EXTENSIONS = new Set([
   '.txt', '.md', '.markdown', '.json', '.csv', '.js', '.ts', '.css', '.html', '.xml', '.yaml', '.yml'
 ]);
 const AUTH_SESSION_MAX_AGE_SECONDS = 30 * 24 * 60 * 60;
+const AUTH_ATTEMPT_WINDOW_MS = 10 * 60 * 1000;
+const AUTH_ATTEMPT_LIMIT = 12;
+const MAX_TRACKED_AUTH_ADDRESSES = 10000;
+const AUTH_ATTEMPT_PRUNE_INTERVAL_MS = 60 * 1000;
 
 function authCookie(req, token, maxAge = AUTH_SESSION_MAX_AGE_SECONDS) {
   const secure = req.secure || String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim() === 'https';
@@ -114,13 +118,29 @@ function createHttpApp(config, getRoom = () => null) {
   });
   const app = express();
   const authAttempts = new Map();
+  let lastAuthAttemptPruneAt = 0;
 
   async function dmIdentity(req) {
+    const identity = await tableIdentity(req);
+    return identity?.role === 'dm' ? { room: getRoom(), identity } : null;
+  }
+
+  async function tableIdentity(req) {
     const room = getRoom();
     const token = cookieValue(req.headers.cookie, AUTH_COOKIE_NAME);
     if (!room || !token) return null;
-    const identity = await room.authSessionIdentity(token);
-    return identity?.role === 'dm' ? { room, identity } : null;
+    return room.authSessionIdentity(token);
+  }
+
+  async function requireTableSession(req, res, next) {
+    try {
+      if (await tableIdentity(req)) return next();
+      // Keep private asset existence opaque to unauthenticated callers.
+      return res.status(404).end();
+    } catch (error) {
+      console.error('HTTP asset authorization failed:', error.message);
+      return res.status(503).end();
+    }
   }
 
   async function requireDm(req, res, next) {
@@ -169,25 +189,44 @@ function createHttpApp(config, getRoom = () => null) {
       return res.status(503).json({ ok: false, status: 'unavailable' });
     }
   });
+  // These paths must precede publicDir: uploadDir defaults to public/uploads,
+  // so the general static handler would otherwise bypass this session check.
+  app.use('/uploads', requireTableSession, express.static(config.uploadDir, { fallthrough: false }));
+  app.use('/music', requireTableSession, express.static(config.musicDir, { fallthrough: false }));
   app.use(express.static(config.publicDir));
-  app.use('/uploads', express.static(config.uploadDir));
-  app.use('/music', express.static(config.musicDir));
 
   function authAttemptKey(req) {
     return String(req.ip || req.socket?.remoteAddress || 'unknown');
   }
 
+  function pruneAuthAttempts(now) {
+    if (now - lastAuthAttemptPruneAt < AUTH_ATTEMPT_PRUNE_INTERVAL_MS) return;
+    lastAuthAttemptPruneAt = now;
+    const cutoff = now - AUTH_ATTEMPT_WINDOW_MS;
+    for (const [address, attempts] of authAttempts) {
+      const recent = attempts.filter(time => time > cutoff);
+      if (recent.length) authAttempts.set(address, recent);
+      else authAttempts.delete(address);
+    }
+  }
+
   function tooManyAuthAttempts(req) {
     const key = authAttemptKey(req);
-    const cutoff = Date.now() - 10 * 60 * 1000;
-    const attempts = (authAttempts.get(key) || []).filter(time => time > cutoff);
-    authAttempts.set(key, attempts);
-    return attempts.length >= 12;
+    const now = Date.now();
+    pruneAuthAttempts(now);
+    const attempts = authAttempts.get(key) || [];
+    const cutoff = now - AUTH_ATTEMPT_WINDOW_MS;
+    const recent = attempts.filter(time => time > cutoff);
+    if (recent.length) authAttempts.set(key, recent);
+    else authAttempts.delete(key);
+    if (recent.length >= AUTH_ATTEMPT_LIMIT) return true;
+    return !authAttempts.has(key) && authAttempts.size >= MAX_TRACKED_AUTH_ADDRESSES;
   }
 
   function recordAuthFailure(req) {
     const key = authAttemptKey(req);
-    authAttempts.set(key, [...(authAttempts.get(key) || []), Date.now()].slice(-12));
+    if (!authAttempts.has(key) && authAttempts.size >= MAX_TRACKED_AUTH_ADDRESSES) return;
+    authAttempts.set(key, [...(authAttempts.get(key) || []), Date.now()].slice(-AUTH_ATTEMPT_LIMIT));
   }
 
   app.post('/api/auth/session', async (req, res) => {
@@ -297,7 +336,7 @@ function createHttpApp(config, getRoom = () => null) {
     });
   });
 
-  app.get('/api/music', (req, res) => {
+  app.get('/api/music', requireTableSession, (req, res) => {
     const stored = listMp3Tracks(config.musicDir, '/music', 'Server');
     // Tracks uploaded by older versions lived in the general uploads volume.
     // Continue listing them so existing campaigns are not broken by the move.

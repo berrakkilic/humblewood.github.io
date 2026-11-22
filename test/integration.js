@@ -215,9 +215,7 @@ async function run() {
   assert.match(session0Source, /no sexual violence/);
   assert.match(session0Source, /critical initiative rolls/);
   const musicResponse = await fetch(`http://127.0.0.1:${port}/api/music`);
-  assert.equal(musicResponse.status, 200);
-  const musicCatalog = await musicResponse.json();
-  assert.deepEqual(musicCatalog.tracks, []);
+  assert.equal(musicResponse.status, 404);
   const unauthenticatedUpload = new FormData();
   unauthenticatedUpload.append('file', new Blob(['fake mp3 bytes'], { type: 'audio/mpeg' }), 'unauthorized.mp3');
   const unauthenticatedUploadResponse = await fetch(`http://127.0.0.1:${port}/api/upload/audio`, {
@@ -247,8 +245,16 @@ async function run() {
   const uploadedAudio = await audioUploadResponse.json();
   assert.equal(uploadedAudio.url, '/music/uploaded-forest.mp3');
   const uploadedTrackResponse = await fetch(`http://127.0.0.1:${port}${uploadedAudio.url}`);
-  assert.equal(uploadedTrackResponse.status, 200);
-  const updatedMusicCatalog = await (await fetch(`http://127.0.0.1:${port}/api/music`)).json();
+  assert.equal(uploadedTrackResponse.status, 404);
+  const authenticatedTrackResponse = await fetch(`http://127.0.0.1:${port}${uploadedAudio.url}`, {
+    headers: { Cookie: dmCookie }
+  });
+  assert.equal(authenticatedTrackResponse.status, 200);
+  const updatedMusicResponse = await fetch(`http://127.0.0.1:${port}/api/music`, {
+    headers: { Cookie: dmCookie }
+  });
+  assert.equal(updatedMusicResponse.status, 200);
+  const updatedMusicCatalog = await updatedMusicResponse.json();
   assert(updatedMusicCatalog.tracks.some(track => track.url === uploadedAudio.url && track.source === 'Server'));
   const unsupportedLibraryUpload = new FormData();
   unsupportedLibraryUpload.append('file', new Blob(['binary'], { type: 'application/octet-stream' }), 'archive.zip');
@@ -264,7 +270,13 @@ async function run() {
   assert.equal(libraryUploadResponse.status, 200);
   const uploadedLibrary = await libraryUploadResponse.json();
   assert.match(uploadedLibrary.url, /^\/uploads\/\d+-secret-clue\.txt$/);
-  assert.equal((await (await fetch(`http://127.0.0.1:${port}${uploadedLibrary.url}`)).text()), 'A secret clue');
+  const anonymousLibraryResponse = await fetch(`http://127.0.0.1:${port}${uploadedLibrary.url}`);
+  assert.equal(anonymousLibraryResponse.status, 404);
+  const authenticatedLibraryResponse = await fetch(`http://127.0.0.1:${port}${uploadedLibrary.url}`, {
+    headers: { Cookie: dmCookie }
+  });
+  assert.equal(authenticatedLibraryResponse.status, 200);
+  assert.equal(await authenticatedLibraryResponse.text(), 'A secret clue');
   const routerResponse = await fetch(`http://127.0.0.1:${port}/js/router.js`);
   assert.equal(routerResponse.status, 200);
   assert.match(await routerResponse.text(), /createRouter/);

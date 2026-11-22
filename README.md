@@ -86,6 +86,10 @@ Now hosted on `https://humblewood.sfseeger.de/` !!
 1. Open the site, enter your name, pick **Dungeon Master** or **Player** and click "Enter the Wood" once you enter your profile information.
 2. DM-only controls (uploading maps, moving npcs, editing the playlist etc.) are hidden/restricted from players.
 
+Maps, handouts, and server-stored music require a signed-in table session to
+load. Anyone without an active player or DM session cannot open an uploaded
+asset URL directly.
+
 ## What's built so far 
 
 - **Map & tokens**: DM uploads the battle map image. Tokens for NPCs, items and PCs live in a tray and can be moved, snapped to the grid, hidden from players and given one-by-one HP adjustments. Pan and zoom controls work for everyone. Doodles and NPC/item names can be enabled by DM. Distance can be measured with the Ruler. Battle Fog can be drawn with rectangles. Conditions show up on tokens with its starting letters. 
