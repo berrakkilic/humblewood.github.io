@@ -1,7 +1,7 @@
 /** Shared formatting, escaping, toast, and upload helpers. */
 
 // ================= Shared helpers =================
-function signed(value) {
+function signed(value: number | string | null | undefined): string {
   const number = Number(value) || 0;
   return number >= 0 ? `+${number}` : String(number);
 }
@@ -54,13 +54,14 @@ function initializeSmoothDetails(duration = 360) {
   });
 }
 
-function escapeHtml(value) {
-  return String(value ?? '').replace(/[&<>"']/g, character => ({
+function escapeHtml(value: unknown): string {
+  const escapedCharacters: Record<string, string> = {
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;'
-  })[character]);
+  };
+  return String(value ?? '').replace(/[&<>"']/g, character => escapedCharacters[character]);
 }
 
-function escapeAttr(value) {
+function escapeAttr(value: unknown): string {
   return escapeHtml(value);
 }
 
@@ -94,13 +95,13 @@ function getRequiredSelect(id: string): HTMLSelectElement {
   return getRequiredElement<HTMLSelectElement>(`#${CSS.escape(id)}`);
 }
 
-function safeAssetUrl(value, prefixes = ['uploads', 'images']) {
+function safeAssetUrl(value: unknown, prefixes: readonly string[] = ['uploads', 'images']): string {
   const url = String(value ?? '').trim();
   const prefixPattern = prefixes.map(prefix => String(prefix).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
   return new RegExp(`^/(?:${prefixPattern})/[A-Za-z0-9._~%()+-]+$`).test(url) ? url : '';
 }
 
-function safeImageUrl(value) {
+function safeImageUrl(value: unknown): string {
   const url = String(value ?? '').trim();
   if (/^data:image\/(?:gif|jpe?g|png|webp);base64,[A-Za-z0-9+/]+=*$/.test(url)) return url;
   return safeAssetUrl(url, ['uploads', 'images']);
@@ -193,7 +194,7 @@ function applyPresetSearch(selectId: string, searchId: string) {
   renderList();
 }
 
-function showToast(message) {
+function showToast(message: string): void {
   const toast = getElementById('toast');
   toast.textContent = message;
   toast.classList.add('visible');
@@ -201,29 +202,62 @@ function showToast(message) {
   toastTimer = setTimeout(() => toast.classList.remove('visible'), 3200);
 }
 
-async function uploadFile(file) {
+async function uploadFile(file: File): Promise<string> {
   const form = new FormData();
   form.append('file', file);
   const res = await fetch('/api/upload', { method: 'POST', body: form });
   if (!res.ok) throw new Error('Upload failed');
   const data = await res.json();
+  if (typeof data.url !== 'string') throw new Error('Upload response did not include a file URL.');
   return data.url;
 }
 
-async function uploadAudioFile(file) {
+interface AudioUploadResponse {
+  url: string;
+  name: string;
+}
+
+async function uploadAudioFile(file: File): Promise<AudioUploadResponse> {
   const form = new FormData();
   form.append('file', file);
   const res = await fetch('/api/upload/audio', { method: 'POST', body: form });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || 'The MP3 could not be uploaded.');
-  return data;
+  const data: unknown = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const message = data && typeof data === 'object' && 'error' in data && typeof data.error === 'string'
+      ? data.error
+      : 'The MP3 could not be uploaded.';
+    throw new Error(message);
+  }
+  if (!data || typeof data !== 'object' || !('url' in data) || typeof data.url !== 'string'
+    || !('name' in data) || typeof data.name !== 'string') {
+    throw new Error('Upload response did not include track details.');
+  }
+  return { url: data.url, name: data.name };
 }
 
-async function uploadLibraryFile(file) {
+interface LibraryUploadResponse {
+  url: string;
+  name: string;
+  mimeType: string;
+  size: number;
+}
+
+async function uploadLibraryFile(file: File): Promise<LibraryUploadResponse> {
   const form = new FormData();
   form.append('file', file);
   const res = await fetch('/api/upload/library', { method: 'POST', body: form });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || 'The file could not be uploaded.');
-  return data;
+  const data: unknown = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const message = data && typeof data === 'object' && 'error' in data && typeof data.error === 'string'
+      ? data.error
+      : 'The file could not be uploaded.';
+    throw new Error(message);
+  }
+  if (!data || typeof data !== 'object' || !('url' in data) || typeof data.url !== 'string'
+    || !('name' in data) || typeof data.name !== 'string'
+    || !('mimeType' in data) || typeof data.mimeType !== 'string'
+    || !('size' in data) || typeof data.size !== 'number') {
+    throw new Error('Upload response did not include file details.');
+  }
+  return { url: data.url, name: data.name, mimeType: data.mimeType, size: data.size };
 }

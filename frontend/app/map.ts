@@ -29,7 +29,8 @@ function renderMap() {
   getRequiredInput('grid-color').value = gridColor;
   getRequiredInput('snap-toggle').checked = state.scene.snapToGrid !== false;
   getRequiredInput('fit-token-toggle').checked = state.scene.fitTokensToGrid !== false;
-  const timeOfDay = ['morning', 'afternoon', 'night'].includes(state.scene.timeOfDay) ? state.scene.timeOfDay : 'morning';
+  const sceneTime = state.scene.timeOfDay;
+  const timeOfDay: MapTimeOfDay = sceneTime === 'afternoon' || sceneTime === 'night' ? sceneTime : 'morning';
   getRequiredSelect('time-of-day-select').value = timeOfDay;
   const timeDetails = {
     morning: { label: 'Morning', icon: '☀️' },
@@ -179,12 +180,12 @@ function renderMapTokens() {
   });
 }
 
-function visibleTokenLabel(token) {
+function visibleTokenLabel(token: RoomToken): string {
   if (myRole === 'dm' || state.scene.showTokenLabelsToPlayers !== false || token.kind === 'pc') return token.label;
   return '';
 }
 
-function tokenPronouns(token) {
+function tokenPronouns(token: RoomToken): string {
   const direct = String(token?.pronouns || '').trim();
   if (direct) return direct;
   if (token?.characterName) {
@@ -198,14 +199,14 @@ function tokenPronouns(token) {
   return '';
 }
 
-function tokenHoverText(token) {
+function tokenHoverText(token: RoomToken): string {
   const visibleName = visibleTokenLabel(token);
   const fallback = token.kind === 'pc' ? 'Player character' : token.kind === 'npc' ? 'NPC' : 'Item';
   const pronouns = tokenPronouns(token);
   return [visibleName || fallback, pronouns ? `Pronouns: ${pronouns}` : ''].filter(Boolean).join(' · ');
 }
 
-function renderTokenConditionBadges(token, linkedCharacter) {
+function renderTokenConditionBadges(token: RoomToken, linkedCharacter: RoomCharacter | null): string {
   const combat = linkedCharacter?.combat || token.combat || token.conditionBadges || {};
   const badges = (combat.conditions || []).slice(0, 4).map(condition => ({
     text: condition.slice(0, 2).toUpperCase(), title: condition
@@ -216,7 +217,7 @@ function renderTokenConditionBadges(token, linkedCharacter) {
   return `<div class="token-condition-badges">${badges.map(badge => `<span title="${escapeAttr(badge.title)}">${escapeHtml(badge.text)}</span>`).join('')}</div>`;
 }
 
-function tokenRenderSize(token) {
+function tokenRenderSize(token: RoomToken): number {
   const scale = Math.max(0.35, Math.min(3, Number(token.sizeScale) || 1));
   if (state.scene.fitTokensToGrid === false) return Math.max(12, Math.min(360, Math.round((Number(token.size) || 44) * scale)));
   const gridSize = Math.max(10, Number(state.scene.gridSize) || 50);
@@ -224,24 +225,25 @@ function tokenRenderSize(token) {
   return Math.max(12, Math.min(360, Math.round(gridSize * ratio * scale)));
 }
 
-function adjustTokenScale(token, delta) {
+function adjustTokenScale(token: RoomToken, delta: number) {
   const current = Math.max(0.35, Math.min(3, Number(token.sizeScale) || 1));
   const next = Math.max(0.35, Math.min(3, Math.round((current + delta) * 100) / 100));
   socket.emit('token:update', { id: token.id, sizeScale: next });
 }
 
-function emojiFor(kind) {
+function emojiFor(kind: RoomToken['kind']): string {
   return kind === 'pc' ? '🧝' : kind === 'npc' ? '🦊' : '🌸';
 }
 
-function startDragToken(e, id) {
+function startDragToken(e: MouseEvent, id: string) {
   if (e.button !== 0) return;
   if (!startDragTokenAt(e.clientX, e.clientY, e.currentTarget, id)) return;
   e.preventDefault();
 }
 
-function startDragTokenAt(clientX, clientY, element, id) {
+function startDragTokenAt(clientX: number, clientY: number, element: EventTarget | null, id: string) {
   if (selectedTool !== 'move') return false;
+  if (!(element instanceof HTMLElement)) return false;
   const token = state.tokens.find(entry => entry.id === id);
   if (!token?.canControl) {
     showToast('You can only move your own character token.');
@@ -254,7 +256,7 @@ function startDragTokenAt(clientX, clientY, element, id) {
   return true;
 }
 
-function moveDraggedToken(clientX, clientY) {
+function moveDraggedToken(clientX: number, clientY: number) {
   if (!draggingToken) return;
   const stage = getRequiredElement<HTMLElement>('#map-stage');
   const rect = stage.getBoundingClientRect();
@@ -333,7 +335,7 @@ getRequiredButton('tool-doodle').onclick = () => setTool('doodle');
 getRequiredButton('tool-eraser').onclick = () => setTool('eraser');
 getRequiredButton('tool-fog-reveal').onclick = () => setTool('fog-reveal');
 getRequiredButton('tool-fog-hide').onclick = () => setTool('fog-hide');
-function setTool(tool) {
+function setTool(tool: MapTool) {
   if ((tool === 'doodle' || tool === 'eraser') && !canDoodle()) return showToast('Player doodling is not enabled for this scene.');
   if (tool.startsWith('fog-') && (myRole !== 'dm' || !state.scene.fogEnabled)) return showToast('Enable fog of war first.');
   if (tool === 'grid-move' && myRole !== 'dm') return;
@@ -561,11 +563,11 @@ mapStageWrap.addEventListener('touchcancel', () => {
   mapStageWrap.classList.remove('is-panning');
 });
 
-function isMapGestureTarget(target) {
-  return !!target.closest?.('#map-stage, #empty-map') && !target.closest('button, input, select, textarea, label');
+function isMapGestureTarget(target: EventTarget | null) {
+  return target instanceof Element && !!target.closest('#map-stage, #empty-map') && !target.closest('button, input, select, textarea, label');
 }
 
-function touchMetrics(touches) {
+function touchMetrics(touches: TouchList) {
   const first = touches[0];
   const second = touches[1];
   return {
@@ -577,7 +579,7 @@ function touchMetrics(touches) {
   };
 }
 
-function createPinchGesture(touches) {
+function createPinchGesture(touches: TouchList): Extract<MapTouchGesture, { type: 'pinch' }> {
   const metrics = touchMetrics(touches);
   const wrapperRect = mapStageWrap.getBoundingClientRect();
   const anchor = {
@@ -655,7 +657,7 @@ document.addEventListener('mouseup', event => {
   }
 });
 
-function updateRuler(start, end) {
+function updateRuler(start: SocketPoint, end: SocketPoint) {
   const overlay = getRequiredElement<SVGElement>('#ruler-overlay');
   const line = getRequiredElement<SVGLineElement>('#ruler-line');
   const startDot = getRequiredElement<SVGCircleElement>('#ruler-start');
@@ -686,7 +688,7 @@ function clearRuler() {
   getRequiredElement<SVGElement>('#ruler-overlay').classList.remove('visible');
 }
 
-function updateMapAreaSelection(drag) {
+function updateMapAreaSelection(drag: MapAreaDrag) {
   const selection = getRequiredElement<HTMLElement>('#map-area-selection');
   const x = Math.min(drag.start.x, drag.current.x);
   const y = Math.min(drag.start.y, drag.current.y);
@@ -783,7 +785,7 @@ getRequiredButton('toggle-initiative-btn').onclick = () => {
   getRequiredButton('toggle-initiative-btn').setAttribute('aria-expanded', String(!collapsed));
 };
 
-function setMapZoom(value, clientPoint = viewportCenter()) {
+function setMapZoom(value: number, clientPoint: { clientX: number; clientY: number } = viewportCenter()) {
   const wrapperRect = mapStageWrap.getBoundingClientRect();
   const anchor = {
     x: clientPoint.clientX - wrapperRect.left,
@@ -852,7 +854,7 @@ function renderFog() {
   ctx.globalCompositeOperation = 'source-over';
 }
 
-function renderSharedPointer({ id, name, color, x, y }: any = {}) {
+function renderSharedPointer({ id, name, color, x, y }: SocketPoint & { id: string; name?: string; color?: string }) {
   if (!id || !Number.isFinite(Number(x)) || !Number.isFinite(Number(y))) return;
   let pointer = findSharedPointer(id);
   if (!pointer) {
@@ -875,19 +877,19 @@ function renderSharedPointer({ id, name, color, x, y }: any = {}) {
   pointerFadeTimers.set(id, setTimeout(() => pointer.classList.add('fading'), 1200));
 }
 
-function removeSharedPointer(id) {
+function removeSharedPointer(id: string) {
   if (!id) return;
   const pointer = findSharedPointer(id);
   if (pointer) pointer.remove();
   clearTimeout(pointerFadeTimers.get(id));
   pointerFadeTimers.delete(id);
 }
-function findSharedPointer(id) {
+function findSharedPointer(id: string): HTMLElement | undefined {
   return [...document.querySelectorAll('.shared-pointer')]
     .find(pointer => pointer.dataset.pointerId === String(id));
 }
 
-function renderSharedPing({ name, color, x, y }: any = {}) {
+function renderSharedPing({ name, color, x, y }: SocketPoint & { id: string; name?: string; color?: string }) {
   if (!Number.isFinite(Number(x)) || !Number.isFinite(Number(y))) return;
   const ping = document.createElement('div');
   ping.className = 'shared-ping';

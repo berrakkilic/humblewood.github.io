@@ -1,7 +1,15 @@
 /** Character and NPC sheet setup, class/species rules, editor lifecycle, and cards. */
 
 // ================= CHARACTERS =================
-function replaceSelectOptions(select, options, placeholder, selected = '') {
+interface HumblewoodFeatPreset {
+  title: string;
+  facts?: [string, string][];
+  sections?: { heading: string; text?: string; items?: string[] }[];
+}
+
+const sheetFeatPresets = HUMBLEWOOD_FEAT_PRESETS as HumblewoodFeatPreset[];
+
+function replaceSelectOptions(select: HTMLSelectElement, options: string[], placeholder: string, selected = ''): void {
   select.innerHTML = '';
   const empty = document.createElement('option');
   empty.value = '';
@@ -17,11 +25,11 @@ function replaceSelectOptions(select, options, placeholder, selected = '') {
   select.value = canonicalSelected;
 }
 
-function sheetSpeciesOptions() {
+function sheetSpeciesOptions(): string[] {
   return characterRules.speciesOptions({ includeNpcOnly: !!editingNpcSheetId });
 }
 
-function updateSpeciesOptions(selected = '') {
+function updateSpeciesOptions(selected = ''): void {
   replaceSelectOptions(
     getElementById('sf-species'),
     sheetSpeciesOptions(),
@@ -30,7 +38,7 @@ function updateSpeciesOptions(selected = '') {
   );
 }
 
-function updateSubraceOptions(selected = '') {
+function updateSubraceOptions(selected = ''): void {
   const includeNpcOnly = !!editingNpcSheetId;
   const species = characterRules.canonicalSpecies(
     getElementById('sf-species').value,
@@ -43,7 +51,7 @@ function updateSubraceOptions(selected = '') {
   select.disabled = !species || !options.length || !editingCanEdit;
 }
 
-function syncAutomaticSpeciesTraits(force = false) {
+function syncAutomaticSpeciesTraits(force = false): void {
   const field = getElementById('sf-racial-traits');
   if (!field) return;
   const current = field.value || '';
@@ -59,7 +67,7 @@ function syncAutomaticSpeciesTraits(force = false) {
   field.value = characterRules.mergeAutomaticSpeciesTraits(current, automatic);
 }
 
-function syncAutomaticClassFeatures(force = false) {
+function syncAutomaticClassFeatures(force = false): void {
   const field = getElementById('sf-features');
   if (!field) return;
   const current = field.value || '';
@@ -76,7 +84,7 @@ function syncAutomaticClassFeatures(force = false) {
   field.value = characterRules.mergeAutomaticClassFeatures(current, automatic);
 }
 
-function updateSubclassOptions(selected = '') {
+function updateSubclassOptions(selected = ''): void {
   const className = characterRules.canonicalClass(getElementById('sf-class').value);
   const select = getElementById('sf-subclass');
   const options = characterRules.subclassesFor(className);
@@ -84,12 +92,12 @@ function updateSubclassOptions(selected = '') {
   select.disabled = !className || !options.length || !editingCanEdit;
 }
 
-function setCharacterRuleSelections(fields: any = {}) {
-  updateSpeciesOptions(fields.species);
-  updateSubraceOptions(fields.subrace);
+function setCharacterRuleSelections(fields: Record<string, unknown> = {}): void {
+  updateSpeciesOptions(String(fields.species || ''));
+  updateSubraceOptions(String(fields.subrace || ''));
   syncAutomaticSpeciesTraits();
-  getElementById('sf-class').value = characterRules.canonicalClass(fields.class) || '';
-  updateSubclassOptions(fields.subclass);
+  getElementById('sf-class').value = characterRules.canonicalClass(String(fields.class || '')) || '';
+  updateSubclassOptions(String(fields.subclass || ''));
   syncAutomaticClassFeatures();
 }
 
@@ -215,12 +223,15 @@ function initializeFeatureUsageControls() {
     if (!name) return showToast('Give the feature charge a name first.');
     const max = Math.max(0, Math.min(999, Math.floor(Number(getElementById('feature-use-max').value) || 0)));
     if (max <= 0) return showToast('Feature charges need a maximum of at least 1.');
+    const reset = getElementById('feature-use-reset').value;
     editingFeatureUses.push({
       id: `feature-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       name,
       max,
       remaining: max,
-      reset: getElementById('feature-use-reset').value
+      reset: isUsageReset(reset)
+        ? reset
+        : 'long-rest'
     });
     nameInput.value = '';
     getElementById('feature-use-max').value = '1';
@@ -231,7 +242,7 @@ function initializeFeatureUsageControls() {
 
 function initializeFeatPresetControls() {
   const select = getElementById('feat-preset-select');
-  HUMBLEWOOD_FEAT_PRESETS.forEach(feat => {
+  sheetFeatPresets.forEach(feat => {
     const option = document.createElement('option');
     option.value = feat.title;
     const prerequisite = feat.facts?.find(([label]) => label === 'Prerequisite')?.[1];
@@ -244,7 +255,7 @@ function initializeFeatPresetControls() {
 
 function addFeatPresetToSheet() {
   const select = getElementById('feat-preset-select');
-  const feat = HUMBLEWOOD_FEAT_PRESETS.find(entry => entry.title === select.value);
+  const feat = sheetFeatPresets.find(entry => entry.title === select.value);
   if (!feat) return showToast('Choose a Humblewood feat first.');
   const prerequisite = feat.facts?.find(([label]) => label === 'Prerequisite')?.[1] || '';
   const species = characterRules.canonicalSpecies(getElementById('sf-species').value);
@@ -257,7 +268,7 @@ function addFeatPresetToSheet() {
     return showToast(`${feat.title} is already on this character.`);
   }
 
-  const details = [];
+  const details: string[] = [];
   (feat.facts || []).forEach(([label, value]) => details.push(`${label}: ${value}`));
   (feat.sections || []).forEach(section => {
     if (section.text) details.push(`${section.heading}: ${section.text}`);
@@ -270,11 +281,11 @@ function addFeatPresetToSheet() {
   showToast(`${feat.title} added.`);
 }
 
-function renderCharacters() {
+function renderCharacters(): void {
   const grid = getElementById('char-grid');
   grid.innerHTML = '';
   renderNpcFilterControls();
-  const characters = Object.values(state.characters || {}).sort((a, b) => a.name.localeCompare(b.name));
+  const characters = (Object.values(state.characters || {}) as RoomCharacter[]).sort((a, b) => a.name.localeCompare(b.name));
   if (!characters.length) grid.innerHTML = '<p class="empty-character-grid">No player characters yet.</p>';
   characters.forEach(c => {
     const card = document.createElement('div');
@@ -330,8 +341,8 @@ function renderCharacters() {
   const npcGrid = getElementById('npc-sheet-grid');
   if (!npcGrid) return;
   npcGrid.innerHTML = '';
-  const allNpcs = Object.values(state.npcs || {});
-  const npcs = filteredNpcDirectory(allNpcs).sort((a, b) => a.name.localeCompare(b.name));
+  const allNpcs = Object.values(state.npcs || {}) as RoomNpc[];
+  const npcs = (filteredNpcDirectory(allNpcs) as RoomNpc[]).sort((a, b) => a.name.localeCompare(b.name));
   if (!npcs.length) {
     npcGrid.innerHTML = `<p class="empty-character-grid">${allNpcs.length ? 'No NPCs match these filters.' : 'No NPCs yet. Create one from a preset or paste a stat block.'}</p>`;
     return;
@@ -434,7 +445,7 @@ window.addEventListener('resize', () => {
   window.requestAnimationFrame(alignBasicStatsPanels);
 });
 
-function openSheetEditor(c, options: any = {}) {
+function openSheetEditor(c: RoomCharacter | RoomNpc | null, options: { npc?: boolean } = {}): void {
   const isNpc = !!options.npc;
   const form = getElementById('sheet-form');
   form.reset();
@@ -448,8 +459,10 @@ function openSheetEditor(c, options: any = {}) {
   editingCanEdit = isNpc ? myRole === 'dm' : canEditCharacter(c);
   pendingPortraitFile = null;
   editingPortraitUrl = (isNpc ? c?.imageUrl : c?.portraitUrl) || null;
-  const fields = {
-    ...(isNpc ? (c?.sheet?.fields || legacyNpcFields(c)) : (c?.fields || legacyCharacterFields(c)))
+  const fields: Record<string, unknown> = {
+    ...(isNpc
+      ? (c?.sheet?.fields || legacyNpcFields(c as RoomNpc | null))
+      : (c?.fields || legacyCharacterFields(c as RoomCharacter | null)))
   };
   if (!Object.prototype.hasOwnProperty.call(fields, 'pronouns')) {
     fields.pronouns = isNpc
@@ -482,7 +495,7 @@ function openSheetEditor(c, options: any = {}) {
       }
       input.value = savedValue;
     } else {
-      input.value = fields[key] ?? '';
+      input.value = String(fields[key] ?? '');
     }
   });
   setCharacterRuleSelections(fields);
@@ -516,9 +529,9 @@ function openSheetEditor(c, options: any = {}) {
   });
 }
 
-function legacyCharacterFields(c) {
+function legacyCharacterFields(c: RoomCharacter | null): Record<string, unknown> {
   if (!c) return {};
-  const fields = {
+  const fields: Record<string, unknown> = {
     name: c.name || '', pronouns: c.pronouns || '', species: c.species || c.race || '', class: c.charClass || '', level: c.level ?? 1,
     hp: c.hp ?? 10, maxhp: c.maxHp ?? 10, ac: c.ac ?? 10, speed: c.speed || '30 ft', notes: c.notes || ''
   };
@@ -526,9 +539,9 @@ function legacyCharacterFields(c) {
   return fields;
 }
 
-function legacyNpcFields(npc) {
+function legacyNpcFields(npc: RoomNpc | null): Record<string, unknown> {
   if (!npc) return {};
-  const fields = {
+  const fields: Record<string, unknown> = {
     name: npc.name || '', pronouns: npc.pronouns || '', level: '1', hp: npc.hp ?? npc.maxHp ?? 10, maxhp: npc.maxHp ?? 10,
     temphp: npc.tempHp ?? 0, ac: npc.ac ?? 10, initiative: npc.initiativeModifier ?? 0,
     speed: '30 ft.', 'ac-method': 'manual', 'ac-base': npc.ac ?? 10,
@@ -538,11 +551,11 @@ function legacyNpcFields(npc) {
   return fields;
 }
 
-function canEditCharacter(c) {
+function canEditCharacter(c: RoomCharacter | RoomNpc | null): boolean {
   return !c || !!c.canManage;
 }
 
-function setSheetEditable(canEdit, hasCharacter) {
+function setSheetEditable(canEdit: boolean, hasCharacter: boolean): void {
   document.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement | HTMLButtonElement>('#sheet-form input, #sheet-form select, #sheet-form textarea, #sheet-form button').forEach(control => {
     control.disabled = !canEdit;
   });

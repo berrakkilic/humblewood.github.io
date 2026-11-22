@@ -1,6 +1,29 @@
 /** Core 5e and Humblewood reaction presets plus the character-sheet editor. */
 
-const REACTION_PRESET_GROUPS = [
+interface ReactionPreset {
+  id: string;
+  group: string;
+  name: string;
+  requirement: string;
+  resource: string;
+  source: string;
+  trigger: string;
+  effect: string;
+  alwaysSuggested?: boolean;
+  suggestedTags?: string[];
+}
+
+interface BonusActionPreset {
+  id: string;
+  group: string;
+  name: string;
+  requirement: string;
+  resource: string;
+  source: string;
+  effect: string;
+}
+
+const REACTION_PRESET_GROUPS: string[] = [
   'Core rules',
   'Class & subclass features',
   'Feats',
@@ -8,7 +31,7 @@ const REACTION_PRESET_GROUPS = [
   'Humblewood features'
 ];
 
-const REACTION_PRESETS: any[] = [
+const REACTION_PRESETS: ReactionPreset[] = [
   {
     id: 'core-opportunity-attack', group: 'Core rules', name: 'Opportunity Attack',
     requirement: 'Any creature', resource: 'One reaction', source: 'Core rules',
@@ -305,14 +328,14 @@ const REACTION_PRESETS: any[] = [
   }
 ];
 
-const BONUS_ACTION_PRESET_GROUPS = [
+const BONUS_ACTION_PRESET_GROUPS: string[] = [
   'Class features',
   'Bonus action spells',
   'Weapons',
   'Feats'
 ];
 
-const BONUS_ACTION_PRESETS: any[] = [
+const BONUS_ACTION_PRESETS: BonusActionPreset[] = [
   { id: 'ba-monk-flurry', group: 'Class features', name: 'Flurry of Blows', requirement: 'Monk', resource: 'Spend 1 ki', source: "2024 core rules", effect: 'Immediately make two Unarmed Strikes after taking the Attack action.' },
   { id: 'ba-monk-patient', group: 'Class features', name: 'Patient Defense', requirement: 'Monk', resource: 'Spend 1 ki', source: "2024 core rules", effect: 'Take the Disengage action and gain advantage on Dexterity saving throws until the start of your next turn.' },
   { id: 'ba-monk-wind', group: 'Class features', name: 'Step of the Wind', requirement: 'Monk', resource: 'Spend 1 ki', source: "2024 core rules", effect: 'Take the Disengage or Dash action and double your jump distance for the turn.' },
@@ -345,27 +368,29 @@ const BONUS_ACTION_PRESETS: any[] = [
   { id: 'ba-telekinetic', group: 'Feats', name: 'Telekinetic', requirement: 'Telekinetic feat', resource: 'One bonus action', source: "2014 / 2024 core rules", effect: 'Cast Mage Hand or use the feat to shove a creature away with a bonus action where the rules permit.' }
 ];
 
-function normalizeReaction(reaction, index = 0) {
+function normalizeReaction(reaction: unknown, index = 0): CharacterReaction | null {
   if (!reaction || typeof reaction !== 'object') return null;
-  const name = String(reaction.name || '').trim();
+  const fields = reaction as Record<string, unknown>;
+  const name = String(fields.name || '').trim();
   if (!name) return null;
   return {
-    id: String(reaction.id || `reaction-normalized-${index}`),
+    id: String(fields.id || `reaction-normalized-${index}`),
     name,
-    trigger: String(reaction.trigger || '').trim(),
-    effect: String(reaction.effect || '').trim(),
-    resource: String(reaction.resource || '').trim(),
-    requirement: String(reaction.requirement || '').trim(),
-    source: String(reaction.source || '').trim()
+    trigger: String(fields.trigger || '').trim(),
+    effect: String(fields.effect || '').trim(),
+    resource: String(fields.resource || '').trim(),
+    requirement: String(fields.requirement || '').trim(),
+    source: String(fields.source || '').trim()
   };
 }
 
-function normalizeReactionList(raw) {
+function normalizeReactionList(raw: unknown): CharacterReaction[] {
   let values = raw;
   if (typeof values === 'string') {
     try { values = JSON.parse(values); } catch { values = []; }
   }
-  return (Array.isArray(values) ? values : []).map(normalizeReaction).filter(Boolean);
+  return (Array.isArray(values) ? values : []).map(normalizeReaction)
+    .filter((reaction): reaction is CharacterReaction => reaction !== null);
 }
 
 function reactionPresetSearchText() {
@@ -375,7 +400,7 @@ function reactionPresetSearchText() {
   return `${sheetText} ${spellText}`.toLowerCase();
 }
 
-function appendReactionPresetOption(parent, preset) {
+function appendReactionPresetOption(parent: HTMLOptGroupElement, preset: ReactionPreset): void {
   const option = document.createElement('option');
   option.value = preset.id;
   option.textContent = `${preset.name} — ${preset.requirement}`;
@@ -529,7 +554,7 @@ function initializeReactionPresetControls() {
   };
 }
 
-function populateReactionForm(value: any = {}) {
+function populateReactionForm(value: Partial<CharacterReaction> = {}): void {
   getElementById('reaction-form-name').value = value.name || '';
   getElementById('reaction-form-trigger').value = value.trigger || '';
   getElementById('reaction-form-effect').value = value.effect || '';
@@ -538,7 +563,7 @@ function populateReactionForm(value: any = {}) {
   getElementById('reaction-form-source').value = value.source || '';
 }
 
-function openReactionForm(value) {
+function openReactionForm(value: Partial<CharacterReaction> | null): void {
   editingReactionId = value?.id || null;
   renderReactionPresetOptions();
   getElementById('reaction-preset-select').value = '';

@@ -1,14 +1,159 @@
 interface Window {
-  HumblewoodAlmanac: any;
-  HumblewoodAlmanacData: any[];
-  HumblewoodCharacterRules: any;
-  HumblewoodCombatState: any;
-  HumblewoodCreationPresets: any;
-  HumblewoodMapGeometry: any;
-  HumblewoodPhbSpellPresets: any;
-  HumblewoodRouter: any;
+  HumblewoodAlmanac: HumblewoodAlmanacApi;
+  HumblewoodAlmanacData: AlmanacCategory[];
+  HumblewoodCharacterRules: CharacterRulesApi;
+  HumblewoodCombatState: CombatStateApi;
+  HumblewoodCreationPresets: CreationPresetsApi;
+  HumblewoodMapGeometry: MapGeometryApi;
+  HumblewoodPhbSpellPresets: { PHB_SPELL_PRESETS: CharacterSpell[] };
+  HumblewoodRouter: HumblewoodRouterApi;
+  HumblewoodOverlays: HumblewoodOverlaysApi;
 }
 
+interface AlmanacEntry {
+  title: string;
+  kicker?: string;
+  tags?: string[];
+  summary?: string;
+  facts?: [string, string][];
+  sections?: { heading: string; text?: string; items?: string[] }[];
+  image?: { src: string; alt?: string; caption?: string };
+  wide?: boolean;
+  openByDefault?: boolean;
+}
+
+interface AlmanacCategory {
+  id: string;
+  title: string;
+  icon: string;
+  description: string;
+  entries: AlmanacEntry[];
+}
+
+interface HumblewoodAlmanacApi {
+  mount(categories: AlmanacCategory[], documentRoot?: Document): { render: () => void } | null;
+}
+
+interface CharacterRulesApi {
+  AUTO_CLASS_FEATURES_START: string;
+  AUTO_SPECIES_TRAITS_START: string;
+  CLASS_SUBCLASSES: Record<string, string[]>;
+  abilityModifier(score: number | string): number;
+  automaticClassFeatureText(className: string | null, subclass?: string, level?: number | string): string;
+  automaticSpeciesTraitText(species: string, subrace?: string): string;
+  armorClass(input: { method: string; base?: number | string; bonus?: number | string; dex?: number | string; con?: number | string; wis?: number | string }): number | null;
+  applyPlayerCharacterConstraints<T extends { fields: Record<string, string | boolean> }>(character: T): T;
+  averageHitDieRoll(className: string): number;
+  canonicalClass(value: string): string | null;
+  canonicalSpecies(value: string, options?: { includeNpcOnly?: boolean }): string | null;
+  classSavingThrows(className: string | null): AbilityKey[];
+  defaultArmorMethod(species: string, className: string): string;
+  hitDieFor(className: string): number;
+  maximumSpellLevelFor(className: string, subclass: string, level: number | string): number;
+  levelUpGains(input: { className: string; subclass: string; species: string; fromLevel: number; toLevel: number }): {
+    level: number;
+    asi: boolean;
+    proficiencyIncrease: boolean;
+    classFeatures: string[];
+    subclassFeatures: string[];
+    speciesFeatures: string[];
+    cantripIncrease: boolean;
+  }[];
+  levelUpHitPointIncrease(className: string, oldConstitution: number, newConstitution: number, level: number, rolls: number[]): number;
+  mergeAutomaticClassFeatures(existingText: string, automaticText: string): string;
+  mergeAutomaticSpeciesTraits(existingText: string, automaticText: string): string;
+  preparedSpellCount(className: string, level: number | string, abilityScore: number | string): number | null;
+  proficiencyBonus(level: number | string): number;
+  spellSlotsFor(className: string, subclass: string, level: number | string): number[];
+  spellcastingAbilityFor(className: string | null, subclass?: string): string | null;
+  spellcastingValues(abilityScore: number | string, level: number | string): { saveDc: number; attackBonus: number };
+  speciesOptions(options?: { includeNpcOnly?: boolean }): string[];
+  subclassesFor(className: string | null): string[];
+  subracesFor(species: string | null, options?: { includeNpcOnly?: boolean }): string[];
+  validatePlayerCharacter(character: { fields: Record<string, string | boolean> }): string | null;
+}
+
+interface CombatStateApi {
+  setConditionBadges(entity: RoomToken, conditions: string[]): string[];
+  setConditions(entity: RoomNpc, conditions: string[]): string[];
+  toggleCondition(entity: RoomCharacter | RoomNpc | RoomToken, condition: string): string[];
+}
+
+interface CreationPresetsApi {
+  ATTACK_PRESETS: { name: string; properties?: string }[];
+  NPC_PRESETS: { id: string; name: string; source: string; statBlock: string }[];
+  STANDARD_SPELL_PRESETS: CharacterSpell[];
+  attackPresetValues(preset: { name: string; properties?: string }, scores: Record<string, string>, proficiency: string): Partial<CharacterAttack>;
+  findSpellPreset(name: string, presets: CharacterSpell[]): CharacterSpell | undefined;
+  parseStatBlock(text: string, options?: { name?: string; spellPresets?: CharacterSpell[] }): {
+    error?: string;
+    name: string;
+    fields?: Record<string, string | boolean>;
+    attacks?: unknown[];
+    spells?: unknown[];
+    challenge?: string;
+  };
+}
+
+interface MapGeometryApi {
+  clampScale(value: number): number;
+  fitStageInViewport(input: { stageWidth: number; stageHeight: number; viewportWidth: number; viewportHeight: number; padding?: number }): { scale: number; pan: SocketPoint };
+  gridMeasurement(start: SocketPoint, end: SocketPoint, gridSize: number, gridOffsetX?: number, gridOffsetY?: number): {
+    horizontalSquares: number;
+    verticalSquares: number;
+    squares: number;
+    feet: number;
+    start: SocketPoint;
+    end: SocketPoint;
+  };
+  positionStagePoint(input: { stagePoint: SocketPoint; anchor: SocketPoint; nextScale: number }): { scale: number; pan: SocketPoint };
+  snapCoordinateToCell(value: number, gridSize: number, gridOffset?: number): number;
+  zoomAroundPoint(input: { pan: SocketPoint; scale: number; nextScale: number; anchor: SocketPoint }): { scale: number; pan: SocketPoint };
+}
+
+interface HumblewoodRoute {
+  path: string;
+  title: string;
+}
+
+interface HumblewoodRouterApi {
+  createRouter(options: {
+    routes: Record<string, HumblewoodRoute>;
+    onRoute: (viewName: string, route: HumblewoodRoute) => void;
+  }): {
+    current: string;
+    navigate: (viewName: string) => void;
+    start: () => void;
+  };
+}
+
+interface HumblewoodOverlaysApi {
+  createDialogController(dialog: HTMLDialogElement, options?: {
+    onDismiss?: (reason: string, returnValue: string) => void;
+    onOpen?: () => void;
+    restoreFocus?: boolean;
+    closeOnBackdrop?: boolean;
+    closeOnEscape?: boolean;
+  }): {
+    element: HTMLDialogElement;
+    open: () => void;
+    close: (reason?: string) => void;
+    isOpen: () => boolean;
+  };
+  createPopoverController(popover: HTMLElement, options?: {
+    mode?: 'auto' | 'manual';
+    closeOnOutsideClick?: boolean;
+  }): {
+    element: HTMLElement;
+    show: () => void;
+    hide: () => void;
+    toggle: () => void;
+    isOpen: () => boolean;
+  };
+}
+
+// Compatibility boundary for open-ended legacy payload fields. Replace this
+// with named fields as their server contracts are formalized.
 type LegacyRecord = Record<string, any>;
 
 interface FrontendElementMap {
@@ -523,9 +668,20 @@ type FrontendElementForId<K extends string> =
 interface RoomScene extends LegacyRecord {
   mapUrl: string | null;
   mapName: string;
-  fogShapes: LegacyRecord[];
-  doodlePaths: LegacyRecord[];
-  doodleCornerPaths: LegacyRecord[];
+  gridSize?: number;
+  gridOffsetX?: number;
+  gridOffsetY?: number;
+  gridColor?: string;
+  gridVisible?: boolean;
+  snapToGrid?: boolean;
+  fitTokensToGrid?: boolean;
+  timeOfDay?: 'morning' | 'afternoon' | 'night';
+  fogEnabled?: boolean;
+  fogShapes: SocketFogShape[];
+  doodlePaths: SocketDoodlePath[];
+  doodleCornerPaths: SocketDoodlePath[];
+  playerDoodlingEnabled?: boolean;
+  showTokenLabelsToPlayers?: boolean;
 }
 
 interface RoomToken extends LegacyRecord {
@@ -536,17 +692,94 @@ interface RoomToken extends LegacyRecord {
   y: number;
   visibleToPlayers: boolean;
   canControl?: boolean;
+  pronouns?: string;
+  characterName?: string;
+  npcId?: string;
+  imageUrl?: string;
+  initiativeModifier?: number;
+  attacks?: RollableAttack[];
+  notes?: string;
+  spells?: CharacterSpell[];
+  reactions?: CharacterReaction[];
+  spellcasting?: { attackBonus?: number | string; saveDc?: number | string };
+  hp?: number;
+  maxHp?: number;
+  size?: number;
+  sizeScale?: number;
+  combat?: TokenCombatState;
+  conditionBadges?: TokenCombatState;
 }
 
 interface RoomCharacter extends LegacyRecord {
   name: string;
   ownerUsername?: string | null;
   canManage?: boolean;
+  pronouns?: string;
+  combat?: TokenCombatState;
+  level?: number;
+  charClass?: string;
+  initiativeModifier?: number;
+  abilities?: Partial<Record<AbilityKey, number>>;
+  saves?: Partial<Record<AbilityKey, { modifier?: number; proficient?: boolean }>>;
+  skills?: Partial<Record<SkillName, { modifier?: number; proficient?: boolean }>>;
+  attacks?: RollableAttack[];
+  reactions?: CharacterReaction[];
+  spells?: CharacterSpell[];
+  spellcasting?: { attackBonus?: number | string };
+  fields?: Record<string, string | number | boolean>;
+}
+
+interface RollableAttack {
+  name: string;
+  bonus: string;
+  damage: string;
+  details?: string;
+}
+
+interface ActiveCombatTarget {
+  type: 'character' | 'npc';
+  id: string;
+}
+
+interface TokenCombatState extends LegacyRecord {
+  conditions?: string[];
+  concentration?: boolean;
+  exhaustion?: number;
+  dead?: boolean;
+  stable?: boolean;
+  deathSaves?: { successes?: number; failures?: number };
+  spellSlots?: Record<string, { total: number; used: number }>;
+  rage?: { active?: boolean; maxUses?: number; used?: number };
+  featureUses?: FeatureUse[];
+  reactionAvailable?: boolean;
+}
+
+interface CharacterSpell {
+  id: string;
+  name: string;
+  level: number;
+  school: string;
+  range: string;
+  castingTime: string;
+  duration: string;
+  components: string;
+  attack: string;
+  damage: string;
+  effect: string;
+  source: string;
+  prepared?: boolean;
+  alwaysPrepared?: boolean;
 }
 
 interface RoomNpc extends LegacyRecord {
   id: string;
   name: string;
+  initiativeModifier?: number;
+  attacks?: RollableAttack[];
+  spells?: CharacterSpell[];
+  reactions?: CharacterReaction[];
+  sheet?: Partial<RoomCharacter> & LegacyRecord;
+  combat?: TokenCombatState;
 }
 
 interface JukeboxTrack extends LegacyRecord {
@@ -567,6 +800,13 @@ interface SocketInitiativeState {
   entries: SocketInitiativeEntry[];
   round: number;
   currentIndex: number;
+}
+
+interface SocketSavedScene {
+  name: string;
+  mapName: string;
+  tokenCount: number;
+  savedAt: number;
 }
 
 interface SocketLibraryFolder {
@@ -646,7 +886,7 @@ interface RoomState extends LegacyRecord {
   tokens: RoomToken[];
   characters: Record<string, RoomCharacter>;
   npcs: Record<string, RoomNpc>;
-  savedScenes: LegacyRecord[] | Record<string, LegacyRecord>;
+  savedScenes: SocketSavedScene[];
   jukebox: LegacyRecord & { playlist: JukeboxTrack[]; currentIndex: number };
   library: SocketLibraryState;
   notifications: SocketNotification[];
@@ -667,9 +907,18 @@ interface SocketPoint {
 }
 
 interface SocketDoodlePath {
+  id?: string;
   points: SocketPoint[];
   color?: string;
   width?: number;
+}
+
+interface SocketFogShape {
+  mode: 'reveal' | 'hide';
+  x: number;
+  y: number;
+  width: number;
+  height: number;
 }
 
 interface SocketTokenUpdate {
@@ -750,8 +999,8 @@ type FrontendSocketEvents = {
   'identify:result': [{ ok: boolean; message?: string; role?: 'dm' | 'player'; name?: string; username?: string }];
   'session:result': [{ ok: boolean; message?: string }];
   'scene:dirty': [{ dirty: boolean }];
-  'scene:fog:update': [{ enabled: boolean; shapes: LegacyRecord[] }];
-  'scenes:update': [Record<string, unknown>[]];
+  'scene:fog:update': [{ enabled: boolean; shapes: SocketFogShape[] }];
+  'scenes:update': [SocketSavedScene[]];
   'scene:active': [{ name?: string | null }];
   'scene:saved': [{ name: string }];
   'scene:loaded': [{ name: string }];
@@ -866,14 +1115,6 @@ interface SocketLike {
 }
 
 declare function io(options?: Record<string, unknown>): SocketLike;
-
-// Server snapshots are still runtime-validated JavaScript objects. These
-// overloads keep values/entries useful during the migration; domain models can
-// replace them feature by feature without weakening newly typed code.
-interface ObjectConstructor {
-  values(value: LegacyRecord): any[];
-  entries(value: LegacyRecord): [string, any][];
-}
 
 // Event delegation in the legacy UI intentionally starts at EventTarget. The
 // handlers guard their selectors at runtime before using the returned element.

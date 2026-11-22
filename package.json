@@ -6,8 +6,9 @@
   "scripts": {
     "start": "node server.js",
     "build": "npm run build:frontend",
-    "build:frontend": "npm run typecheck:frontend && node scripts/build-frontend.js",
+    "build:frontend": "npm run typecheck:frontend && npm run typecheck:frontend:strict && node scripts/build-frontend.js",
     "typecheck:frontend": "tsc -p tsconfig.frontend.json --pretty false",
+    "typecheck:frontend:strict": "tsc -p tsconfig.frontend.strict.json --pretty false",
     "watch:frontend": "node scripts/watch-frontend.js",
     "dev:server": "node --watch server.js",
     "check": "npm run build:frontend && node scripts/check-syntax.js && node test/frontend-structure.js",

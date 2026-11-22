@@ -2,12 +2,12 @@
 const doodleCornerCanvas = getElementById('doodle-corner-canvas') as HTMLCanvasElement;
 const doodleCornerContext = doodleCornerCanvas.getContext('2d');
 let doodleCornerDrawing = false;
-let doodleCornerPath: any = null;
+let doodleCornerPath: SocketDoodlePath | null = null;
 let doodleCornerErasing = false;
-let doodleCornerLastErasePoint: any = null;
+let doodleCornerLastErasePoint: SocketPoint | null = null;
 let doodleCornerOpen = false;
-let doodleCornerTool = 'draw';
-let doodleCornerDrag: any = null;
+let doodleCornerTool: 'draw' | 'eraser' = 'draw';
+let doodleCornerDrag: { clientX: number; clientY: number; left: number; top: number } | null = null;
 
 const doodleCornerPanel = getElementById('doodle-corner');
 const doodleCornerToggle = getElementById('doodle-corner-toggle');
@@ -15,7 +15,7 @@ const doodleCornerDragHandle = getElementById('doodle-corner-drag-handle');
 const doodleCornerDrawButton = getElementById('doodle-corner-draw-btn');
 const doodleCornerEraserButton = getElementById('doodle-corner-eraser-btn');
 
-function setDoodleCornerOpen(open) {
+function setDoodleCornerOpen(open: boolean) {
   doodleCornerOpen = !!open;
   doodleCornerPanel.classList.toggle('hidden', !doodleCornerOpen);
   doodleCornerToggle.setAttribute('aria-expanded', String(doodleCornerOpen));
@@ -42,7 +42,7 @@ function resetDoodleCornerPosition() {
   doodleCornerPanel.style.top = `${Math.min(Math.max(minimumTop, gutter), maxTop)}px`;
 }
 
-function clampDoodleCornerPosition(left, top) {
+function clampDoodleCornerPosition(left: number, top: number) {
   const panelRect = doodleCornerPanel.getBoundingClientRect();
   const gutter = 8;
   const maxLeft = Math.max(gutter, window.innerWidth - panelRect.width - gutter);
@@ -55,7 +55,7 @@ function clampDoodleCornerPosition(left, top) {
   doodleCornerPanel.style.top = `${Math.min(Math.max(top, minimumTop), maxTop)}px`;
 }
 
-function setDoodleCornerTool(tool) {
+function setDoodleCornerTool(tool: 'draw' | 'eraser') {
   doodleCornerTool = tool === 'eraser' ? 'eraser' : 'draw';
   doodleCornerDrawButton.classList.toggle('active', doodleCornerTool === 'draw');
   doodleCornerEraserButton.classList.toggle('active', doodleCornerTool === 'eraser');
@@ -68,21 +68,21 @@ function renderDoodleCorner() {
   (state.scene.doodleCornerPaths || []).forEach(path => drawDoodleCornerPath(path));
 }
 
-function drawDoodleCornerPath(path) {
+function drawDoodleCornerPath(path: SocketDoodlePath) {
   if (!doodleCornerContext || !Array.isArray(path?.points) || path.points.length < 2) return;
   doodleCornerContext.strokeStyle = path.color || '#d98a9e';
   doodleCornerContext.lineWidth = Number(path.width) || 3;
   doodleCornerContext.lineCap = 'round';
   doodleCornerContext.lineJoin = 'round';
   doodleCornerContext.beginPath();
-  path.points.forEach((point, index) => {
+  path.points.forEach((point: SocketPoint, index: number) => {
     if (index === 0) doodleCornerContext.moveTo(point.x, point.y);
     else doodleCornerContext.lineTo(point.x, point.y);
   });
   doodleCornerContext.stroke();
 }
 
-function doodleCornerPoint(event) {
+function doodleCornerPoint(event: PointerEvent) {
   const rect = doodleCornerCanvas.getBoundingClientRect();
   return {
     x: (event.clientX - rect.left) * doodleCornerCanvas.width / rect.width,
@@ -126,7 +126,7 @@ doodleCornerCanvas.onpointermove = event => {
   drawDoodleCornerPath(doodleCornerPath);
 };
 
-function finishDoodleCorner(event) {
+function finishDoodleCorner(event?: PointerEvent) {
   if (doodleCornerErasing) {
     doodleCornerErasing = false;
     doodleCornerLastErasePoint = null;
@@ -149,7 +149,7 @@ getElementById('doodle-corner-undo-btn').onclick = () => socket.emit('scene:dood
 getElementById('doodle-corner-clear-btn').onclick = () => socket.emit('scene:doodleCorner:clear');
 
 doodleCornerDragHandle.onpointerdown = event => {
-  if (event.target.closest('button, input')) return;
+  if (event.target instanceof Element && event.target.closest('button, input')) return;
   const rect = doodleCornerPanel.getBoundingClientRect();
   doodleCornerPanel.style.position = 'fixed';
   doodleCornerPanel.style.left = `${rect.left}px`;

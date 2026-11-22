@@ -1,27 +1,59 @@
 /** Attack presets, attack editing, and NPC stat-block importing. */
 
 // ---- Reusable attack editor ----
-function normalizeAttack(attack, index = 0) {
+interface AttackPreset {
+  name: string;
+  properties?: string;
+}
+
+interface NpcPreset {
+  id: string;
+  name: string;
+  source: string;
+  statBlock: string;
+}
+
+interface ParsedStatBlock {
+  error?: string;
+  name: string;
+  fields?: Record<string, string | boolean>;
+  attacks?: unknown[];
+  spells?: unknown[];
+  challenge?: string;
+}
+
+interface AttackPresetApi {
+  ATTACK_PRESETS: AttackPreset[];
+  NPC_PRESETS: NpcPreset[];
+  attackPresetValues: (preset: AttackPreset, scores: Record<string, string>, proficiency: string) => Partial<CharacterAttack>;
+  parseStatBlock: (text: string, options?: { name?: string; spellPresets?: unknown[] }) => ParsedStatBlock;
+}
+
+const attackPresetApi = creationPresets as AttackPresetApi;
+
+function normalizeAttack(attack: unknown, index = 0): CharacterAttack | null {
   if (!attack || typeof attack !== 'object') return null;
-  const name = String(attack.name || '').trim();
+  const fields = attack as Record<string, unknown>;
+  const name = String(fields.name || '').trim();
   if (!name) return null;
   return {
-    id: String(attack.id || `attack-normalized-${index}`),
+    id: String(fields.id || `attack-normalized-${index}`),
     name,
-    bonus: String(attack.bonus || '').trim(),
-    damage: String(attack.damage || '').trim(),
-    details: String(attack.details || '').trim(),
-    source: String(attack.source || '').trim()
+    bonus: String(fields.bonus || '').trim(),
+    damage: String(fields.damage || '').trim(),
+    details: String(fields.details || '').trim(),
+    source: String(fields.source || '').trim()
   };
 }
 
-function normalizeAttackList(raw) {
-  return (Array.isArray(raw) ? raw : []).map(normalizeAttack).filter(Boolean);
+function normalizeAttackList(raw: unknown): CharacterAttack[] {
+  return (Array.isArray(raw) ? raw : []).map(normalizeAttack)
+    .filter((attack): attack is CharacterAttack => attack !== null);
 }
 
 function initializeAttackPresetControls() {
   const select = getElementById('attack-preset-select');
-  creationPresets.ATTACK_PRESETS.forEach(preset => {
+  attackPresetApi.ATTACK_PRESETS.forEach(preset => {
     const option = document.createElement('option');
     option.value = preset.name;
     option.textContent = `${preset.name}${preset.properties ? ` · ${preset.properties}` : ''}`;
@@ -31,10 +63,10 @@ function initializeAttackPresetControls() {
   getElementById('attack-add-btn').onclick = () => openAttackForm(null);
   getElementById('attack-form-cancel').onclick = closeAttackForm;
   getElementById('attack-preset-load').onclick = () => {
-    const preset = creationPresets.ATTACK_PRESETS.find(entry => entry.name === select.value);
+    const preset = attackPresetApi.ATTACK_PRESETS.find(entry => entry.name === select.value);
     if (!preset) return showToast('Choose an attack preset first.');
     const scores = Object.fromEntries(ABILITIES.map(ability => [ability, getElementById(`sf-${ability}`).value]));
-    populateAttackForm(creationPresets.attackPresetValues(preset, scores, getElementById('sf-prof-bonus').value));
+    populateAttackForm(attackPresetApi.attackPresetValues(preset, scores, getElementById('sf-prof-bonus').value));
   };
   getElementById('attack-form-save').onclick = () => {
     const name = getElementById('attack-form-name').value.trim();
@@ -58,7 +90,7 @@ function initializeAttackPresetControls() {
   };
 }
 
-function populateAttackForm(value: any = {}) {
+function populateAttackForm(value: Partial<CharacterAttack> = {}) {
   getElementById('attack-add-form').dataset.attackSource = value.source || '';
   getElementById('attack-form-name').value = value.name || '';
   getElementById('attack-form-bonus').value = value.bonus || '';
@@ -66,7 +98,7 @@ function populateAttackForm(value: any = {}) {
   getElementById('attack-form-details').value = value.details || '';
 }
 
-function openAttackForm(value) {
+function openAttackForm(value: Partial<CharacterAttack> | null) {
   editingAttackId = value?.id || null;
   getElementById('attack-add-form').classList.remove('hidden');
   getElementById('attack-preset-select').value = '';
@@ -116,7 +148,7 @@ function renderAttackEditor() {
 function initializeNpcPresetControls() {
   const select = getElementById('npc-sheet-preset');
   const groups = new Map();
-  creationPresets.NPC_PRESETS.forEach(preset => {
+  attackPresetApi.NPC_PRESETS.forEach(preset => {
     if (!groups.has(preset.source)) {
       const group = document.createElement('optgroup');
       group.label = preset.source;
@@ -130,7 +162,7 @@ function initializeNpcPresetControls() {
   });
   applyPresetSearch('npc-sheet-preset', 'npc-preset-search');
   getElementById('npc-sheet-preset-load').onclick = () => {
-    const preset = creationPresets.NPC_PRESETS.find(entry => entry.id === select.value);
+    const preset = attackPresetApi.NPC_PRESETS.find(entry => entry.id === select.value);
     if (!preset) return showToast('Choose an NPC preset first.');
     applyImportedStatBlock(creationPresets.parseStatBlock(preset.statBlock, {
       name: preset.name,
@@ -146,7 +178,7 @@ function initializeNpcPresetControls() {
   };
 }
 
-function applyImportedStatBlock(parsed) {
+function applyImportedStatBlock(parsed: ParsedStatBlock) {
   if (parsed.error) return showToast(parsed.error);
   const form = getElementById('sheet-form');
   form.reset();
@@ -156,7 +188,7 @@ function applyImportedStatBlock(parsed) {
     const key = input.id.slice(3);
     if (!Object.prototype.hasOwnProperty.call(fields, key)) return;
     if (input instanceof HTMLInputElement && input.type === 'checkbox') input.checked = !!fields[key];
-    else input.value = fields[key] ?? '';
+    else input.value = String(fields[key] ?? '');
   });
   setCharacterRuleSelections(fields);
   acMethodManuallySelected = true;
@@ -176,7 +208,7 @@ function applyImportedStatBlock(parsed) {
   renderSpellListEditor();
   form.dataset.npcChallenge = parsed.challenge || '';
   refreshCharacterCalculations(false, false);
-  getElementById('sf-ac').value = fields.ac || '10';
+  getElementById('sf-ac').value = String(fields.ac || '10');
   getElementById('sf-ac-method').value = 'manual';
   refreshArmorClass();
   getElementById('sf-name').focus();

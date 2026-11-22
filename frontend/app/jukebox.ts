@@ -11,9 +11,15 @@ const jukeboxVolumeInput = getElementById('jukebox-volume');
 const jukeboxVolumeValue = getElementById('jukebox-volume-value');
 const jukeboxVolumeIcon = getElementById('jukebox-volume-icon');
 const JUKEBOX_VOLUME_STORAGE_KEY = 'humblewood:jukebox-volume';
-let availableMusicTracks = [];
+interface MusicCatalogTrack {
+  title: string;
+  url: string;
+  source: string;
+}
 
-function normalizedJukeboxVolume(value) {
+let availableMusicTracks: MusicCatalogTrack[] = [];
+
+function normalizedJukeboxVolume(value: number | string): number {
   const numeric = Number(value);
   return Number.isFinite(numeric) ? Math.max(0, Math.min(100, Math.round(numeric))) : 100;
 }
@@ -27,7 +33,7 @@ function storedJukeboxVolume() {
   }
 }
 
-function applyLocalJukeboxVolume(value, persist = false) {
+function applyLocalJukeboxVolume(value: number | string, persist = false): void {
   const percent = normalizedJukeboxVolume(value);
   audioEl.volume = percent / 100;
   jukeboxVolumeInput.value = String(percent);
@@ -88,13 +94,22 @@ async function loadMusicTracks() {
     const response = await fetch('/api/music');
     if (!response.ok) throw new Error('Music list unavailable');
     const payload = await response.json();
-    availableMusicTracks = Array.isArray(payload.tracks) ? payload.tracks : [];
+    availableMusicTracks = Array.isArray(payload.tracks)
+      ? payload.tracks.filter((track: unknown): track is MusicCatalogTrack =>
+        !!track && typeof track === 'object'
+        && 'title' in track && 'url' in track && 'source' in track
+        && typeof track.title === 'string'
+        && typeof track.url === 'string'
+        && typeof track.source === 'string')
+      : [];
     renderMusicTrackOptions();
   } catch (error) {
     availableMusicTracks = [];
     renderMusicTrackOptions();
   }
 }
+
+socket.on('state:full', () => { void loadMusicTracks(); });
 
 trackPresetSelect.onchange = () => {
   if (!trackPresetSelect.value) return;
@@ -126,7 +141,7 @@ addTrackButton.onclick = async () => {
   addTrackButton.disabled = true;
   try {
     if (file) {
-      const uploaded = await uploadAudioFile(file);
+      const uploaded: { url: string; name: string } = await uploadAudioFile(file);
       url = uploaded.url;
       if (!title) title = uploaded.name.replace(/\.mp3$/i, '').replace(/[_-]+/g, ' ');
     }
@@ -151,7 +166,6 @@ addTrackButton.onclick = async () => {
   }
 };
 
-loadMusicTracks();
 
 getElementById('jb-playpause').onclick = () => {
   if (state.jukebox.isPlaying) {

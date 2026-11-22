@@ -22,7 +22,7 @@ roleDmButton.onclick = () => setRole('dm');
 rolePlayerButton.onclick = () => setRole('player');
 authLoginButton.onclick = () => setAuthMode('login');
 authRegisterButton.onclick = () => setAuthMode('register');
-function setRole(role) {
+function setRole(role: 'dm' | 'player') {
   myRole = role;
   roleDmButton.classList.toggle('active', role === 'dm');
   rolePlayerButton.classList.toggle('active', role === 'player');
@@ -34,7 +34,7 @@ function setRole(role) {
   joinError.textContent = '';
 }
 
-function setAuthMode(mode) {
+function setAuthMode(mode: 'login' | 'register') {
   authMode = mode;
   authLoginButton.classList.toggle('active', mode === 'login');
   authRegisterButton.classList.toggle('active', mode === 'register');
@@ -179,7 +179,7 @@ function updateMainNavIndicator(viewName: string) {
   indicator.style.transform = `translateX(${buttonRect.left - navRect.left - 20}px)`;
 }
 
-function renderRoute(viewName, route) {
+function renderRoute(viewName: string, route: HumblewoodRoute) {
   if (viewName === 'library' && myRole !== 'dm') {
     router.navigate('map');
     return;
@@ -195,7 +195,7 @@ function renderRoute(viewName, route) {
   if (viewName === 'dice') refreshCharacterRoller();
 }
 
-function switchView(viewName) {
+function switchView(viewName: string) {
   router.navigate(viewName);
 }
 
@@ -318,7 +318,7 @@ socket.on('notifications:update', notifications => {
   renderDmNotifications();
   if (hasNew) showToast('New private table notification.');
 });
-socket.on('safety:submitted', ({ cooldown }: any = {}) => {
+socket.on('safety:submitted', ({ cooldown } = {}) => {
   const button = getRequiredButton('player-safety-btn');
   button.disabled = true;
   button.textContent = cooldown ? 'Break request sent' : 'Break requested';
@@ -404,14 +404,20 @@ socket.on('account:passwordReset', ({ username }) => {
   showToast(`Password reset for ${username}.`);
 });
 
-function renderPlayerAccounts(accounts) {
+interface PlayerAccount {
+  username: string;
+  displayName: string;
+  createdAt: number;
+}
+
+function renderPlayerAccounts(accounts: PlayerAccount[]) {
   const list = getRequiredElement<HTMLElement>('#account-list');
   list.innerHTML = '';
   if (!accounts.length) {
     list.innerHTML = '<p class="empty-roll-options">No player accounts have been created yet.</p>';
     return;
   }
-  accounts.forEach(account => {
+  accounts.forEach((account) => {
     const row = document.createElement('div');
     row.className = 'account-list-item';
     row.innerHTML = `<strong>${escapeHtml(account.displayName)}</strong><span>@${escapeHtml(account.username)}</span>`;

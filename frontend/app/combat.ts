@@ -1,7 +1,25 @@
 /** Quick combat controls, spell preparation, conditions, and long rests. */
 
 // ================= QUICK COMBAT =================
-function openCombatManager(name) {
+type Combatant = RoomCharacter | RoomNpc | RoomToken;
+type ActiveCombatEntity =
+  | { type: 'npc'; entity: RoomToken }
+  | { type: 'character'; entity: RoomCharacter };
+interface SpellPreparationDetails {
+  className: string;
+  maximumSpellLevel: number;
+  limit: number;
+  available: CharacterSpell[];
+  alwaysPrepared: CharacterSpell[];
+  selectable: CharacterSpell[];
+  target: number;
+}
+interface PendingSpellPreparation extends SpellPreparationDetails {
+  characterName: string;
+  selected: Set<string>;
+}
+
+function openCombatManager(name: string) {
   const character = state?.characters?.[name];
   if (!character?.canManage) return showToast('You can only manage combat for your own character.');
   activeCombatTarget = { type: 'character', id: name };
@@ -11,7 +29,7 @@ function openCombatManager(name) {
   renderCombatManager();
 }
 
-function openNpcCombatManager(id) {
+function openNpcCombatManager(id: string) {
   const token = state?.tokens?.find(entry => entry.id === id && entry.kind === 'npc');
   if (myRole !== 'dm' || !token) return showToast('Only the DM can manage NPC combat.');
   activeCombatTarget = { type: 'npc', id };
@@ -28,14 +46,14 @@ function closeCombatManager() {
   overlay.setAttribute('aria-hidden', 'true');
 }
 
-function combatAction(action, extra: any = {}) {
+function combatAction(action: string, extra: Record<string, unknown> = {}) {
   if (!activeCombatTarget) return;
-  if (action === 'condition:toggle') applyOptimisticConditionToggle(extra.condition);
+  if (action === 'condition:toggle' && typeof extra.condition === 'string') applyOptimisticConditionToggle(extra.condition);
   if (activeCombatTarget.type === 'npc') socket.emit('token:combat:update', { id: activeCombatTarget.id, action, ...extra });
   else socket.emit('character:combat:update', { name: activeCombatTarget.id, action, ...extra });
 }
 
-function activeCombatEntity() {
+function activeCombatEntity(): ActiveCombatEntity | null {
   if (!activeCombatTarget) return null;
   if (activeCombatTarget.type === 'npc') {
     const token = state?.tokens?.find(entry => entry.id === activeCombatTarget.id && entry.kind === 'npc');
@@ -45,7 +63,7 @@ function activeCombatEntity() {
   return character ? { type: 'character', entity: character } : null;
 }
 
-function applyOptimisticConditionToggle(condition) {
+function applyOptimisticConditionToggle(condition: string) {
   const target = activeCombatEntity();
   if (!target || !CONDITIONS.includes(condition)) return;
   const nextConditions = combatState.toggleCondition(target.entity, condition);
@@ -147,7 +165,7 @@ function renderCombatManager() {
   if (check) checkButton.textContent = `Roll Constitution save · DC ${check.dc}`;
 }
 
-function renderCombatMovement(entity, isNpc = false) {
+function renderCombatMovement(entity: Combatant, isNpc = false) {
   const container = getElementById('combat-movement');
   if (!container) return;
   const fields = isNpc ? (entity.sheet?.fields || {}) : (entity.fields || {});
@@ -178,11 +196,11 @@ function renderCombatMovement(entity, isNpc = false) {
   if (!container.children.length) container.innerHTML = '<p class="empty-roll-options">No movement details are listed on the sheet.</p>';
 }
 
-function barbarianClass(character) {
+function barbarianClass(character: Combatant) {
   return String(character?.charClass || character?.fields?.class || '').trim().toLowerCase() === 'barbarian';
 }
 
-function barbarianRageMaxUses(level) {
+function barbarianRageMaxUses(level: number | string) {
   const value = Number(level) || 1;
   if (value >= 17) return 6;
   if (value >= 12) return 5;
@@ -191,21 +209,21 @@ function barbarianRageMaxUses(level) {
   return 2;
 }
 
-function barbarianRageDamageBonus(level) {
+function barbarianRageDamageBonus(level: number | string) {
   const value = Number(level) || 1;
   return value >= 16 ? 4 : value >= 9 ? 3 : 2;
 }
 
-function rageUsesRemaining(character) {
+function rageUsesRemaining(character: Combatant) {
   const rage = character.combat?.rage || {};
   return Math.max(0, Math.min(Number(rage.maxUses) || barbarianRageMaxUses(character.level || character.fields?.level), Number(rage.used) || 0));
 }
 
-function characterWearsHeavyArmor(character) {
+function characterWearsHeavyArmor(character: Combatant) {
   return String(character.fields?.['ac-method'] || '').toLowerCase() === 'heavy';
 }
 
-function renderCombatRage(character, isNpc = false) {
+function renderCombatRage(character: Combatant, isNpc = false) {
   const section = getElementById('combat-rage-section');
   if (!section) return;
   const available = !isNpc && barbarianClass(character);
@@ -233,7 +251,7 @@ function renderCombatRage(character, isNpc = false) {
   toggle.onclick = () => combatAction('rage:toggle', { active: !active });
 }
 
-function renderCombatFeatureUses(character, isNpc = false) {
+function renderCombatFeatureUses(character: Combatant, isNpc = false) {
   const section = getElementById('combat-feature-uses-section');
   const container = getElementById('combat-feature-uses');
   if (!section || !container) return;
@@ -270,7 +288,7 @@ function renderCombatFeatureUses(character, isNpc = false) {
   });
 }
 
-function renderCombatRolls(character, isNpc = false) {
+function renderCombatRolls(character: Combatant, isNpc = false) {
   const mode = () => getElementById('combat-roll-mode').value;
   const initiativeButton = getElementById('combat-initiative-roll');
   const initiativeModifier = isNpc ? (Number(character.initiativeModifier) || 0) : characterInitiativeModifier(character);
@@ -416,18 +434,18 @@ function renderCombatRolls(character, isNpc = false) {
   if (!spells.children.length) spells.innerHTML = '<p class="empty-roll-options">No spells are listed on the sheet.</p>';
 }
 
-function isRageMeleeStrengthAttack(attack) {
+function isRageMeleeStrengthAttack(attack: RollableAttack) {
   const details = String(attack.details || '').toLowerCase();
   if (/ranged weapon attack|ranged attack|ammunition|range\s+\d|\d+\/\d+\s*ft/.test(details)) return false;
   if (/using dexterity|dexterity-based|finesse/.test(details)) return false;
   return /melee weapon attack|melee attack|reach \d|strength/.test(details) || !details;
 }
 
-function formatDiceExpression(count, sides, modifier) {
+function formatDiceExpression(count: number, sides: number, modifier: number) {
   return `${count}d${sides}${modifier ? (modifier > 0 ? `+${modifier}` : modifier) : ''}`;
 }
 
-function renderCombatBonusActions(character, isNpc = false) {
+function renderCombatBonusActions(character: Combatant, isNpc = false) {
   const copy = getElementById('combat-bonus-actions-copy');
   if (!copy) return;
   const bonusActions = isNpc
@@ -437,7 +455,7 @@ function renderCombatBonusActions(character, isNpc = false) {
   copy.classList.toggle('empty', !String(bonusActions || '').trim());
 }
 
-function renderCombatReactions(character, isNpc = false) {
+function renderCombatReactions(character: Combatant, isNpc = false) {
   const section = getElementById('combat-reactions-section');
   const container = getElementById('combat-reactions');
   const stateLabel = getElementById('combat-reaction-state');
@@ -506,7 +524,7 @@ function renderCombatReactions(character, isNpc = false) {
   });
 }
 
-function makeCombatRollButton(label, onclick, damage = false) {
+function makeCombatRollButton(label: string, onclick: () => void, damage = false): HTMLButtonElement {
   const button = document.createElement('button');
   button.type = 'button';
   button.className = `combat-roll-button${damage ? ' damage' : ''}`;
@@ -515,31 +533,35 @@ function makeCombatRollButton(label, onclick, damage = false) {
   return button;
 }
 
-function characterKnownSpellEntries(character) {
+function characterKnownSpellEntries(character: Combatant): CharacterSpell[] {
   const structured = normalizeSpellList(character.fields?.['spell-list']);
   if (structured.length) {
     return structured
       .sort((a, b) => a.level - b.level || a.name.localeCompare(b.name));
   }
-  const entries = [];
+  const entries: CharacterSpell[] = [];
   for (let level = 0; level <= 9; level += 1) {
     const text = String(character.fields?.[`spells-${level}`] || '').trim();
     if (!text) continue;
     text.split(/\n|;/).flatMap(line => {
       const trimmed = line.trim();
       return trimmed.includes(',') && !/\d+d\d+/i.test(trimmed) ? trimmed.split(',') : [trimmed];
-    }).map(name => name.trim()).filter(Boolean).forEach(name => entries.push(normalizeSpell({ level, name }, entries.length)));
+    }).map(name => name.trim()).filter(Boolean).forEach(name => {
+      const spell = normalizeSpell({ level, name }, entries.length);
+      if (spell) entries.push(spell);
+    });
   }
   return entries;
 }
 
-function characterPreparationDetails(character) {
+function characterPreparationDetails(character: Combatant | null | undefined): SpellPreparationDetails | null {
   if (!character) return null;
   const fields = character.fields || {};
   const className = character.charClass || fields.class || '';
   const subclass = character.subclass || fields.subclass || '';
   const level = character.level || fields.level || 1;
-  const ability = characterRules.spellcastingAbilityFor(className, subclass);
+  const requestedAbility: unknown = characterRules.spellcastingAbilityFor(className, subclass);
+  const ability = typeof requestedAbility === 'string' && isAbilityKey(requestedAbility) ? requestedAbility : null;
   const abilityScore = ability ? (character.abilities?.[ability] ?? fields[ability] ?? 10) : 10;
   const limit = characterRules.preparedSpellCount(className, level, abilityScore);
   if (limit === null) return null;
@@ -560,7 +582,7 @@ function characterPreparationDetails(character) {
   };
 }
 
-function characterSpellEntries(character) {
+function characterSpellEntries(character: Combatant): CharacterSpell[] {
   const known = characterKnownSpellEntries(character);
   const preparation = characterPreparationDetails(character);
   if (!preparation) return known;
@@ -604,7 +626,7 @@ function renderSpellPreparationList() {
     updateSpellPreparationCount();
     return;
   }
-  const byLevel = new Map();
+  const byLevel = new Map<number, CharacterSpell[]>();
   visible.forEach(spell => {
     if (!byLevel.has(spell.level)) byLevel.set(spell.level, []);
     byLevel.get(spell.level).push(spell);
@@ -653,7 +675,7 @@ function renderSpellPreparationList() {
   updateSpellPreparationCount();
 }
 
-function openSpellPreparation(character, preparation = characterPreparationDetails(character)) {
+function openSpellPreparation(character: RoomCharacter, preparation = characterPreparationDetails(character)) {
   if (!preparation) return false;
   const current = preparation.selectable.filter(spell => spell.prepared === true).map(spell => spell.id);
   const hasSavedPreparation = preparation.selectable.some(spell => typeof spell.prepared === 'boolean');
@@ -696,7 +718,7 @@ getElementById('combat-concentration').onchange = event => {
 };
 document.querySelectorAll<HTMLButtonElement>('[data-combat-action]').forEach(button => {
   button.onclick = () => {
-    const actions = {
+    const actions: Record<string, [string, Record<string, unknown>]> = {
       'exhaustion-down': ['exhaustion', { delta: -1 }],
       'exhaustion-up': ['exhaustion', { delta: 1 }],
       'success-down': ['deathSave', { kind: 'successes', delta: -1 }],
@@ -704,7 +726,9 @@ document.querySelectorAll<HTMLButtonElement>('[data-combat-action]').forEach(but
       'failure-down': ['deathSave', { kind: 'failures', delta: -1 }],
       'failure-up': ['deathSave', { kind: 'failures', delta: 1 }]
     };
-    const [action, extra] = actions[button.dataset.combatAction];
+    const actionEntry = button.dataset.combatAction ? actions[button.dataset.combatAction] : undefined;
+    if (!actionEntry) return;
+    const [action, extra] = actionEntry;
     combatAction(action, extra);
   };
 });

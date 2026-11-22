@@ -1,7 +1,11 @@
 /** Nested inventory normalization, drag-and-drop ordering, containers, and item editing. */
 
-function normalizeInventory(inventory) {
-  const source = Array.isArray(inventory)
+function isUsageReset(value: string): value is UsageReset {
+  return value === 'long-rest' || value === 'short-rest' || value === 'manual';
+}
+
+function normalizeInventory(inventory: unknown): InventoryItem[] {
+  const source: unknown[] = Array.isArray(inventory)
     ? inventory
     : typeof inventory === 'string' && inventory.trim()
       ? inventory.split(/\n|,/).map(name => ({ name, qty: 1 }))
@@ -9,38 +13,39 @@ function normalizeInventory(inventory) {
   const seen = new Set();
   const items = source.map((item, index) => {
     if (!item || typeof item !== 'object') return null;
-    let id = String(item.id || `item-${Date.now()}-${index}`);
+    const fields = item as Record<string, unknown>;
+    let id = String(fields.id || `item-${Date.now()}-${index}`);
     if (!id || seen.has(id)) id = `item-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 7)}`;
     seen.add(id);
-    const quantity = item.qty === 0 ? 0 : Number(item.qty);
-    const name = String(item.name || '').trim();
-    const rawUsage = item.usage && typeof item.usage === 'object' ? item.usage : {};
-    const rawMax = rawUsage.max ?? item.usageMax ?? item.maxUses ?? item.maxCharges ?? 0;
+    const quantity = fields.qty === 0 ? 0 : Number(fields.qty);
+    const name = String(fields.name || '').trim();
+    const rawUsage = fields.usage && typeof fields.usage === 'object' ? fields.usage as Record<string, unknown> : {};
+    const rawMax = rawUsage.max ?? fields.usageMax ?? fields.maxUses ?? fields.maxCharges ?? 0;
     const max = Math.max(0, Math.min(999, Math.floor(Number(rawMax) || 0)));
-    const rawRemaining = rawUsage.remaining ?? item.usageRemaining ?? item.chargesRemaining;
-    const rawUsed = rawUsage.used ?? item.usageUsed;
+    const rawRemaining = rawUsage.remaining ?? fields.usageRemaining ?? fields.chargesRemaining;
+    const rawUsed = rawUsage.used ?? fields.usageUsed;
     const remainingValue = rawRemaining !== undefined
       ? Number(rawRemaining)
       : rawUsed !== undefined ? max - (Number(rawUsed) || 0) : max;
-    const resetValue = String(rawUsage.reset ?? item.usageReset ?? '').trim().toLowerCase();
-    const reset = ['long-rest', 'short-rest', 'manual'].includes(resetValue)
-      ? resetValue
+    const resetValue = String(rawUsage.reset ?? fields.usageReset ?? '').trim().toLowerCase();
+    const reset: UsageReset = ['long-rest', 'short-rest', 'manual'].includes(resetValue)
+      ? resetValue as UsageReset
       : max > 0 ? 'long-rest' : 'manual';
     return {
       id,
       name,
-      description: String(item.description || '').trim().slice(0, 4000),
+      description: String(fields.description || '').trim().slice(0, 4000),
       qty: Math.max(0, Math.min(9999, Number.isFinite(quantity) ? quantity : 1)),
-      location: item.location === 'carried' ? 'carried' : 'backpack',
-      isContainer: !!(item.isContainer ?? item.container) || /(?:backpack|bag|pouch|chest|satchel|quiver|case|pack)$/i.test(name),
-      containerId: String(item.containerId || '').trim() || null,
+      location: fields.location === 'carried' ? 'carried' : 'backpack',
+      isContainer: !!(fields.isContainer ?? fields.container) || /(?:backpack|bag|pouch|chest|satchel|quiver|case|pack)$/i.test(name),
+      containerId: String(fields.containerId || '').trim() || null,
       usage: {
         max,
         remaining: Math.max(0, Math.min(max, Math.floor(Number.isFinite(remainingValue) ? remainingValue : max))),
         reset
       }
     };
-  }).filter(item => item && item.name);
+  }).filter((item): item is InventoryItem => item !== null && !!item.name);
   const byId = new Map(items.map(item => [item.id, item]));
   items.forEach(item => {
     if (!item.containerId || item.containerId === item.id) {
@@ -62,29 +67,31 @@ function normalizeInventory(inventory) {
   return items;
 }
 
-function normalizeFeatureUses(features) {
+function normalizeFeatureUses(features: unknown): FeatureUse[] {
   const source = Array.isArray(features) ? features : [];
   const seen = new Set();
   return source.slice(0, 80).map((feature, index) => {
     if (!feature || typeof feature !== 'object') return null;
-    let id = String(feature.id || `feature-${index}`).trim().slice(0, 140);
+    const fields = feature as Record<string, unknown>;
+    let id = String(fields.id || `feature-${index}`).trim().slice(0, 140);
     if (!id || seen.has(id)) id = `feature-${index}-${Math.random().toString(36).slice(2, 7)}`;
     seen.add(id);
-    const max = Math.max(0, Math.min(999, Math.floor(Number(feature.max) || 0)));
-    const reset = ['long-rest', 'short-rest', 'manual'].includes(String(feature.reset || '').trim())
-      ? String(feature.reset).trim()
+    const max = Math.max(0, Math.min(999, Math.floor(Number(fields.max) || 0)));
+    const resetValue = String(fields.reset || '').trim();
+    const reset: UsageReset = ['long-rest', 'short-rest', 'manual'].includes(resetValue)
+      ? resetValue as UsageReset
       : 'long-rest';
     return {
       id,
-      name: String(feature.name || '').trim().slice(0, 100),
+      name: String(fields.name || '').trim().slice(0, 100),
       max,
-      remaining: Math.max(0, Math.min(max, Math.floor(Number(feature.remaining) || 0))),
+      remaining: Math.max(0, Math.min(max, Math.floor(Number(fields.remaining) || 0))),
       reset
     };
-  }).filter(feature => feature && feature.name);
+  }).filter((feature): feature is FeatureUse => feature !== null && !!feature.name);
 }
 
-function featureResetLabel(reset) {
+function featureResetLabel(reset: UsageReset): string {
   if (reset === 'long-rest') return 'Long rest';
   if (reset === 'short-rest') return 'Short rest';
   return 'Manual';
@@ -132,11 +139,11 @@ function renderFeatureUsageEditor() {
   });
 }
 
-function inventoryChildren(itemId) {
+function inventoryChildren(itemId: string): InventoryItem[] {
   return editingInventory.filter(item => item.containerId === itemId);
 }
 
-function inventoryIsInSubtree(itemId, rootId) {
+function inventoryIsInSubtree(itemId: string, rootId: string): boolean {
   if (!itemId || !rootId || itemId === rootId) return itemId === rootId;
   const visited = new Set();
   let current = editingInventory.find(item => item.id === itemId);
@@ -148,7 +155,7 @@ function inventoryIsInSubtree(itemId, rootId) {
   return false;
 }
 
-function inventorySubtree(itemId) {
+function inventorySubtree(itemId: string): InventoryItem[] {
   return editingInventory.filter(item => item.id === itemId || inventoryIsInSubtree(item.id, itemId));
 }
 
@@ -159,15 +166,20 @@ function clearInventoryDropIndicators() {
   });
 }
 
-function inventoryDragId(event) {
+function inventoryDragId(event: DragEvent): string {
   return event.dataTransfer?.getData('text/plain') || inventoryDraggingId;
 }
 
-function inventoryCanDropOn(sourceId, targetId) {
+function inventoryCanDropOn(sourceId: string, targetId: string): boolean {
   return !!sourceId && !!targetId && sourceId !== targetId && !inventoryIsInSubtree(targetId, sourceId);
 }
 
-function inventoryMoveSubtree(sourceId, mode, target = null, location = null) {
+function inventoryMoveSubtree(
+  sourceId: string,
+  mode: 'inside' | 'before' | 'after' | 'group',
+  target: InventoryItem | null = null,
+  location: InventoryLocation | null = null
+): boolean {
   const source = editingInventory.find(item => item.id === sourceId);
   if (!source || !editingCanEdit) return false;
   if (target && !inventoryCanDropOn(sourceId, target.id)) return false;
@@ -215,14 +227,14 @@ function inventoryMoveSubtree(sourceId, mode, target = null, location = null) {
   return true;
 }
 
-function inventoryDropMode(event, item) {
+function inventoryDropMode(event: DragEvent, item: HTMLElement): 'inside' | 'before' | 'after' {
   const rect = item.getBoundingClientRect();
   const ratio = rect.height ? (event.clientY - rect.top) / rect.height : 0.5;
   if (item.dataset.isContainer === 'true' && ratio > 0.25 && ratio < 0.75) return 'inside';
   return ratio < 0.5 ? 'before' : 'after';
 }
 
-function inventoryEffectiveLocation(item) {
+function inventoryEffectiveLocation(item: InventoryItem): InventoryLocation {
   let current = item;
   const visited = new Set();
   while (current?.containerId && !visited.has(current.id)) {
@@ -248,7 +260,7 @@ function renderInventoryContainerOptions() {
   select.value = editingInventory.some(item => item.id === selected && item.isContainer) ? selected : '';
 }
 
-function removeInventoryItem(item) {
+function removeInventoryItem(item: InventoryItem): void {
   const parent = item.containerId ? editingInventory.find(candidate => candidate.id === item.containerId) : null;
   editingInventory = editingInventory
     .filter(entry => entry.id !== item.id)
@@ -260,7 +272,7 @@ function removeInventoryItem(item) {
   renderInventoryEditor();
 }
 
-function moveInventoryItem(item) {
+function moveInventoryItem(item: InventoryItem): void {
   const effectiveLocation = inventoryEffectiveLocation(item);
   if (item.containerId) {
     item.containerId = null;
@@ -271,20 +283,20 @@ function moveInventoryItem(item) {
   renderInventoryEditor();
 }
 
-function inventoryResetLabel(reset) {
+function inventoryResetLabel(reset: UsageReset): string {
   if (reset === 'long-rest') return 'long rest';
   if (reset === 'short-rest') return 'short rest (manual)';
   return 'manual reset';
 }
 
-function inventoryUsage(item) {
-  const usage = item.usage && typeof item.usage === 'object' ? item.usage : {};
+function inventoryUsage(item: InventoryItem): InventoryUsage {
+  const usage = item.usage;
   const max = Math.max(0, Math.min(999, Math.floor(Number(usage.max) || 0)));
   const remaining = Math.max(0, Math.min(max, Math.floor(Number(usage.remaining) || 0)));
-  return { max, remaining, reset: ['long-rest', 'short-rest', 'manual'].includes(usage.reset) ? usage.reset : 'manual' };
+  return { max, remaining, reset: isUsageReset(usage.reset) ? usage.reset : 'manual' };
 }
 
-function renderInventoryEditForm(item, children) {
+function renderInventoryEditForm(item: InventoryItem, children: InventoryItem[]): HTMLElement {
   const usage = inventoryUsage(item);
   const form = document.createElement('div');
   form.className = 'inventory-item-edit-form';
@@ -331,11 +343,12 @@ function renderInventoryEditForm(item, children) {
   const resetField = document.createElement('label');
   resetField.textContent = 'Reset';
   const resetInput = document.createElement('select');
-  [
+  const resetOptions: [UsageReset, string][] = [
     ['long-rest', 'Long rest'],
     ['short-rest', 'Short rest (manual)'],
     ['manual', 'Manual']
-  ].forEach(([value, label]) => {
+  ];
+  resetOptions.forEach(([value, label]) => {
     const option = document.createElement('option');
     option.value = value;
     option.textContent = label;
@@ -358,7 +371,7 @@ function renderInventoryEditForm(item, children) {
     item.name = name;
     item.isContainer = item.isContainer || /(?:backpack|bag|pouch|chest|satchel|quiver|case|pack)$/i.test(name);
     item.description = descriptionInput.value.trim().slice(0, 4000);
-    item.usage = { max, remaining, reset: resetInput.value };
+    item.usage = { max, remaining, reset: isUsageReset(resetInput.value) ? resetInput.value : 'manual' };
     inventoryEditingId = '';
     renderInventoryEditor();
   };
@@ -381,7 +394,7 @@ function renderInventoryEditForm(item, children) {
   return form;
 }
 
-function renderInventoryItem(item) {
+function renderInventoryItem(item: InventoryItem): DocumentFragment {
   const children = inventoryChildren(item.id);
   const row = document.createElement('div');
   row.className = 'inventory-item';
@@ -420,7 +433,9 @@ function renderInventoryItem(item) {
       const sourceId = inventoryDragId(event);
       if (!inventoryCanDropOn(sourceId, item.id)) return;
       event.preventDefault();
-      const mode = row.dataset.dropMode || inventoryDropMode(event, row);
+        const mode = row.dataset.dropMode === 'inside' || row.dataset.dropMode === 'before' || row.dataset.dropMode === 'after'
+          ? row.dataset.dropMode
+          : inventoryDropMode(event, row);
       inventoryMoveSubtree(sourceId, mode, item);
     });
   }
@@ -536,7 +551,7 @@ function renderInventoryEditor() {
   if (!list) return;
   list.innerHTML = '';
   renderInventoryContainerOptions();
-  ['carried', 'backpack'].forEach(location => {
+  (['carried', 'backpack'] as InventoryLocation[]).forEach(location => {
     const group = document.createElement('section');
     group.className = 'inventory-group';
     group.dataset.location = location;
@@ -594,6 +609,7 @@ getElementById('inv-add-btn').onclick = () => {
   const parent = editingInventory.find(item => item.id === containerInput.value && item.isContainer);
   const quantity = Number(qtyInput.value);
   const usageMax = Math.max(0, Math.min(999, Math.floor(Number(usageMaxInput.value) || 0)));
+  const usageReset = usageResetInput.value;
   const location = parent ? inventoryEffectiveLocation(parent) : (locationInput.value === 'carried' ? 'carried' : 'backpack');
   const item = {
     id: `item-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
@@ -603,7 +619,7 @@ getElementById('inv-add-btn').onclick = () => {
     location,
     isContainer: !!containerFlag.checked,
     containerId: parent?.id || null,
-    usage: { max: usageMax, remaining: usageMax, reset: usageResetInput.value }
+    usage: { max: usageMax, remaining: usageMax, reset: isUsageReset(usageReset) ? usageReset : 'long-rest' }
   };
   editingInventory.push(item);
   if (parent) inventoryExpandedContainers.add(parent.id);

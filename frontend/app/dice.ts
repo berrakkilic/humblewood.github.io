@@ -29,8 +29,8 @@ function privateDiceRollActive() {
     getElementById('view-dice')?.classList.contains('active');
 }
 
-function setPendingDiceRollMode(mode = 'normal') {
-  pendingDiceRollMode = ['advantage', 'disadvantage'].includes(mode) ? mode : 'normal';
+function setPendingDiceRollMode(mode: string = 'normal') {
+  pendingDiceRollMode = mode === 'advantage' || mode === 'disadvantage' ? mode : 'normal';
   document.querySelectorAll<HTMLButtonElement>('.dice-roll-mode-btn').forEach(button => {
     const active = button.dataset.mode === pendingDiceRollMode;
     button.classList.toggle('active', active);
@@ -57,7 +57,21 @@ document.querySelectorAll<HTMLButtonElement>('.dice-roll-mode-btn').forEach(butt
   };
 });
 
-function rollDiceFromDiceScreen(count, sides, modifier, options: any = {}) {
+interface DiceRollOptions {
+  name?: string;
+  mode?: string;
+  spell?: boolean;
+  label?: string;
+  characterName?: string | null;
+  npcId?: string | null;
+  initiativeName?: string | null;
+  tokenId?: string | null;
+  targetDc?: number | null;
+  concentrationFor?: string | null;
+  private?: boolean;
+}
+
+function rollDiceFromDiceScreen(count: number, sides: number, modifier: number, options: DiceRollOptions = {}) {
   rollDice(count, sides, modifier, {
     ...options,
     mode: consumePendingDiceRollMode()
@@ -76,7 +90,7 @@ getRequiredButton('roll-custom-btn').onclick = () => {
   );
 };
 
-function rollDice(count, sides, modifier, options: any = {}) {
+function rollDice(count: number, sides: number, modifier: number, options: DiceRollOptions = {}) {
   socket.emit('roll:make', {
     name: options.name || myName,
     count,
@@ -94,7 +108,7 @@ function rollDice(count, sides, modifier, options: any = {}) {
   });
 }
 
-function rollPopupText(entry, privateRoll = false) {
+function rollPopupText(entry: SocketRollEntry, privateRoll = false) {
   const roller = String(entry.name || 'Someone').trim() || 'Someone';
   const rollLabel = String(entry.label || entry.expression || 'a roll').trim() || 'a roll';
   const showOutcome = entry.targetDc && !/\b(?:attack|damage)\b/i.test(entry.label || '');
@@ -119,7 +133,7 @@ socket.on('roll:private', (entry) => {
   showToast(rollPopupText(entry, true));
 });
 
-function rollBreakdownText(entry) {
+function rollBreakdownText(entry: SocketRollEntry): string {
   const modifier = entry.modifier
     ? ` ${entry.modifier > 0 ? '+' : ''}${entry.modifier}`
     : '';
@@ -143,7 +157,7 @@ function renderRollLog() {
     ...((state && state.rollLog) || []),
     ...(myRole === 'dm' ? privateRollLog : [])
   ].sort((a, b) => Number(b.ts) - Number(a.ts)).slice(0, 15);
-  entries.forEach(entry => {
+  entries.forEach((entry: SocketRollEntry) => {
     const row = document.createElement('div');
     const rolls = Array.isArray(entry.rolls) ? entry.rolls : [];
     const kept = Number.isFinite(Number(entry.kept)) ? Number(entry.kept) : (rolls.length === 1 ? rolls[0] : null);
@@ -170,13 +184,13 @@ function renderRollLog() {
 
 getRequiredSelect('dice-character').onchange = renderCharacterRollOptions;
 
-function rollableCharacters() {
+function rollableCharacters(): RoomCharacter[] {
   const all = Object.values(state?.characters || {}).sort((a, b) => a.name.localeCompare(b.name));
   if (myRole === 'dm') return all;
   return all.filter(character => character.canManage);
 }
 
-function openCharacterRoller(name) {
+function openCharacterRoller(name: string) {
   switchView('dice');
   refreshCharacterRoller(name);
   getElementById('character-roller-title').scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -271,14 +285,14 @@ function renderCharacterRollOptions() {
   });
 
   const skillButtons = createDiceRollGroup(container, 'Skills');
-  Object.keys(SKILL_ABILITIES).forEach(skill => {
+  (Object.keys(SKILL_ABILITIES) as SkillName[]).forEach(skill => {
     const modifier = characterSkillModifier(character, skill);
     appendRollButton(skillButtons, SKILL_LABELS[skill], modifier, () => rollCharacterD20(character, `${SKILL_LABELS[skill]} check`, modifier));
   });
 
 }
 
-function renderNpcRollOptions(container, npc) {
+function renderNpcRollOptions(container: HTMLElement, npc: RoomNpc) {
   const combatButtons = createDiceRollGroup(container, 'Combat');
   appendRollButton(combatButtons, 'Initiative', Number(npc.initiativeModifier) || 0, () => rollNpcSheetInitiative(npc));
   const spellAttack = npc.spellcasting?.attackBonus ?? npc.sheet?.spellcasting?.attackBonus ?? npc.sheet?.fields?.['spell-attack'];
@@ -349,7 +363,7 @@ function renderNpcRollOptions(container, npc) {
   });
 
   const skillButtons = createDiceRollGroup(container, 'Skills');
-  Object.keys(SKILL_ABILITIES).forEach(skill => {
+  (Object.keys(SKILL_ABILITIES) as SkillName[]).forEach(skill => {
     const modifier = npcSkillModifier(npc, skill);
     appendRollButton(skillButtons, SKILL_LABELS[skill], modifier, () => (
       rollNpcSheetD20(npc, `${SKILL_LABELS[skill]} check`, modifier)
@@ -357,7 +371,7 @@ function renderNpcRollOptions(container, npc) {
   });
 }
 
-function createDiceRollGroup(container, title) {
+function createDiceRollGroup(container: HTMLElement, title: string): HTMLDivElement {
   const group = document.createElement('section');
   group.className = 'roll-group';
   const heading = document.createElement('h4');
@@ -369,7 +383,14 @@ function createDiceRollGroup(container, title) {
   return buttons;
 }
 
-function appendRollButton(container, label, modifier, onclick, damage = false, valueLabel = null) {
+function appendRollButton(
+  container: HTMLElement,
+  label: string,
+  modifier: number,
+  onclick: () => void,
+  damage = false,
+  valueLabel: string | null = null
+) {
   const button = document.createElement('button');
   button.type = 'button';
   button.className = 'modifier-roll-btn' + (damage ? ' damage' : '');
@@ -378,11 +399,11 @@ function appendRollButton(container, label, modifier, onclick, damage = false, v
   container.appendChild(button);
 }
 
-function characterRollName(character) {
+function characterRollName(character: Combatant): string {
   return myName === character.name ? character.name : `${myName} as ${character.name}`;
 }
 
-function rollCharacterD20(character, label, modifier, extra: any = {}) {
+function rollCharacterD20(character: Combatant, label: string, modifier: number, extra: DiceRollOptions = {}) {
   const mode = extra.mode || consumePendingDiceRollMode();
   rollDice(1, 20, modifier, {
     name: characterRollName(character),
@@ -393,7 +414,7 @@ function rollCharacterD20(character, label, modifier, extra: any = {}) {
   });
 }
 
-function rollCharacterInitiative(character, forcedMode = null) {
+function rollCharacterInitiative(character: Combatant, forcedMode: string | null = null) {
   const token = state.tokens.find(entry => entry.label.toLowerCase() === character.name.toLowerCase());
   rollDice(1, 20, characterInitiativeModifier(character), {
     name: characterRollName(character),
@@ -405,7 +426,7 @@ function rollCharacterInitiative(character, forcedMode = null) {
   });
 }
 
-function rollNpcD20(token, label, modifier, mode = 'normal', extra: any = {}) {
+function rollNpcD20(token: Combatant, label: string, modifier: number, mode: string = 'normal', extra: DiceRollOptions = {}) {
   rollDice(1, 20, modifier, {
     name: `${myName} as ${token.label}`,
     tokenId: token.id,
@@ -415,14 +436,14 @@ function rollNpcD20(token, label, modifier, mode = 'normal', extra: any = {}) {
   });
 }
 
-function rollNpcInitiative(token, mode = 'normal') {
+function rollNpcInitiative(token: Combatant, mode: string = 'normal') {
   const modifier = Number(token.initiativeModifier) || 0;
   rollNpcD20(token, `${token.label} initiative`, modifier, mode, {
     initiativeName: token.label
   });
 }
 
-function rollNpcSheetD20(npc, label, modifier, extra: any = {}) {
+function rollNpcSheetD20(npc: RoomNpc, label: string, modifier: number, extra: DiceRollOptions = {}) {
   const mode = extra.mode || consumePendingDiceRollMode();
   rollDice(1, 20, modifier, {
     npcId: npc.id,
@@ -432,48 +453,48 @@ function rollNpcSheetD20(npc, label, modifier, extra: any = {}) {
   });
 }
 
-function rollNpcSheetInitiative(npc) {
+function rollNpcSheetInitiative(npc: RoomNpc) {
   const modifier = Number(npc.initiativeModifier) || 0;
   rollNpcSheetD20(npc, `${npc.name} initiative`, modifier, {
     initiativeName: npc.name
   });
 }
 
-function characterInitiativeModifier(character) {
+function characterInitiativeModifier(character: Combatant): number {
   const stored = character.initiativeModifier ?? character.fields?.initiative;
   if (stored !== '' && stored !== undefined && stored !== null) return Number(stored) || 0;
   return abilityModifier(character.abilities?.dex);
 }
 
-function characterSaveModifier(character, ability) {
+function characterSaveModifier(character: Combatant, ability: AbilityKey): number {
   const saved = character.saves?.[ability]?.modifier ?? character.fields?.[`save-${ability}`];
   if (saved !== '' && saved !== undefined && saved !== null) return Number(saved) || 0;
   return abilityModifier(character.abilities?.[ability]) + (character.saves?.[ability]?.proficient ? proficiencyBonus(character.level) : 0);
 }
 
-function characterSkillModifier(character, skill) {
+function characterSkillModifier(character: RoomCharacter, skill: SkillName): number {
   const saved = character.skills?.[skill]?.modifier ?? character.fields?.[`skill-${skill}`];
   if (saved !== '' && saved !== undefined && saved !== null) return Number(saved) || 0;
   return abilityModifier(character.abilities?.[SKILL_ABILITIES[skill]]) + (character.skills?.[skill]?.proficient ? proficiencyBonus(character.level) : 0);
 }
 
-function npcAbilityScore(npc, ability) {
+function npcAbilityScore(npc: RoomNpc, ability: AbilityKey): number {
   return Number(npc.sheet?.abilities?.[ability] ?? npc.sheet?.fields?.[ability]) || 10;
 }
 
-function npcSaveModifier(npc, ability) {
+function npcSaveModifier(npc: RoomNpc, ability: AbilityKey): number {
   const saved = npc.sheet?.saves?.[ability]?.modifier ?? npc.sheet?.fields?.[`save-${ability}`];
   if (saved !== '' && saved !== undefined && saved !== null) return Number(saved) || 0;
   return abilityModifier(npcAbilityScore(npc, ability));
 }
 
-function npcSkillModifier(npc, skill) {
+function npcSkillModifier(npc: RoomNpc, skill: SkillName): number {
   const saved = npc.sheet?.skills?.[skill]?.modifier ?? npc.sheet?.fields?.[`skill-${skill}`];
   if (saved !== '' && saved !== undefined && saved !== null) return Number(saved) || 0;
   return abilityModifier(npcAbilityScore(npc, SKILL_ABILITIES[skill]));
 }
 
-function parseDiceExpression(value) {
+function parseDiceExpression(value: unknown): { count: number; sides: number; modifier: number; expression: string } | null {
   const match = String(value || '').replace(/\s+/g, '').match(/(\d*)d(\d+)([+-]\d+)?/i);
   if (!match) return null;
   const count = Math.max(1, Number(match[1]) || 1);

@@ -58,15 +58,15 @@ function renderInitiative() {
       };
       row.appendChild(dragHandle);
     }
-    const value: any = document.createElement(myRole === 'dm' ? 'input' : 'div');
+    const value = document.createElement(myRole === 'dm' ? 'input' : 'div');
     value.className = 'init-value' + (myRole === 'dm' ? ' init-value-edit' : '');
-    if (myRole === 'dm') {
+    if (value instanceof HTMLInputElement) {
       value.type = 'number';
-      value.value = entry.value;
+      value.value = String(entry.value);
       value.title = `Edit ${entry.name}'s initiative`;
       value.onchange = () => socket.emit('initiative:edit', { id: entry.id, value: Number(value.value) });
     } else {
-      value.textContent = entry.value;
+      value.textContent = String(entry.value);
     }
     const name = document.createElement('div');
     name.className = 'init-name';

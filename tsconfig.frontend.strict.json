@@ -1,0 +1,34 @@
+{
+  "extends": "./tsconfig.frontend.json",
+  "compilerOptions": {
+    "noImplicitAny": true
+  },
+  "files": [
+    "frontend/types/globals.d.ts",
+    "frontend/types/strict-attack-dependencies.d.ts",
+    "frontend/types/strict-initiative-dependencies.d.ts",
+    "frontend/types/strict-level-up-dependencies.d.ts",
+    "frontend/types/strict-sheet-dependencies.d.ts",
+    "frontend/types/strict-session-dependencies.d.ts",
+    "frontend/types/strict-token-dependencies.d.ts",
+    "frontend/app/ui/overlays.ts",
+    "frontend/app/state.ts",
+    "frontend/app/shared.ts",
+    "frontend/app/session.ts",
+    "frontend/app/map.ts",
+    "frontend/app/map-doodles.ts",
+    "frontend/app/doodle-corner.ts",
+    "frontend/app/characters/attacks.ts",
+    "frontend/app/characters/reactions.ts",
+    "frontend/app/characters/level-up.ts",
+    "frontend/app/characters/inventory.ts",
+    "frontend/app/characters/sheet.ts",
+    "frontend/app/characters/spells.ts",
+    "frontend/app/dice.ts",
+    "frontend/app/combat.ts",
+    "frontend/app/tokens.ts",
+    "frontend/app/library.ts",
+    "frontend/app/initiative.ts",
+    "frontend/app/jukebox.ts"
+  ]
+}

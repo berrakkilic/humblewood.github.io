@@ -177,14 +177,14 @@ async function run() {
     .filter(file => file.endsWith('.ts') && !file.endsWith('.d.ts'))
     .map(file => fs.readFileSync(path.join(project, file), 'utf8'))
     .join('\n');
-  assert.match(frontendSource, /function tokenHoverText\(token\)/);
+  assert.match(frontendSource, /function tokenHoverText\(token: RoomToken\)/);
   assert.match(frontendSource, /Pronouns: \$\{pronouns\}/);
-  assert.match(frontendSource, /function uploadAudioFile\(file\)/);
+  assert.match(frontendSource, /function uploadAudioFile\(file: File\)/);
   assert.match(frontendSource, /fetch\('\/api\/music'\)/);
   assert.match(frontendSource, /function renderLibrary\(\)/);
   assert.match(frontendSource, /library:broadcast/);
-  assert.match(frontendSource, /function uploadLibraryFile\(file\)/);
-  assert.match(frontendSource, /function npcDirectoryMatches\(npc\)/);
+  assert.match(frontendSource, /function uploadLibraryFile\(file: File\)/);
+  assert.match(frontendSource, /function npcDirectoryMatches\(npc: RoomNpc\)/);
   assert.match(frontendSource, /npcRaceFilter/);
   assert.match(frontendSource, /broadcast\.kind === 'html'/);
   assert.match(frontendSource, /function renderDmNotifications\(\)/);
@@ -197,7 +197,7 @@ async function run() {
   assert.match(frontendSource, /function rollDiceFromDiceScreen\(/);
   assert.match(frontendSource, /humblewood:shop-purchase-request/);
   assert.match(frontendSource, /socket\.emit\('shop:purchase'/);
-  assert.match(frontendSource, /function characterPreparationDetails\(character\)/);
+  assert.match(frontendSource, /function characterPreparationDetails\(character: Combatant/);
   assert.match(frontendSource, /preparedSpellIds/);
   assert.match(frontendSource, /sandbox', 'allow-scripts'/);
   assert.doesNotMatch(frontendSource, /allow-same-origin/);

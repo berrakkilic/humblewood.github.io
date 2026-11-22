@@ -1,10 +1,39 @@
 /** Token and NPC creation, rosters, directory filters, and sidebars. */
 
 // ---- Token and NPC creation ----
+interface NpcAttack {
+  name: string;
+  bonus: string;
+  damage: string;
+}
+
+interface NpcDirectoryDetails {
+  race: string;
+  raceKey: string;
+  subrace: string;
+  className: string;
+  classKey: string;
+  background: string;
+  searchText: string;
+}
+
+interface NpcFilterOption {
+  key: string;
+  label: string;
+}
+
+interface NpcFilterEventTarget extends EventTarget {
+  id?: string;
+  selectionStart?: number | null;
+}
+
+type NpcDetailLabelKey = 'race' | 'className';
+type NpcDetailFilterKey = 'raceKey' | 'classKey';
+
 getRequiredSelect('token-kind').onchange = updateTokenCreateForm;
 getRequiredButton('cancel-npc-edit-btn').onclick = resetNpcEditor;
 
-function updateTokenCreateForm() {
+function updateTokenCreateForm(): void {
   const selectedKind = getRequiredSelect('token-kind').value;
   const kind: RoomToken['kind'] = selectedKind === 'pc' || selectedKind === 'npc' || selectedKind === 'item'
     ? selectedKind
@@ -14,14 +43,14 @@ function updateTokenCreateForm() {
   if (!editingNpcId) getRequiredButton('add-token-btn').textContent = kind === 'npc' ? 'Create NPC & place' : 'Add to map';
 }
 
-function parseNpcAttacks(text) {
+function parseNpcAttacks(text: string): NpcAttack[] {
   return String(text || '').split('\n').map(line => line.trim()).filter(Boolean).map(line => {
     const [name = '', bonus = '', damage = ''] = line.split('|').map(part => part.trim());
     return { name, bonus, damage };
   }).filter(attack => attack.name);
 }
 
-function npcAttacksText(attacks) {
+function npcAttacksText(attacks: NpcAttack[] = []): string {
   return (attacks || []).map(attack => [attack.name, attack.bonus, attack.damage].join(' | ')).join('\n');
 }
 
@@ -67,7 +96,7 @@ getRequiredButton('add-token-btn').onclick = async () => {
   resetNpcEditor();
 };
 
-function editNpc(npcId) {
+function editNpc(npcId: string): void {
   const npc = state.npcs?.[npcId];
   if (!npc) return;
   editingNpcId = npcId;
@@ -86,7 +115,7 @@ function editNpc(npcId) {
   getRequiredInput('token-name').focus();
 }
 
-function resetNpcEditor() {
+function resetNpcEditor(): void {
   editingNpcId = null;
   getRequiredSelect('token-kind').disabled = false;
   getRequiredInput('token-name').value = '';
@@ -101,7 +130,7 @@ function resetNpcEditor() {
   updateTokenCreateForm();
 }
 
-function renderTokenTray() {
+function renderTokenTray(): void {
   const list = getRequiredElement<HTMLElement>('#token-list');
   list.innerHTML = '';
   state.tokens.forEach(t => {
@@ -176,7 +205,7 @@ document.querySelectorAll<HTMLDetailsElement>('.sidebar-accordion').forEach(deta
   });
 });
 
-function renderDmSidebarSummary() {
+function renderDmSidebarSummary(): void {
   const summary = getRequiredElement<HTMLElement>('#dm-sidebar-summary');
   if (!state) return;
   const tokens = state.tokens || [];
@@ -194,7 +223,7 @@ function renderDmSidebarSummary() {
   summary.textContent = parts.join(' · ');
 }
 
-function npcDirectoryDetails(npc) {
+function npcDirectoryDetails(npc: RoomNpc): NpcDirectoryDetails {
   const fields = npc?.sheet?.fields || {};
   const sheet = npc?.sheet || {};
   const race = String(
@@ -220,7 +249,7 @@ function npcDirectoryDetails(npc) {
   };
 }
 
-function npcDirectoryMatches(npc) {
+function npcDirectoryMatches(npc: RoomNpc): boolean {
   const details = npcDirectoryDetails(npc);
   const query = npcSearchQuery.trim().toLowerCase();
   if (query && !details.searchText.includes(query)) return false;
@@ -229,12 +258,12 @@ function npcDirectoryMatches(npc) {
   return true;
 }
 
-function filteredNpcDirectory(npcs = Object.values(state?.npcs || {})) {
+function filteredNpcDirectory(npcs: RoomNpc[] = Object.values(state?.npcs || {}) as RoomNpc[]): RoomNpc[] {
   return npcs.filter(npcDirectoryMatches);
 }
 
-function npcFilterValues(npcs, property, keyProperty) {
-  const values = new Map();
+function npcFilterValues(npcs: RoomNpc[], property: NpcDetailLabelKey, keyProperty: NpcDetailFilterKey): NpcFilterOption[] {
+  const values = new Map<string, string>();
   npcs.forEach(npc => {
     const details = npcDirectoryDetails(npc);
     const key = details[keyProperty];
@@ -245,7 +274,7 @@ function npcFilterValues(npcs, property, keyProperty) {
     .sort((a, b) => a.label.localeCompare(b.label));
 }
 
-function refreshNpcViewsAfterFilter(event) {
+function refreshNpcViewsAfterFilter(event: { target?: NpcFilterEventTarget | null } | null): void {
   const focusedId = event?.target?.id || '';
   const selectionStart = typeof event?.target?.selectionStart === 'number' ? event.target.selectionStart : null;
   renderNpcRoster();
@@ -260,7 +289,7 @@ function refreshNpcViewsAfterFilter(event) {
   }
 }
 
-function renderNpcFilterControls() {
+function renderNpcFilterControls(): void {
   if (!state) return;
   const allNpcs = Object.values(state.npcs || {});
   const races = npcFilterValues(allNpcs, 'race', 'raceKey');
@@ -335,12 +364,12 @@ function renderNpcFilterControls() {
   });
 }
 
-function renderNpcRoster() {
+function renderNpcRoster(): void {
   const roster = getRequiredElement<HTMLElement>('#npc-roster');
   if (!state) return;
   renderNpcFilterControls();
   roster.innerHTML = '';
-  const allNpcs = Object.values(state.npcs || {});
+  const allNpcs = Object.values(state.npcs || {}) as RoomNpc[];
   const npcs = filteredNpcDirectory(allNpcs).sort((a, b) => a.name.localeCompare(b.name));
   if (!npcs.length) {
     roster.innerHTML = `<p class="player-sidebar-empty">${allNpcs.length ? 'No NPCs match these filters.' : 'No NPCs created yet.'}</p>`;
@@ -378,7 +407,7 @@ function renderNpcRoster() {
   });
 }
 
-function renderOnlineUsers() {
+function renderOnlineUsers(): void {
   const list = getRequiredElement<HTMLElement>('#dm-online-list');
   const count = getRequiredElement<HTMLElement>('#dm-online-count');
   if (myRole !== 'dm') return;
@@ -402,7 +431,7 @@ function renderOnlineUsers() {
   });
 }
 
-function renderPlayerSidebar() {
+function renderPlayerSidebar(): void {
   const container = getRequiredElement<HTMLElement>('#player-character-summary');
   if (!state) return;
   container.innerHTML = '';
@@ -414,7 +443,7 @@ function renderPlayerSidebar() {
   characters.forEach(character => {
     const species = character.species || character.race || '';
     const charClass = character.charClass || character.className || '';
-    const skilled = Object.keys(SKILL_ABILITIES)
+    const skilled = (Object.keys(SKILL_ABILITIES) as (keyof typeof SKILL_LABELS)[])
       .filter(skill => character.skills?.[skill]?.proficient || character.fields?.[`skill-${skill}-prof`])
       .slice(0, 4)
       .map(skill => `${SKILL_LABELS[skill]} ${signed(characterSkillModifier(character, skill))}`);

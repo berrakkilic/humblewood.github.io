@@ -2,7 +2,9 @@
 
 // ---- Spell list editor ----
 const SPELL_LEVEL_NAMES = ['Cantrip', 'Level 1', 'Level 2', 'Level 3', 'Level 4', 'Level 5', 'Level 6', 'Level 7', 'Level 8', 'Level 9'];
-const HUMBLEWOOD_SPELL_PRESETS = [
+type SpellPreset = Omit<CharacterSpell, 'id'> & { id?: string };
+
+const HUMBLEWOOD_SPELL_PRESETS: SpellPreset[] = [
   {
     name: 'Ambush Prey', level: 2, school: 'Illusion', range: 'Self', castingTime: '1 action',
     duration: '1 hour', components: 'S, M (a broken twig)', attack: 'First attack against an unaware target',
@@ -56,50 +58,52 @@ const HUMBLEWOOD_SPELL_PRESETS = [
   }
 ];
 
-function allSpellPresets() {
-  return [
+function allSpellPresets(): CharacterSpell[] {
+  const presets: unknown[] = [
     ...HUMBLEWOOD_SPELL_PRESETS,
     ...(window.HumblewoodPhbSpellPresets?.PHB_SPELL_PRESETS || []),
     ...creationPresets.STANDARD_SPELL_PRESETS
   ];
+  return presets.map(normalizeSpell).filter((spell): spell is CharacterSpell => spell !== null);
 }
 
-function normalizeSpell(spell, index = 0) {
+function normalizeSpell(spell: unknown, index = 0): CharacterSpell | null {
   if (!spell || typeof spell !== 'object') return null;
-  const name = String(spell.name || '').trim();
+  const source = spell as Record<string, unknown>;
+  const name = String(source.name || '').trim();
   if (!name) return null;
-  const normalized: any = {
-    id: String(spell.id || `spell-normalized-${index}`),
+  const normalized: CharacterSpell = {
+    id: String(source.id || `spell-normalized-${index}`),
     name,
-    level: Math.max(0, Math.min(9, Number(spell.level) || 0)),
-    school: String(spell.school || '').trim(),
-    range: String(spell.range || '').trim(),
-    castingTime: String(spell.castingTime || '').trim(),
-    duration: String(spell.duration || '').trim(),
-    components: String(spell.components || '').trim(),
-    attack: String(spell.attack || '').trim(),
-    damage: String(spell.damage || '').trim(),
-    effect: String(spell.effect ?? spell.description ?? '').trim(),
-    source: String(spell.source || '').trim()
+    level: Math.max(0, Math.min(9, Number(source.level) || 0)),
+    school: String(source.school || '').trim(),
+    range: String(source.range || '').trim(),
+    castingTime: String(source.castingTime || '').trim(),
+    duration: String(source.duration || '').trim(),
+    components: String(source.components || '').trim(),
+    attack: String(source.attack || '').trim(),
+    damage: String(source.damage || '').trim(),
+    effect: String(source.effect ?? source.description ?? '').trim(),
+    source: String(source.source || '').trim()
   };
-  if (typeof spell.prepared === 'boolean') normalized.prepared = spell.prepared;
-  if (spell.alwaysPrepared === true) normalized.alwaysPrepared = true;
+  if (typeof source.prepared === 'boolean') normalized.prepared = source.prepared;
+  if (source.alwaysPrepared === true) normalized.alwaysPrepared = true;
   return normalized;
 }
 
-function normalizeSpellList(raw) {
-  let list = Array.isArray(raw) ? raw : null;
+function normalizeSpellList(raw: unknown): CharacterSpell[] {
+  let list: unknown[] | null = Array.isArray(raw) ? raw : null;
   if (typeof raw === 'string' && raw.trim()) {
     try {
-      const parsed = JSON.parse(raw);
+      const parsed: unknown = JSON.parse(raw);
       if (Array.isArray(parsed)) list = parsed;
     } catch (err) { /* not JSON, treated as empty — legacy text lives in spells-N fields */ }
   }
-  return (list || []).map(normalizeSpell).filter(Boolean);
+  return (list || []).map(normalizeSpell).filter((spell): spell is CharacterSpell => spell !== null);
 }
 
-function migrateLegacySpellText(fields) {
-  const migrated = [];
+function migrateLegacySpellText(fields: Record<string, unknown>): CharacterSpell[] {
+  const migrated: CharacterSpell[] = [];
   for (let level = 0; level <= 9; level += 1) {
     const text = String(fields?.[`spells-${level}`] || '').trim();
     if (!text) continue;
@@ -130,7 +134,7 @@ function renderSpellListEditor() {
     getElementById('sf-level').value,
     10
   ) !== null;
-  const byLevel = new Map();
+  const byLevel = new Map<number, CharacterSpell[]>();
   editingSpells.forEach(spell => {
     const level = Math.max(0, Math.min(9, Number(spell.level) || 0));
     if (!byLevel.has(level)) byLevel.set(level, []);
@@ -209,12 +213,12 @@ function renderSpellListEditor() {
   syncSpellListField();
 }
 
-function populateSpellForm(spell: any = {}) {
+function populateSpellForm(spell: Partial<CharacterSpell> = {}) {
   const form = getElementById('spell-add-form');
-  const normalized: any = normalizeSpell({ name: spell.name || ' ', ...spell }) || {};
+  const normalized = normalizeSpell({ ...spell, name: spell.name || ' ' })!;
   form.dataset.spellSource = normalized.source || '';
   getElementById('spell-form-name').value = spell.name || '';
-  getElementById('spell-form-level').value = normalized.level ?? '0';
+  getElementById('spell-form-level').value = String(normalized.level);
   getElementById('spell-form-school').value = normalized.school || '';
   getElementById('spell-form-range').value = normalized.range || '';
   getElementById('spell-form-casting-time').value = normalized.castingTime || '';
@@ -226,7 +230,7 @@ function populateSpellForm(spell: any = {}) {
   getElementById('spell-form-always-prepared').checked = !!normalized.alwaysPrepared;
 }
 
-function openSpellForm(spell) {
+function openSpellForm(spell: CharacterSpell | null) {
   const form = getElementById('spell-add-form');
   form.classList.remove('hidden');
   editingSpellId = spell ? spell.id : null;
@@ -252,13 +256,13 @@ const spellPresetSelect = getElementById('spell-preset-select');
 });
 applyPresetSearch('spell-preset-select', 'spell-preset-search');
 
-function selectedSpellPreset() {
+function selectedSpellPreset(): CharacterSpell | undefined {
   const [source, ...nameParts] = spellPresetSelect.value.split('::');
   const name = nameParts.join('::');
   return allSpellPresets().find(spell => spell.source === source && spell.name === name);
 }
 
-function addSpellNames(raw) {
+function addSpellNames(raw: string) {
   const names = String(raw || '').split(/[,;\n]/).map(name => name.trim()).filter(Boolean);
   if (!names.length) return showToast('Enter at least one spell name.');
   let added = 0;
@@ -327,11 +331,11 @@ getElementById('sf-portrait').onchange = (event) => {
   pendingPortraitFile = input?.files?.[0] || null;
   if (!pendingPortraitFile) return renderPortraitPreview(editingPortraitUrl);
   const reader = new FileReader();
-  reader.onload = () => renderPortraitPreview(reader.result);
+  reader.onload = () => renderPortraitPreview(typeof reader.result === 'string' ? reader.result : null);
   reader.readAsDataURL(pendingPortraitFile);
 };
 
-function renderPortraitPreview(url) {
+function renderPortraitPreview(url: string | null) {
   const preview = getElementById('portrait-preview');
   preview.innerHTML = '';
   if (!url) {
@@ -344,8 +348,8 @@ function renderPortraitPreview(url) {
   preview.appendChild(image);
 }
 
-function collectCharacterFields() {
-  const fields: any = {};
+function collectCharacterFields(): Record<string, string | boolean> {
+  const fields: Record<string, string | boolean> = {};
   document.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>('#sheet-form [id^="sf-"]').forEach(input => {
     if (input instanceof HTMLInputElement && input.type === 'file') return;
     const key = input.id.slice(3);
@@ -380,7 +384,7 @@ getElementById('save-sheet-btn').onclick = async () => {
     return;
   }
 
-  const num = (key, fallback = 0) => Number(fields[key]) || fallback;
+  const num = (key: string, fallback = 0) => Number(fields[key]) || fallback;
   const sheet = {
     name,
     pronouns: String(fields.pronouns || '').trim(),
@@ -422,7 +426,7 @@ getElementById('save-sheet-btn').onclick = async () => {
   };
   if (isNpc) {
     const existing = editingNpcSheetId === '__new__' ? null : state.npcs?.[editingNpcSheetId];
-    const spellSlots = {};
+    const spellSlots: Record<number, { total: number; used: number }> = {};
     for (let level = 1; level <= 9; level += 1) {
       const total = Math.max(0, Number(fields[`spell-slots-${level}`]) || 0);
       spellSlots[level] = {
@@ -483,11 +487,11 @@ getElementById('delete-sheet-btn').onclick = () => {
   getElementById('sheet-editor').classList.add('hidden');
 };
 
-function abilityModifier(score) {
+function abilityModifier(score: number | string) {
   return Math.floor(((Number(score) || 10) - 10) / 2);
 }
 
-function proficiencyBonus(level) {
+function proficiencyBonus(level: number | string) {
   return 2 + Math.floor((Math.max(1, Math.min(20, Number(level) || 1)) - 1) / 4);
 }
 
@@ -523,7 +527,7 @@ function refreshArmorClass() {
   baseInput.readOnly = !['light', 'medium', 'heavy'].includes(method);
   if (automatic) armorClassInput.value = String(calculated);
 
-  const notes = {
+  const notes: Record<string, string> = {
     manual: 'Manual AC remains unchanged.',
     unarmored: '10 + Dexterity modifier + the shield/other bonus.',
     light: 'Armor base + Dexterity modifier + the shield/other bonus.',
@@ -537,7 +541,7 @@ function refreshArmorClass() {
   getElementById('ac-calculation-note').textContent = notes[method] || notes.manual;
 }
 
-function refreshCharacterCalculations(force, recalculateSpell = false) {
+function refreshCharacterCalculations(force: boolean, recalculateSpell = false) {
   const level = getElementById('sf-level');
   const bonus = proficiencyBonus(level.value);
   getElementById('sf-prof-bonus').value = String(bonus);
@@ -561,7 +565,7 @@ function refreshCharacterCalculations(force, recalculateSpell = false) {
   const passive = getElementById('sf-passive-perception');
   if (force || passive.value === '') passive.value = String(10 + Number(getElementById('sf-skill-perception').value || 0));
   const spellAbility = getElementById('sf-spell-ability').value.toLowerCase();
-  if (ABILITIES.includes(spellAbility)) {
+  if (isAbilityKey(spellAbility)) {
     const calculated = characterRules.spellcastingValues(
       getElementById(`sf-${spellAbility}`).value,
       level.value
@@ -577,7 +581,7 @@ function refreshCharacterCalculations(force, recalculateSpell = false) {
   const prepared = characterRules.preparedSpellCount(
     className,
     level.value,
-    ABILITIES.includes(preparedAbility) ? getElementById(`sf-${preparedAbility}`).value : 10
+    isAbilityKey(preparedAbility) ? getElementById(`sf-${preparedAbility}`).value : 10
   );
   getElementById('sf-spells-prepared').value = prepared === null ? '' : String(prepared);
   refreshArmorClass();

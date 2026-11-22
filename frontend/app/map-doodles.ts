@@ -1,10 +1,10 @@
 /** Map doodle drawing, erasing, and canvas rendering. */
 let isDrawing = false;
 let isErasing = false;
-let currentPath = null;
-let lastErasePoint = null;
-let doodleTouchId = null;
-const doodleCanvas = getElementById('doodle-canvas');
+let currentPath: SocketDoodlePath | null = null;
+let lastErasePoint: SocketPoint | null = null;
+let doodleTouchId: number | null = null;
+const doodleCanvas = getRequiredElement<HTMLCanvasElement>('#doodle-canvas');
 const doodleCtx = doodleCanvas.getContext('2d');
 
 doodleCanvas.onmousedown = (event) => {
@@ -49,7 +49,7 @@ doodleCanvas.addEventListener('touchcancel', event => {
   if (cancelled) cancelDoodle();
 }, { passive: false });
 
-function startDoodle(point) {
+function startDoodle(point: SocketPoint) {
   if (!canDoodle()) return false;
   if (selectedTool === 'eraser') {
     isErasing = true;
@@ -68,7 +68,7 @@ function startDoodle(point) {
   return true;
 }
 
-function continueDoodle(point) {
+function continueDoodle(point: SocketPoint) {
   if (isErasing) {
     if (lastErasePoint && Math.hypot(point.x - lastErasePoint.x, point.y - lastErasePoint.y) >= 3) {
       lastErasePoint = point;
@@ -106,18 +106,18 @@ function cancelDoodle() {
   if (state?.scene) redrawAllDoodles();
 }
 
-function getCanvasPos(event) {
+function getCanvasPos(event: MouseEvent | Touch) {
   const rect = doodleCanvas.getBoundingClientRect();
   return { x: (event.clientX - rect.left) / mapScale, y: (event.clientY - rect.top) / mapScale };
 }
 
-function drawDoodlePath(path) {
+function drawDoodlePath(path: SocketDoodlePath) {
   doodleCtx.strokeStyle = path.color;
   doodleCtx.lineWidth = path.width;
   doodleCtx.lineCap = 'round';
   doodleCtx.lineJoin = 'round';
   doodleCtx.beginPath();
-  path.points.forEach((point, index) => {
+  path.points.forEach((point: SocketPoint, index: number) => {
     if (index === 0) doodleCtx.moveTo(point.x, point.y); else doodleCtx.lineTo(point.x, point.y);
   });
   doodleCtx.stroke();

@@ -1,11 +1,27 @@
 /** Saved scenes, DM library, handouts, notifications, safety tools, and shop bridge. */
 
 // ---- Named scene library ----
-function savedSceneList() {
+interface LibraryData {
+  folders: SocketLibraryFolder[];
+  files: SocketLibraryFile[];
+  broadcast: SocketLibraryBroadcast | null;
+}
+
+interface OrderedLibraryFolder {
+  folder: SocketLibraryFolder;
+  depth: number;
+}
+
+interface ShopPurchaseRequest {
+  requestId?: string;
+  itemId?: string;
+}
+
+function savedSceneList(): SocketSavedScene[] {
   return Array.isArray(state?.savedScenes) ? state.savedScenes : [];
 }
 
-function renderSavedScenes() {
+function renderSavedScenes(): void {
   if (!state) return;
   getRequiredElement<HTMLElement>('#current-scene-name').textContent = state.activeSceneName || 'Unsaved scene';
   const dirtyIndicator = getRequiredElement<HTMLElement>('#scene-dirty-indicator');
@@ -24,7 +40,7 @@ function renderSavedScenes() {
   updateSelectedSceneSummary();
 }
 
-function updateSelectedSceneSummary() {
+function updateSelectedSceneSummary(): void {
   const selected = savedSceneList().find(scene => scene.name === getRequiredSelect('saved-scene-select').value);
   const summary = getRequiredElement<HTMLElement>('#scene-summary');
   if (!selected) {
@@ -58,7 +74,7 @@ getRequiredButton('delete-scene-btn').onclick = () => {
 };
 
 // ---- DM library and shared handouts ----
-function libraryData() {
+function libraryData(): LibraryData {
   const library = state?.library || { folders: [], files: [], broadcast: null };
   return {
     folders: Array.isArray(library.folders) ? library.folders : [],
@@ -67,13 +83,13 @@ function libraryData() {
   };
 }
 
-function libraryFolderName(folderId, folders) {
+function libraryFolderName(folderId: string | null, folders: SocketLibraryFolder[]): string {
   return folders.find(folder => folder.id === folderId)?.name || 'Unfiled';
 }
 
-function orderedLibraryFolders(folders) {
-  const ordered = [];
-  const visit = (parentId, depth, visited) => {
+function orderedLibraryFolders(folders: SocketLibraryFolder[]): OrderedLibraryFolder[] {
+  const ordered: OrderedLibraryFolder[] = [];
+  const visit = (parentId: string | null, depth: number, visited: Set<string>): void => {
     folders
       .filter(folder => (folder.parentId || null) === parentId)
       .sort((a, b) => a.name.localeCompare(b.name))
@@ -88,11 +104,11 @@ function orderedLibraryFolders(folders) {
   return ordered;
 }
 
-function libraryFileIcon(file) {
+function libraryFileIcon(file: SocketLibraryFile): string {
   return file.kind === 'image' ? '🖼️' : file.kind === 'pdf' ? '📕' : file.kind === 'html' ? '✨' : file.kind === 'text' ? '📝' : '📎';
 }
 
-function libraryFileSize(size) {
+function libraryFileSize(size: number): string {
   const bytes = Number(size) || 0;
   if (!bytes) return 'Size unknown';
   if (bytes < 1024) return `${bytes} B`;
@@ -100,7 +116,7 @@ function libraryFileSize(size) {
   return `${(bytes / (1024 * 1024)).toFixed(bytes >= 10 * 1024 * 1024 ? 0 : 1)} MB`;
 }
 
-function renderLibrary() {
+function renderLibrary(): void {
   if (myRole !== 'dm') return;
   const library = libraryData();
   const currentFolder = libraryCurrentFolderId !== 'all' && libraryCurrentFolderId !== 'unfiled'
@@ -115,7 +131,7 @@ function renderLibrary() {
   folderList.innerHTML = '';
   folderCount.textContent = `${library.folders.length} folder${library.folders.length === 1 ? '' : 's'}`;
 
-  const appendFolderButton = (label, id, depth = 0, icon = '') => {
+  const appendFolderButton = (label: string, id: string, depth = 0, icon = ''): void => {
     const row = document.createElement('div');
     row.className = 'library-folder-row';
     const button = document.createElement('button');
@@ -228,13 +244,13 @@ function renderLibrary() {
     });
 }
 
-function notificationTimestamp(createdAt) {
+function notificationTimestamp(createdAt: number): string {
   const time = Number(createdAt);
   if (!time) return '';
   return new Intl.DateTimeFormat(undefined, { dateStyle: 'short', timeStyle: 'short' }).format(new Date(time));
 }
 
-function renderDmNotifications() {
+function renderDmNotifications(): void {
   const panel = getRequiredElement<HTMLElement>('#dm-notifications-panel');
   const list = getRequiredElement<HTMLElement>('#dm-notifications-list');
   const count = getRequiredElement<HTMLElement>('#dm-notification-count');
@@ -294,7 +310,7 @@ function renderDmNotifications() {
   getRequiredButton('dm-notifications-clear-all').disabled = notifications.length === 0;
 }
 
-function closePlayerQuestion() {
+function closePlayerQuestion(): void {
   const overlay = getRequiredElement<HTMLElement>('#player-question-overlay');
   overlay.classList.add('hidden');
   overlay.setAttribute('aria-hidden', 'true');
@@ -361,19 +377,19 @@ document.addEventListener('click', event => {
   }
 });
 
-function activeShopFrame() {
+function activeShopFrame(): HTMLIFrameElement | null {
   return document.querySelector<HTMLIFrameElement>('#shared-handout-content iframe[data-shop-handout="true"]');
 }
 
-function activePuzzleFrame() {
+function activePuzzleFrame(): HTMLIFrameElement | null {
   return document.querySelector<HTMLIFrameElement>('#shared-handout-content iframe[data-puzzle-handout="true"]');
 }
 
-function postShopMessage(message, frame = activeShopFrame()) {
+function postShopMessage(message: Record<string, unknown>, frame: HTMLIFrameElement | null = activeShopFrame()): void {
   if (frame?.contentWindow) frame.contentWindow.postMessage(message, location.origin);
 }
 
-function postShopContext(frame = activeShopFrame()) {
+function postShopContext(frame: HTMLIFrameElement | null = activeShopFrame()): void {
   postShopMessage({
     type: 'humblewood:shop-context',
     role: myRole,
@@ -381,11 +397,11 @@ function postShopContext(frame = activeShopFrame()) {
   }, frame);
 }
 
-function rejectShopRequest(request, message) {
+function rejectShopRequest(request: ShopPurchaseRequest, message: string): void {
   postShopMessage({
     type: 'humblewood:shop-purchase-result',
-    requestId: request.requestId,
-    itemId: request.itemId,
+    requestId: String(request.requestId || ''),
+    itemId: String(request.itemId || ''),
     ok: false,
     message
   });
@@ -408,7 +424,7 @@ function choosePurchaseCharacter() {
   return characters.find(character => character.name.toLowerCase() === answer.trim().toLowerCase()) || null;
 }
 
-socket.on('puzzle:update', (payload: any) => {
+socket.on('puzzle:update', (payload: { fileId: string; state: Record<string, unknown> | null; updatedAt: number }) => {
   const frame = activePuzzleFrame();
   if (!frame?.contentWindow) return;
   const broadcast = state?.library?.broadcast;
@@ -421,16 +437,18 @@ socket.on('puzzle:update', (payload: any) => {
   }, location.origin);
 });
 
-window.addEventListener('message', event => {
+window.addEventListener('message', (event: MessageEvent<unknown>) => {
   const frame = activePuzzleFrame() || activeShopFrame();
   if (!frame || event.source !== frame.contentWindow || !event.data || typeof event.data !== 'object') return;
-  const request = event.data;
+  const request = event.data as Record<string, unknown>;
   if (request.type === 'humblewood:puzzle-ready') {
     socket.emit('puzzle:request');
     return;
   }
   if (request.type === 'humblewood:puzzle-state') {
-    const stateValue = request.state && typeof request.state === 'object' ? request.state : null;
+    const stateValue = request.state && typeof request.state === 'object'
+      ? request.state as Record<string, unknown>
+      : null;
     if (!stateValue) return;
     socket.emit('puzzle:update', {
       fileId: state?.library?.broadcast?.fileId,
@@ -469,7 +487,7 @@ window.addEventListener('message', event => {
   });
 });
 
-function formatSharedHandoutTimer(expiresAt) {
+function formatSharedHandoutTimer(expiresAt: number): string {
   const seconds = Math.max(0, Math.ceil((Number(expiresAt) - Date.now()) / 1000));
   if (seconds < 60) return `${seconds}s remaining`;
   const minutes = Math.floor(seconds / 60);
@@ -477,7 +495,7 @@ function formatSharedHandoutTimer(expiresAt) {
   return `${minutes}m${remainder ? ` ${remainder}s` : ''} remaining`;
 }
 
-const sharedHandoutDialog = createDialogController(getRequiredElement<HTMLElement>('#shared-handout-overlay'), {
+const sharedHandoutDialog = createDialogController(getRequiredElement<HTMLDialogElement>('#shared-handout-overlay'), {
   onDismiss: reason => {
     const broadcast = state?.library?.broadcast;
     const stillActive = broadcast && (!broadcast.expiresAt || Number(broadcast.expiresAt) > Date.now());
@@ -491,7 +509,7 @@ const sharedHandoutDialog = createDialogController(getRequiredElement<HTMLElemen
   }
 });
 
-function setSharedHandoutReopenVisible(visible, broadcast: any = null) {
+function setSharedHandoutReopenVisible(visible: boolean, broadcast: SocketLibraryBroadcast | null = null): void {
   const button = getRequiredButton('shared-handout-reopen-btn');
   button.classList.toggle('hidden', !visible);
   button.setAttribute('aria-hidden', String(!visible));
@@ -502,7 +520,7 @@ function setSharedHandoutReopenVisible(visible, broadcast: any = null) {
   }
 }
 
-function renderSharedHandoutContent(broadcast) {
+function renderSharedHandoutContent(broadcast: SocketLibraryBroadcast): void {
   const content = getRequiredElement<HTMLElement>('#shared-handout-content');
   content.innerHTML = '';
   const safeBroadcastUrl = safeAssetUrl(broadcast.url, ['uploads', 'handouts']);
@@ -573,7 +591,7 @@ function renderSharedHandoutContent(broadcast) {
   content.appendChild(message);
 }
 
-function updateSharedHandoutTimer() {
+function updateSharedHandoutTimer(): void {
   const broadcast = state?.library?.broadcast;
   if (!broadcast) {
     setSharedHandoutReopenVisible(false);
@@ -592,7 +610,7 @@ function updateSharedHandoutTimer() {
     : 'Shown until stopped';
 }
 
-function renderSharedHandout() {
+function renderSharedHandout(): void {
   const broadcast = state?.library?.broadcast;
   clearInterval(sharedHandoutTimer);
   sharedHandoutTimer = null;
