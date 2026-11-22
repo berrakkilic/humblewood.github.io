@@ -4,5 +4,13 @@ public/uploads/*
 !public/uploads/.gitkeep
 public/music/
 .git
-.env
+.github
+docs
+test
+README.md
+frontend/README.md
+.env*
 *.log
+coverage
+public/app.js
+public/app.js.map

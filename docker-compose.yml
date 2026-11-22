@@ -5,7 +5,8 @@ services:
     ports:
       - "3000:3000"
     environment:
-      DM_PIN: ${DM_PIN:-humblewood}
+      NODE_ENV: production
+      DM_PIN: ${DM_PIN:?Set DM_PIN to a unique value before starting the container}
     volumes:
       - humblewood-data:/app/data
       - humblewood-uploads:/app/public/uploads

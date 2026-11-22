@@ -59,6 +59,10 @@ Backend work should follow:
 Repository organization and pull requests should follow
 [`docs/REPOSITORY_STRUCTURE_BEST_PRACTICES.md`](docs/REPOSITORY_STRUCTURE_BEST_PRACTICES.md).
 
+Container changes should follow
+[`docs/DOCKER_BEST_PRACTICES.md`](docs/DOCKER_BEST_PRACTICES.md), adapted from
+[Docker's build best practices](https://docs.docker.com/build/building/best-practices/).
+
 ## Deploying with Docker
 - **`Dockerfile`** — builds the app into a container.
 - **`docker-compose.yml`** — runs it with two persistent volumes: one for the database, one for uploaded map/token images.
@@ -67,7 +71,7 @@ Set a unique `DM_PIN` before starting a production deployment. The server refuse
 the development default when `NODE_ENV=production`:
 
 ```bash
-DM_PIN='use-a-long-unique-pin' NODE_ENV=production docker compose up -d --build
+DM_PIN='use-a-long-unique-pin' docker compose up -d --build
 ```
 
 The app uses SQLite in a file and the `docker-compose.yml` mounts a volume (`humblewood-data`) so that the file persists across restarts and redeploys automatically. Redeploys are currently set to every 30 mins or so.
