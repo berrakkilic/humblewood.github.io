@@ -67,6 +67,31 @@ function once(socket, event, predicate = () => true, timeout = 3000) {
   });
 }
 
+async function waitForSocketConnect(socket, label) {
+  let lastConnectError = '';
+  const onConnectError = error => { lastConnectError = error.message; };
+  socket.on('connect_error', onConnectError);
+  try {
+    await once(socket, 'connect', () => true, 10000);
+  } catch (error) {
+    const detail = lastConnectError ? ` Last connection error: ${lastConnectError}` : '';
+    throw new Error(`${label} did not connect within 10 seconds.${detail}`, { cause: error });
+  } finally {
+    socket.off('connect_error', onConnectError);
+  }
+}
+
+function closeSocket(socket) {
+  if (!socket.connected) {
+    socket.close();
+    return Promise.resolve();
+  }
+  return new Promise(resolve => {
+    socket.once('disconnect', resolve);
+    socket.close();
+  });
+}
+
 function expectNoEvent(socket, event, predicate = () => true, timeout = 350) {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
@@ -86,7 +111,7 @@ function expectNoEvent(socket, event, predicate = () => true, timeout = 350) {
 async function identify(io, payload) {
   const socket = io(`http://127.0.0.1:${port}`, { transports: ['websocket'], forceNew: true });
   clients.push(socket);
-  await once(socket, 'connect');
+  await waitForSocketConnect(socket, 'An integration client');
   const resultPromise = once(socket, 'identify:result');
   const statePromise = once(socket, 'state:full');
   socket.emit('identify', payload);
@@ -1022,21 +1047,21 @@ async function run() {
   for (let attempt = 0; attempt < 12; attempt += 1) {
     const throttledClient = io(`http://127.0.0.1:${port}`, { transports: ['websocket'], forceNew: true });
     clients.push(throttledClient);
-    await once(throttledClient, 'connect');
+    await waitForSocketConnect(throttledClient, `Authentication throttle client ${attempt + 1}`);
     const resultPromise = once(throttledClient, 'identify:result');
     throttledClient.emit('identify', { role: 'dm', name: 'Guide', dmPin: 'wrong-pin' });
     const result = await resultPromise;
     assert.equal(result.ok, false);
-    throttledClient.close();
+    await closeSocket(throttledClient);
   }
   const blockedClient = io(`http://127.0.0.1:${port}`, { transports: ['websocket'], forceNew: true });
   clients.push(blockedClient);
-  await once(blockedClient, 'connect');
+  await waitForSocketConnect(blockedClient, 'Blocked authentication client');
   const blockedResultPromise = once(blockedClient, 'identify:result');
   blockedClient.emit('identify', { role: 'dm', name: 'Guide', dmPin: 'wrong-pin' });
   const blockedResult = await blockedResultPromise;
   assert.match(blockedResult.message, /too many sign-in attempts/i);
-  blockedClient.close();
+  await closeSocket(blockedClient);
 
   console.log('Integration checks passed: frontend routes, saved auth sessions, token hide/show, permissions, drawings, fog, duplication, badges, initiative, pointers, scene persistence, and auth throttling.');
 }
