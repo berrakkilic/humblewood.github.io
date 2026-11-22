@@ -8,6 +8,7 @@ RUN npm ci
 COPY frontend ./frontend
 COPY scripts/build-frontend.js ./scripts/build-frontend.js
 COPY tsconfig.frontend.json ./
+COPY tsconfig.frontend.strict.json ./
 RUN mkdir -p public && npm run build:frontend
 
 FROM node:20-slim
