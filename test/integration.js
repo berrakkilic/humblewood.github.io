@@ -371,6 +371,8 @@ async function run() {
   global.self = global;
   global.location = { protocol: 'http:', host: `127.0.0.1:${port}` };
   global.navigator = { userAgent: 'node' };
+  // Keep the browser bundle's WebSocket transport consistent on Node 20 CI.
+  global.WebSocket = require('ws');
   const io = require('../node_modules/socket.io/client-dist/socket.io.js');
 
   const dm = await identify(io, { role: 'dm', name: 'Guide', dmPin: 'test-pin' });
