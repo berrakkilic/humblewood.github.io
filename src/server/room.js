@@ -2,6 +2,7 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const { promisify } = require('util');
+const { pathToFileURL } = require('url');
 const { createClient } = require('@libsql/client');
 const { createDefaultState } = require('./default-state');
 const { normalizeShopStock, publicShopCatalog } = require('./shop-catalog');
@@ -39,7 +40,7 @@ function createRoom({ dataDir, dmPin, io, uploadDir }) {
   };
 
   fs.mkdirSync(dataDir, { recursive: true });
-  const db = createClient({ url: `file:${path.join(dataDir, 'local.db')}` });
+  const db = createClient({ url: pathToFileURL(path.join(dataDir, 'local.db')).href });
   const libraryUploadDir = uploadDir ? path.resolve(uploadDir) : null;
 
   function cleanLocalUploadUrl(value) {
